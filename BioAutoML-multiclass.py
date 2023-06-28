@@ -382,7 +382,7 @@ def imbalanced_function(clf, train, train_labels):
         print('There are imbalanced labels...')
         print('Checking the best technique...')
         performance = []
-        smote = imbalanced_techniques(clf, SMOTE(random_state=42, n_jobs=n_cpu), train, train_labels)
+        smote = imbalanced_techniques(clf, SMOTE(random_state=42), train, train_labels)
         random = imbalanced_techniques(clf, RandomUnderSampler(random_state=42), train, train_labels)
         # hybrid_one = imbalanced_techniques(clf, SMOTEENN(random_state=42), train, train_labels)
         # hybrid_two = imbalanced_techniques(clf, SMOTETomek(random_state=42), train, train_labels)
@@ -401,7 +401,7 @@ def imbalanced_function(clf, train, train_labels):
         # print(max_pos)
         if max_pos == 0:
             print('Applying Smote - Oversampling...')
-            sm = SMOTE(random_state=42, n_jobs=n_cpu)
+            sm = SMOTE(random_state=42)
             train, train_labels = sm.fit_resample(train, train_labels)
         elif max_pos == 1:
             print('Applying Random - Undersampling...')

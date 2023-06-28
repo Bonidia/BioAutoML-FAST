@@ -97,7 +97,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
                'ACC_B': 'balanced_accuracy', 'kappa': make_scorer(cohen_kappa_score),
                'gmean': make_scorer(geometric_mean_score)}
     kfold = StratifiedKFold(n_splits=10, shuffle=True)
-    scores = cross_validate(model, X, LabelEncoder().fit_transform(y), cv=kfold, scoring=scoring)
+    scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
     save_measures(output_cross, scores)
     y_pred = cross_val_predict(model, X, y, cv=kfold)
     conf_mat = (pd.crosstab(y, y_pred, rownames=['REAL'], colnames=['PREDITO'], margins=True))
@@ -378,7 +378,7 @@ def imbalanced_techniques(model, tech, train, train_labels):
     sm = tech
     pipe = Pipeline([('tech', sm), ('classifier', model)])
     #  train_new, train_labels_new = sm.fit_resample(train, train_labels)
-    kfold = StratifiedKFold(n_splits=5, shuffle=True)
+    kfold = StratifiedKFold(n_splits=2, shuffle=True)
     acc = cross_val_score(pipe,
                           train,
                           train_labels,
@@ -398,7 +398,7 @@ def imbalanced_function(clf, train, train_labels):
         print('There are imbalanced labels...')
         print('Checking the best technique...')
         performance = []
-        smote = imbalanced_techniques(clf, SMOTE(random_state=42, n_jobs=n_cpu), train, train_labels)
+        smote = imbalanced_techniques(clf, SMOTE(random_state=42), train, train_labels)
         random = imbalanced_techniques(clf, RandomUnderSampler(random_state=42), train, train_labels)
         # hybrid_one = imbalanced_techniques(clf, SMOTEENN(random_state=42), train, train_labels)
         # hybrid_two = imbalanced_techniques(clf, SMOTETomek(random_state=42), train, train_labels)
@@ -417,7 +417,7 @@ def imbalanced_function(clf, train, train_labels):
         # print(max_pos)
         if max_pos == 0:
             print('Applying Smote - Oversampling...')
-            sm = SMOTE(random_state=42, n_jobs=n_cpu)
+            sm = SMOTE(random_state=42)
             train, train_labels = sm.fit_resample(train, train_labels)
         elif max_pos == 1:
             print('Applying Random - Undersampling...')
@@ -481,7 +481,7 @@ def type_model(explainer, model, data, labels):
     if lgbmtype == str(type(model)) or randtype == str(type(model)):
         shap_values = shap_values[:, :, 0]
     if xgbtype == str(type(model)):
-        labels = le.fit_transform(labels)
+        labels = labels
 
     return shap_values, labels
 
@@ -578,6 +578,7 @@ def build_interpretability_report(generated_plt=[], report_name="interpretabilit
 
 
 def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tuning, output):
+    
     global clf, train, train_labels, le
 
     if not os.path.exists(output):
@@ -596,16 +597,30 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
     """Number of Samples and Features: Train and Test"""
 
     print('Number of samples (train): ' + str(len(train)))
+    
+    print('Number of Labels (train):')
+    df_label = pd.DataFrame(train_labels)
+    print(str(pd.value_counts(df_label.values.flatten())))
 
     if os.path.exists(ftest) is True:
         column_test = test.columns
         print('Number of samples (test): ' + str(len(test)))
+        print('Number of Labels (test):')
+        df_label = pd.DataFrame(test_labels)
+        print(str(pd.value_counts(df_label.values.flatten())))
 
     print('Number of features (train): ' + str(len(column_train)))
 
     if os.path.exists(ftest_labels) is True:
         print('Number of features (test): ' + str(len(column_test)))
 
+
+    """Preprocessing:  Label Encoding"""
+
+    le = LabelEncoder()
+    train_labels = le.fit_transform(train_labels)
+    
+    
     """Preprocessing:  Missing Values"""
 
     print('Checking missing values...')
@@ -692,9 +707,6 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
             if imbalance_data is True:
                 train, train_labels = imbalanced_function(clf, train, train_labels)
     elif classifier == 3:
-        le = LabelEncoder()
-        train_labels = le.fit_transform(train_labels)
-        test_labels = le.fit_transform(test_labels)
         if tuning is True:
             print('Tuning: ' + str(tuning))
             print('Classifier: XGBClassifier')
@@ -705,7 +717,7 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
         else:
             print('Tuning: ' + str(tuning))
             print('Classifier: XGBClassifier')
-            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
+            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
             if imbalance_data is True:
                 train, train_labels = imbalanced_function(clf, train, train_labels)
     else:
@@ -780,7 +792,11 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
 
     if os.path.exists(ftest) is True:
         print('Generating Performance Test...')
-        preds = clf.predict(test)
+
+        # test_labels = le.fit_transform(test_labels)
+        
+        preds = le.inverse_transform(clf.predict(test))
+        # print(preds)
         pred_output = output + 'test_predictions.csv'
         print('Saving prediction in ' + pred_output + '...')
         save_prediction(preds, test_nameseq, pred_output)

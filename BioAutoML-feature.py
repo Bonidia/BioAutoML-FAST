@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings('ignore')
 import pandas as pd
+import polars as pl
 import argparse
 import subprocess
 # import multiprocessing
@@ -12,6 +13,7 @@ import time
 import xgboost as xgb
 import lightgbm as lgb
 import optuna
+import pygad
 from genetic_selection import GeneticSelectionCV
 from catboost import CatBoostClassifier
 from sklearn.metrics import balanced_accuracy_score
@@ -25,6 +27,8 @@ from sklearn.model_selection import cross_val_score
 from sklearn.metrics import f1_score
 from sklearn_genetic import GAFeatureSelectionCV
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials, SparkTrials, early_stop
+from subprocess import Popen
+from multiprocessing import Manager
 
 
 def objective_rf(space):
@@ -43,7 +47,7 @@ def objective_rf(space):
 		if int(space[descriptor]) == 1:
 			index = index + ind
 
-	x = df_x.iloc[:, index]
+	x = df_x[:, index]
 
 	print(space)
 
@@ -86,11 +90,12 @@ def feature_engineering(estimations, train, train_labels, test, foutput):
 
 	print('Automated Feature Engineering - Bayesian Optimization')
 
-	df_x = pd.read_csv(train)
-	labels_y = pd.read_csv(train_labels).values.ravel()
+	df_x = pl.read_csv(train)
+	labels_y = pl.read_csv(train_labels)
+ 	#.values.ravel()
 
 	if test != '':
-		df_test = pd.read_csv(test)
+		df_test = pl.read_csv(test)
 
 	path_bio = foutput + '/best_descriptors'
 	if not os.path.exists(path_bio):
@@ -142,14 +147,14 @@ def feature_engineering(estimations, train, train_labels, test, foutput):
 
 	classifier = param['Classifier'][best_tuning['Classifier']]
 
-	btrain = df_x.iloc[:, index]
+	btrain = df_x[:, index]
 	path_btrain = path_bio + '/best_train.csv'
-	btrain.to_csv(path_btrain, index=False, header=True)
+	btrain.write_csv(path_btrain)
 
 	if test != '':
-		btest = df_test.iloc[:, index]
+		btest = df_test[:, index]
 		path_btest = path_bio + '/best_test.csv'
-		btest.to_csv(path_btest, index=False, header=True)
+		btest.write_csv(path_btest)
 	else:
 		btest, path_btest = '', ''
 
@@ -159,7 +164,7 @@ def feature_engineering(estimations, train, train_labels, test, foutput):
 def check_techniques(model, train, train_labels):
     """Testing algorithms"""
 
-    kfold = StratifiedKFold(n_splits=5, shuffle=True)
+    kfold = StratifiedKFold(n_splits=2, shuffle=True)
     acc = cross_val_score(model,
                           train,
                           train_labels,
@@ -173,33 +178,34 @@ def best_algorithms(train, train_labels):
 
     print('Checking the best algorithms...')
     performance = []
-    cata = CatBoostClassifier(thread_count=n_cpu, nan_mode='Max',
-                             logging_level='Silent', random_state=63)
+    # cata = CatBoostClassifier(thread_count=n_cpu, nan_mode='Max',
+    #                         logging_level='Silent', random_state=63)
     rfa = RandomForestClassifier(n_jobs=n_cpu, random_state=63)
     lgba = lgb.LGBMClassifier(n_jobs=n_cpu, random_state=63)
     xgba = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=n_cpu, random_state=63)
-    one = check_techniques(cata, train, train_labels)
+    # one = check_techniques(cata, train, train_labels)
     two = check_techniques(rfa, train, train_labels)
     three = check_techniques(lgba, train, train_labels)
     four = check_techniques(xgba, train, train_labels)
-    performance.append(one)
+    # performance.append(one)
     performance.append(two)
     performance.append(three)
     performance.append(four)
     max_pos = performance.index(max(performance))
-    return max_pos
+    return max_pos + 1
  
  
 def feature_engineering_ga(train, train_labels, test, foutput):
     
     """Automated Feature Engineering - Genetic Algorithm"""
     
-    df_x = pd.read_csv(train)
-    labels_y = pd.read_csv(train_labels).values.ravel()
+    df_x = pl.read_csv(train)
+    labels_y = pl.read_csv(train_labels)
+    # .values.ravel()
     le = LabelEncoder()
     
     if test != '':
-        df_test = pd.read_csv(test)
+        df_test = pl.read_csv(test)
     
     path_bio = foutput + '/best_descriptors'
     if not os.path.exists(path_bio):
@@ -251,15 +257,15 @@ def feature_engineering_ga(train, train_labels, test, foutput):
     # print(index)
     
     # btrain = selection.transform(df_x)
-    btrain = df_x.iloc[:, index]
+    btrain = df_x[:, index]
     path_btrain = path_bio + '/best_train.csv'
-    btrain.to_csv(path_btrain, index=False, header=True)
+    btrain.write_csv(path_btrain, index=False, header=True)
     
     if test != '':
         # btest = selection.transform(df_test)
-        btest = df_test.iloc[:, index]
+        btest = df_test[:, index]
         path_btest = path_bio + '/best_test.csv'
-        btest.to_csv(path_btest, index=False, header=True)
+        btest.write_csv(path_btest, index=False, header=True)
     else:
         btest, path_btest = '', ''
 
@@ -271,12 +277,13 @@ def feature_engineering_ga_sklearn(train, train_labels, test, foutput):
     
     """Automated Feature Engineering - Genetic Algorithm"""
     
-    df_x = pd.read_csv(train)
-    labels_y = pd.read_csv(train_labels).values.ravel()
+    df_x = pl.read_csv(train)
+    labels_y = pl.read_csv(train_labels)
+    # .values.ravel()
     le = LabelEncoder()
     
     if test != '':
-        df_test = pd.read_csv(test)
+        df_test = pl.read_csv(test)
     
     path_bio = foutput + '/best_descriptors'
     if not os.path.exists(path_bio):
@@ -324,15 +331,15 @@ def feature_engineering_ga_sklearn(train, train_labels, test, foutput):
     # print(index)
     
     # btrain = selection.transform(df_x)
-    btrain = df_x.iloc[:, index]
+    btrain = df_x[:, index]
     path_btrain = path_bio + '/best_train.csv'
-    btrain.to_csv(path_btrain, index=False, header=True)
+    btrain.write_csv(path_btrain, index=False, header=True)
     
     if test != '':
         # btest = selection.transform(df_test)
-        btest = df_test.iloc[:, index]
+        btest = df_test[:, index]
         path_btest = path_bio + '/best_test.csv'
-        btest.to_csv(path_btest, index=False, header=True)
+        btest.write_csv(path_btest, index=False, header=True)
     else:
         btest, path_btest = '', ''
 
@@ -340,7 +347,132 @@ def feature_engineering_ga_sklearn(train, train_labels, test, foutput):
     return classifier, path_btrain, path_btest, btrain, btest
 
 
-def objective(trial):
+def objective_ga_pygad(ga_instance, solution, solution_idx):
+
+	"""Automated Feature Engineering - Objective Function - Genetic Algorithm"""
+	
+	index = list()
+	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
+				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
+				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
+				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
+				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
+ 
+ 
+	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
+         	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
+	for gene in range(0, len(solution)):
+		if int(solution[gene]) == 1:
+			ind = descriptors[desc[int(gene)]]
+			index = index + ind
+	
+ 
+	if len(fasta_label_train) > 2:
+		score = make_scorer(f1_score, average='weighted')
+	else:
+		score = make_scorer(balanced_accuracy_score)
+
+	kfold = StratifiedKFold(n_splits=5, shuffle=True)
+	metric = cross_val_score(model,
+							 df_x[:, index],
+        					 y,
+							 cv=kfold,
+							 scoring=score,
+							 n_jobs=n_cpu).mean()
+	
+	return metric
+
+
+def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
+
+	"""Automated Feature Engineering - Genetic Algorithm"""
+
+	print('Automated Feature Engineering - Genetic Algorithm')
+ 
+	global df_x, y, model
+
+	le = LabelEncoder()
+	df_x = pl.read_csv(train)
+	y = le.fit_transform(pl.read_csv(train_labels))
+	
+	path_bio = foutput + '/best_descriptors'
+	if not os.path.exists(path_bio):
+		os.mkdir(path_bio)
+
+ 
+	classifier = best_algorithms(df_x, y)
+	if classifier == 0:
+		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
+                                   logging_level='Silent', random_state=63)
+	elif classifier == 1:
+		model = RandomForestClassifier(n_jobs=1, random_state=63)
+        
+	elif classifier == 2:
+		model = lgb.LGBMClassifier(n_jobs=1, random_state=63)
+	else:
+		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=1, random_state=63)
+
+	print('Checking the best descriptors...')
+	ga_instance = pygad.GA(num_generations=estimations,
+                       num_parents_mating=4,
+                       fitness_func=objective_ga_pygad,
+                       sol_per_pop=20,
+                       num_genes=12,
+                       gene_type=int,
+                       init_range_low=0,
+                       init_range_high=2,
+                       parent_selection_type="tournament",
+                       keep_parents=8,
+                       K_tournament=4,
+                       crossover_type="two_points",
+                       mutation_type="random",
+                       suppress_warnings=True,
+                       stop_criteria=["saturate_10"],
+                       parallel_processing=n_cpu)
+	ga_instance.run()
+	best = ga_instance.best_solution()[0]
+	print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=best))
+	print("Best fitness value reached after {best_solution_generation} generations.".format(best_solution_generation=ga_instance.best_solution_generation))
+ 
+	
+	index = list()
+	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
+				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
+				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
+				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
+				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
+
+
+	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
+         	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
+ 
+	for gene in range(0, len(best)-1):
+		if int(gene) == 1:
+			ind = descriptors[desc[int(gene)]]
+			index = index + ind
+
+
+	if test != '':
+		df_test = pl.read_csv(test)
+
+	btrain = df_x[:, index]
+	path_btrain = path_bio + '/best_train.csv'
+	btrain.write_csv(path_btrain)
+
+	if test != '':
+		btest = df_test[:, index]
+		path_btest = path_bio + '/best_test.csv'
+		btest.write_csv(path_btest)
+	else:
+		btest, path_btest = '', ''
+
+
+	return classifier, path_btrain, path_btest, btrain, btest
+
+
+def objective(trial, train, train_labels):
 
 	"""Automated Feature Engineering - Optuna - Objective Function - Bayesian Optimization"""
 
@@ -364,16 +496,14 @@ def objective(trial):
 				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
 				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
 				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
-				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, len(df_x.columns)))}
-
+				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
+ 
+ 
 	for descriptor, ind in descriptors.items():
 		if int(space[descriptor]) == 1:
 			index = index + ind
-
-	x = df_x.iloc[:, index]
-
-	# print(space)
-
+	
+ 
 	if int(space['Classifier']) == 0:
 		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
 								   	   logging_level='Silent', random_state=63)
@@ -394,12 +524,12 @@ def objective(trial):
 	kfold = StratifiedKFold(n_splits=5, shuffle=True)
 	le = LabelEncoder()
 	metric = cross_val_score(model,
-							 x,
-        					 le.fit_transform(labels_y),
+							 train[:, index],
+        					 le.fit_transform(pl.read_csv(train_labels)),
 							 cv=kfold,
 							 scoring=score,
 							 n_jobs=n_cpu).mean()
-
+	
 	return metric
 
 
@@ -407,19 +537,17 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 
 	"""Automated Feature Engineering - Bayesian Optimization"""
 
-	global df_x, labels_y
-
 	print('Automated Feature Engineering - Bayesian Optimization')
 
-	df_x = pd.read_csv(train)
-	labels_y = pd.read_csv(train_labels).values.ravel()
-
-	if test != '':
-		df_test = pd.read_csv(test)
-
+	df_x = pl.read_csv(train)
+	mgr = Manager()
+	ns = mgr.Namespace()
+	ns.df = df_x
+	
 	path_bio = foutput + '/best_descriptors'
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
+
 
 	param = {'NAC': [0, 1], 'DNC': [0, 1],
 			 'TNC': [0, 1], 'kGap_di': [0, 1], 'kGap_tri': [0, 1],
@@ -429,20 +557,22 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 'repDNA': [0, 1],
 			 'Classifier': [1, 2, 3]}
 
+	func = lambda trial: objective(trial, ns.df, train_labels)
+	
 	results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
-	results.optimize(objective, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
+	results.optimize(func, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
  
 	best_tuning = results.best_params
  
 	print(best_tuning)
- 
+	
 	index = list()
 	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
 				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
 				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
 				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
 				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
-				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, len(df_x.columns)))}
+				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
 
 	for descriptor, ind in descriptors.items():
 		result = param[descriptor][best_tuning[descriptor]]
@@ -451,22 +581,33 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 
 	classifier = best_tuning['Classifier']
 	# print(classifier)
-
-	btrain = df_x.iloc[:, index]
-	path_btrain = path_bio + '/best_train.csv'
-	btrain.to_csv(path_btrain, index=False, header=True)
+	
+ 	# mem = sys.getsizeof(df_x)
+	# print(mem)
+	# max = 1073741824
+	# if mem > max:
+	# 	df_x = pl.read_csv(train).sample(n=(int(df_x.shape[0]*0.70)), seed=42)
+	# else:
+	# 	pass
 
 	if test != '':
-		btest = df_test.iloc[:, index]
+		df_test = pl.read_csv(test)
+
+	btrain = ns.df[:, index]
+	path_btrain = path_bio + '/best_train.csv'
+	btrain.write_csv(path_btrain)
+
+	if test != '':
+		btest = df_test[:, index]
 		path_btest = path_bio + '/best_test.csv'
-		btest.to_csv(path_btest, index=False, header=True)
+		btest.write_csv(path_btest)
 	else:
 		btest, path_btest = '', ''
 
 	return classifier, path_btrain, path_btest, btrain, btest
 
 
-def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, features, foutput):
+def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 
 	"""Extracts the features from the sequences in the fasta files."""
 
@@ -501,11 +642,6 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, features, fou
 
 	print('Extracting features with MathFeature...')
  
-	# commands = [
-	# 	['python', 'MathFeature/preprocessing/preprocessing.py',
-   	# 	 '-i', fasta[i][j], '-o', preprocessed_fasta]
-	# ]
-
 	for i in range(len(labels)):
 		for j in range(len(labels[i])):
 			file = fasta[i][j].split('/')[-1]
@@ -522,126 +658,61 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, features, fou
 								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 			fasta_list.append(preprocessed_fasta)
+			datasets.append(path + '/NAC.csv')
+			datasets.append(path + '/DNC.csv')
+			datasets.append(path + '/TNC.csv')
+			datasets.append(path + '/kGap_di.csv')
+			datasets.append(path + '/kGap_tri.csv')
+			datasets.append(path + '/ORF.csv')
+			datasets.append(path + '/Fickett.csv')
+			datasets.append(path + '/Shannon.csv')
+			datasets.append(path + '/FourierBinary.csv')
+			datasets.append(path + '/FourierComplex.csv')
+			datasets.append(path + '/Tsallis.csv')
+			datasets.append(path + '/repDNA.csv')
+   
+			commands = [['python', 'MathFeature/methods/ExtractionTechniques.py',
+								'-i', preprocessed_fasta, '-o', path + '/NAC.csv', '-l', labels[i][j],
+								'-t', 'NAC', '-seq', '1'],
 
-			if 1 in features:
-				dataset = path + '/NAC.csv'
-				subprocess.run(['python', 'MathFeature/methods/ExtractionTechniques.py',
-								'-i', preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-t', 'NAC', '-seq', '1'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 2 in features:
-				dataset = path + '/DNC.csv'
-				subprocess.run(['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-t', 'DNC', '-seq', '1'], stdout=subprocess.DEVNULL,
-								stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 3 in features:
-				dataset = path + '/TNC.csv'
-				subprocess.run(['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-t', 'TNC', '-seq', '1'], stdout=subprocess.DEVNULL,
-								stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 4 in features:
-				dataset_di = path + '/kGap_di.csv'
-				dataset_tri = path + '/kGap_tri.csv'
-
-				subprocess.run(['python', 'MathFeature/methods/Kgap.py', '-i',
-								preprocessed_fasta, '-o', dataset_di, '-l',
+						['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
+								preprocessed_fasta, '-o', path + '/DNC.csv', '-l', labels[i][j],
+								'-t', 'DNC', '-seq', '1'],
+      
+						['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
+								preprocessed_fasta, '-o', path + '/TNC.csv', '-l', labels[i][j],
+								'-t', 'TNC', '-seq', '1'],
+						['python', 'MathFeature/methods/Kgap.py', '-i',
+								preprocessed_fasta, '-o', path + '/kGap_di.csv', '-l',
 								labels[i][j], '-k', '1', '-bef', '1',
 								'-aft', '2', '-seq', '1'],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-				subprocess.run(['python', 'MathFeature/methods/Kgap.py', '-i',
-								preprocessed_fasta, '-o', dataset_tri, '-l',
+						['python', 'MathFeature/methods/Kgap.py', '-i',
+								preprocessed_fasta, '-o', path + '/kGap_tri.csv', '-l',
 								labels[i][j], '-k', '1', '-bef', '1',
 								'-aft', '3', '-seq', '1'],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset_di)
-				datasets.append(dataset_tri)
-
-			if 5 in features:
-				dataset = path + '/ORF.csv'
-				subprocess.run(['python', 'MathFeature/methods/CodingClass.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j]],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 6 in features:
-				dataset = path + '/Fickett.csv'
-				subprocess.run(['python', 'MathFeature/methods/FickettScore.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-seq', '1'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 7 in features:
-				dataset = path + '/Shannon.csv'
-				subprocess.run(['python', 'MathFeature/methods/EntropyClass.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
+						['python', 'MathFeature/methods/CodingClass.py', '-i',
+								preprocessed_fasta, '-o', path + '/ORF.csv', '-l', labels[i][j]],
+						['python', 'MathFeature/methods/FickettScore.py', '-i',
+								preprocessed_fasta, '-o', path + '/Fickett.csv', '-l', labels[i][j],
+								'-seq', '1'],
+						['python', 'MathFeature/methods/EntropyClass.py', '-i',
+								preprocessed_fasta, '-o', path + '/Shannon.csv', '-l', labels[i][j],
 								'-k', '5', '-e', 'Shannon'],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
+						['python', 'MathFeature/methods/FourierClass.py', '-i',
+								preprocessed_fasta, '-o', path + '/FourierBinary.csv', '-l', labels[i][j],
+								'-r', '1'],
+						['python', 'other-methods/FourierClass.py', '-i',
+								preprocessed_fasta, '-o', path + '/FourierComplex.csv', '-l', labels[i][j],
+								'-r', '6'],
+						['python', 'other-methods/TsallisEntropy.py', '-i',
+								preprocessed_fasta, '-o', path + '/Tsallis.csv', '-l', labels[i][j],
+								'-k', '5', '-q', '2.3'],
+						['python', 'other-methods/repDNA/repDNA-feat.py', '--file',
+								preprocessed_fasta, '--output', path + '/repDNA.csv', '--label', labels[i][j]]
+			]
 
-			if 8 in features:
-				dataset = path + '/FourierBinary.csv'
-				subprocess.run(['python', 'MathFeature/methods/FourierClass.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-r', '1'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 9 in features:
-				dataset = path + '/FourierComplex.csv'
-				subprocess.run(['python', 'other-methods/FourierClass.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-r', '6'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-			if 10 in features:
-				dataset = path + '/Tsallis.csv'
-				subprocess.run(['python', 'other-methods/TsallisEntropy.py', '-i',
-								preprocessed_fasta, '-o', dataset, '-l', labels[i][j],
-								'-k', '5', '-q', '2.3'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-    
-			if 11 in features:
-				dataset = path + '/repDNA.csv'
-				subprocess.run(['python', 'other-methods/repDNA/repDNA-feat.py', '--file',
-								preprocessed_fasta, '--output', dataset, '--label', labels[i][j]],
-                   				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				datasets.append(dataset)
-
-	if 12 in features:
-		dataset = path + '/Chaos.csv'
-		# classifical_chaos(preprocessed_fasta, labels[i][j], 'Yes', dataset)
-		datasets.append(dataset)
-
-	if 13 in features:
-		dataset = path + '/BinaryMapping.csv'
-
-		labels_list = ftrain_labels + ftest_labels
-		text_input = ''
-		for i in range(len(fasta_list)):
-			text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
-
-		subprocess.run(['python', 'MathFeature/methods/MappingClass.py',
-						'-n', str(len(fasta_list)), '-o',
-						dataset, '-r', '1'], text=True, input=text_input,
-					   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-		with open(dataset, 'r') as temp_f:
-			col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-		colnames = ['BinaryMapping_' + str(i) for i in range(0, max(col_count))]
-
-		df = pd.read_csv(dataset, names=colnames, header=None)
-		df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-		df.to_csv(dataset, index=False)
-		
-		datasets.append(dataset)
+			processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+			for p in processes: p.wait()
 
 	"""Concatenating all the extracted features"""
 
@@ -671,7 +742,9 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, features, fou
 		X_test.to_csv(ftest, index=False)
 		flabeltest = path + '/flabeltest.csv'
 		y_test.to_csv(flabeltest, index=False, header=True)
+		del X_test
 
+	del X_train
 	return fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
 ##########################################################################
@@ -682,7 +755,7 @@ if __name__ == '__main__':
 	print('\n')
 	print('###################################################################################')
 	print('###################################################################################')
-	print('##########         BioAutoML- Automated Feature Engineering             ###########')
+	print('##########         BioAutoML-Fast: Automated Feature Engineering        ###########')
 	print('##########              Author: Robson Parmezan Bonidia                 ###########')
 	print('##########         WebPage: https://bonidia.github.io/website/          ###########')
 	print('###################################################################################')
@@ -698,6 +771,7 @@ if __name__ == '__main__':
 						help='fasta format file, e.g., fasta/ncRNA fasta/lncRNA fasta/circRNA')
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
+	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
 	parser.add_argument('-estimations', '--estimations', default=100, help='number of estimations - BioAutoML - default = 50')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -707,6 +781,7 @@ if __name__ == '__main__':
 	fasta_label_train = args.fasta_label_train
 	fasta_test = args.fasta_test
 	fasta_label_test = args.fasta_label_test
+	algo = int(args.algorithm)
 	estimations = int(args.estimations)
 	n_cpu = int(args.n_cpu)
 	foutput = str(args.output)
@@ -728,7 +803,7 @@ if __name__ == '__main__':
 
 	start_time = time.time()
 
-	features = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+	# features = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 	# process = multiprocessing.Process(target=feature_extraction, args=(fasta_train, 
     #                                                                   fasta_label_train,
@@ -741,13 +816,14 @@ if __name__ == '__main__':
 
 	fnameseqtest, ftrain, ftrain_labels, \
 		ftest, ftest_labels = feature_extraction(fasta_train, fasta_label_train,
-												 fasta_test, fasta_label_test, features, foutput)
+												 fasta_test, fasta_label_test, foutput)
 
-	classifier, path_train, path_test, train_best, test_best = \
-		feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
-  
-	# classifier, path_train, path_test, train_best, test_best = \
-    #  	feature_engineering_ga(ftrain, ftrain_labels, ftest, foutput)
+	if algo == 0:
+		classifier, path_train, path_test, train_best, test_best = \
+          feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
+	else:
+		classifier, path_train, path_test, train_best, test_best = \
+          feature_engineering_pygad(estimations, ftrain, ftrain_labels, ftest, foutput)
     
 	# classifier, path_train, path_test, train_best, test_best = \
     #  	feature_engineering_ga_sklearn(ftrain, ftrain_labels, ftest, foutput)
