@@ -395,54 +395,59 @@ def imbalanced_function(clf, train, train_labels):
     df = pd.DataFrame(train_labels)
     n_labels = pd.value_counts(df.values.flatten())
     if all(x == n_labels[0] for x in n_labels) is False:
-        print('There are imbalanced labels...')
-        print('Checking the best technique...')
-        performance = []
-        smote = imbalanced_techniques(clf, SMOTE(random_state=42), train, train_labels)
-        random = imbalanced_techniques(clf, RandomUnderSampler(random_state=42), train, train_labels)
-        # hybrid_one = imbalanced_techniques(clf, SMOTEENN(random_state=42), train, train_labels)
-        # hybrid_two = imbalanced_techniques(clf, SMOTETomek(random_state=42), train, train_labels)
-        # cluster = imbalanced_techniques(clf, ClusterCentroids(random_state=42), train, train_labels)
-        # near = imbalanced_techniques(clf, EditedNearestNeighbours(), train, train_labels)
-        # near_miss = imbalanced_techniques(clf, NearMiss(), train, train_labels)
-        performance.append(smote)
-        performance.append(random)
-        # performance.append(hybrid_one)
-        # performance.append(hybrid_two)
-        # performance.append(cluster)
-        # performance.append(near)
-        # performance.append(near_miss)
-        max_pos = performance.index(max(performance))
-        # print(performance)
-        # print(max_pos)
-        if max_pos == 0:
+        if classifier == 2:
             print('Applying Smote - Oversampling...')
             sm = SMOTE(random_state=42)
             train, train_labels = sm.fit_resample(train, train_labels)
-        elif max_pos == 1:
-            print('Applying Random - Undersampling...')
-            sm = RandomUnderSampler(random_state=42)
-            train, train_labels = sm.fit_resample(train, train_labels)
-        # elif max_pos == 2:
-        #     print('Applying SMOTEENN - Hybrid...')
-        #     sm = SMOTEENN(random_state=42)
-        #     train, train_labels = sm.fit_resample(train, train_labels)
-        # elif max_pos == 3:
-        #     print('Applying SMOTETomek - Hybrid...')
-        #     sm = SMOTETomek(random_state=42)
-        #     train, train_labels = sm.fit_resample(train, train_labels)
-        # elif max_pos == 4:
-        #     print('Applying ClusterCentroids - Undersampling...')
-        #     sm = ClusterCentroids(random_state=42)
-        #     train, train_labels = sm.fit_resample(train, train_labels)
-        # elif max_pos == 5:
-        #     print('Applying EditedNearestNeighbours - Undersampling...')
-        #     sm = EditedNearestNeighbours()
-        #     train, train_labels = sm.fit_resample(train, train_labels)
-        # else:
-        #     print('Applying NearMiss - Undersampling...')
-        #     sm = NearMiss()
-        #     train, train_labels = sm.fit_resample(train, train_labels)
+        else:
+            print('There are imbalanced labels...')
+            print('Checking the best technique...')
+            performance = []
+            smote = imbalanced_techniques(clf, SMOTE(random_state=42), train, train_labels)
+            random = imbalanced_techniques(clf, RandomUnderSampler(random_state=42), train, train_labels)
+            # hybrid_one = imbalanced_techniques(clf, SMOTEENN(random_state=42), train, train_labels)
+            # hybrid_two = imbalanced_techniques(clf, SMOTETomek(random_state=42), train, train_labels)
+            # cluster = imbalanced_techniques(clf, ClusterCentroids(random_state=42), train, train_labels)
+            # near = imbalanced_techniques(clf, EditedNearestNeighbours(), train, train_labels)
+            # near_miss = imbalanced_techniques(clf, NearMiss(), train, train_labels)
+            performance.append(smote)
+            performance.append(random)
+            # performance.append(hybrid_one)
+            # performance.append(hybrid_two)
+            # performance.append(cluster)
+            # performance.append(near)
+            # performance.append(near_miss)
+            max_pos = performance.index(max(performance))
+            # print(performance)
+            # print(max_pos)
+            if max_pos == 0:
+                print('Applying Smote - Oversampling...')
+                sm = SMOTE(random_state=42)
+                train, train_labels = sm.fit_resample(train, train_labels)
+            elif max_pos == 1:
+                print('Applying Random - Undersampling...')
+                sm = RandomUnderSampler(random_state=42)
+                train, train_labels = sm.fit_resample(train, train_labels)
+            # elif max_pos == 2:
+            #     print('Applying SMOTEENN - Hybrid...')
+            #    sm = SMOTEENN(random_state=42)
+            #     train, train_labels = sm.fit_resample(train, train_labels)
+            # elif max_pos == 3:
+            #     print('Applying SMOTETomek - Hybrid...')
+            #     sm = SMOTETomek(random_state=42)
+            #     train, train_labels = sm.fit_resample(train, train_labels)
+            # elif max_pos == 4:
+            #    print('Applying ClusterCentroids - Undersampling...')
+            #    sm = ClusterCentroids(random_state=42)
+            #    train, train_labels = sm.fit_resample(train, train_labels)
+            # elif max_pos == 4:
+            #    print('Applying EditedNearestNeighbours - Undersampling...')
+            #    sm = EditedNearestNeighbours()
+            #    train, train_labels = sm.fit_resample(train, train_labels)
+            # else:
+            #    print('Applying NearMiss - Undersampling...')
+            #    sm = NearMiss()
+            #    train, train_labels = sm.fit_resample(train, train_labels)
     else:
         print('There are no imbalanced labels...')
     return train, train_labels
