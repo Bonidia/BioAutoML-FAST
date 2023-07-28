@@ -7,9 +7,8 @@
   <img src="https://github.com/Bonidia/BioAutoML/blob/main/img/BioAutoML.png" alt="BioAutoML" width="400">
 </h1>
 
-<h4 align="center">BioAutoML: Automated Feature Engineering and Metalearning for Classification of Biological Sequences</h4>
+<h4 align="center">BioAutoML-Fast: Democratizing Machine Learning in Life Sciences</h4>
 
-<h4 align="center">Democratizing Machine Learning in Life Sciences</h4>
 
 <p align="center">
   <a href="https://github.com/Bonidia/BioAutoML/">Home</a> •
@@ -22,13 +21,9 @@
 <h1 align="center"></h1>
 
 
-## Update news!!!
+[comment]: <> ## Update news!!!
 
-**New Version - Protein:** BioAutoML + iFeature[[Ref](https://github.com/Superzchen/iFeature)]- Access on [[https://bonidia.github.io/BioAutoML/](https://bonidia.github.io/BioAutoML/)]
-
-**New Version - Protein:** Access on [[https://bonidia.github.io/BioAutoML/](https://bonidia.github.io/BioAutoML/)]
-
-**Published Paper:** Access on [[https://doi.org/10.1093/bib/bbac218](https://doi.org/10.1093/bib/bbac218)]
+[comment]: <> **Published Paper:** Access on [[https://doi.org/10.1093/bib/bbac218](https://doi.org/10.1093/bib/bbac218)]
 
 
 ## Awards
@@ -149,6 +144,5 @@ Robson P Bonidia, Anderson P Avila Santos, Breno L S de Almeida, Peter F Stadler
     url = {https://doi.org/10.1093/bib/bbac218},
     note = {bbac218},
 }
-
 
 ```
