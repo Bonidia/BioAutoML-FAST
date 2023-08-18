@@ -805,7 +805,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
-    parser.add_argument('-test', '--test', help='csv format file, e.g., train.csv')
+    parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-nf', '--normalization', type=bool, default=False,

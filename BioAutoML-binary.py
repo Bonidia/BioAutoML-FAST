@@ -873,7 +873,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
-    parser.add_argument('-test', '--test', help='csv format file, e.g., train.csv')
+    parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-nf', '--normalization', type=bool, default=False,
@@ -920,7 +920,7 @@ if __name__ == '__main__':
         sys.exit()
 
     test_read = ''
-    if ftest != '':
+    if ftest:
         if os.path.exists(ftest) is True:
             test_read = pd.read_csv(ftest)
             print('Test - %s: Found File' % ftest)
@@ -929,7 +929,7 @@ if __name__ == '__main__':
             sys.exit()
 
     test_labels_read = ''
-    if ftest_labels != '':
+    if ftest_labels:
         if os.path.exists(ftest_labels) is True:
             test_labels_read = pd.read_csv(ftest_labels).values.ravel()
             print('Test_labels - %s: Found File' % ftest_labels)
@@ -938,7 +938,7 @@ if __name__ == '__main__':
             sys.exit()
 
     test_nameseq_read = ''
-    if nameseq_test != '':
+    if nameseq_test:
         if os.path.exists(nameseq_test) is True:
             test_nameseq_read = pd.read_csv(nameseq_test).values.ravel()
             print('Test_nameseq - %s: Found File' % nameseq_test)
