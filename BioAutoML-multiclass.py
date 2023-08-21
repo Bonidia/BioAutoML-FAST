@@ -648,14 +648,16 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Tuning: ' + str(tuning))
         print('Classifier: XGBClassifier')
         clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63, use_label_encoder=False)
-        train, train_labels = imbalanced_function(clf, train, train_labels)
+        if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             print('Tuning not yet available for XGBClassifier')
     elif classifier == 1:
         print('Tuning: ' + str(tuning))
         print('Classifier: Random Forest')
         clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-        train, train_labels = imbalanced_function(clf, train, train_labels)
+        if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_rf_bayesian()
             print('Finished Tuning')
@@ -663,7 +665,8 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Tuning: ' + str(tuning))
         print('Classifier: LightGBM')
         clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-        train, train_labels = imbalanced_function(clf, train, train_labels)
+        if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_lightgbm_bayesian()
             print('Finished Tuning')
@@ -672,7 +675,8 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Classifier: CatBoost')
         clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
                                  logging_level='Silent', random_state=63)
-        train, train_labels = imbalanced_function(clf, train, train_labels)
+        if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_catboost_bayesian()
             print('Finished Tuning')
@@ -814,6 +818,9 @@ if __name__ == '__main__':
     parser.add_argument('-classifier', '--classifier', default=0,
                         help='Classifier - 0: CatBoost, 1: Random Forest '
                              '2: LightGBM, 3: XGBoost')
+    parser.add_argument('-imbalance', '--imbalance', type=bool, default=False,
+                        help='To deal with the imbalanced dataset problem - True = Yes, False = No, '
+                             'default = False')
     parser.add_argument('-tuning', '--tuning_classifier', type=bool, default=False,
                         help='Tuning Classifier - True = Yes, False = No, default = False')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -828,6 +835,7 @@ if __name__ == '__main__':
     norm = args.normalization
     n_cpu = int(args.n_cpu)
     classifier = int(args.classifier)
+    imbalance_data = args.imbalance
     tuning = args.tuning_classifier
     foutput = str(args.output)
     n_exp_samples = int(args.n_exp_samples)
