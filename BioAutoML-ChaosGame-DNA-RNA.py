@@ -65,9 +65,8 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 	index = list()
 	for gene in range(0, len(solution)):
 		if int(solution[gene]) == 1:
-			ind = gene
-			index = index + ind
-	print(index)
+			index.append(int(gene))
+	# print(index)
 	
  
 	if len(fasta_label_train) > 2:
@@ -115,7 +114,7 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 	else:
 		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=1, random_state=63)
 
-	print('Checking the best descriptors...')
+	print('Checking the best features...')
 	ga_instance = pygad.GA(num_generations=estimations,
                        num_parents_mating=4,
                        fitness_func=objective_ga_pygad,
@@ -125,7 +124,6 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
                        init_range_low=0,
                        init_range_high=2,
                        parent_selection_type="tournament",
-                       keep_parents=8,
                        K_tournament=4,
                        crossover_type="two_points",
                        mutation_type="random",
@@ -137,18 +135,17 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 	print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=best))
 	print("Best fitness value reached after {best_solution_generation} generations.".format(best_solution_generation=ga_instance.best_solution_generation))
  
-	
 	index = list()
-	for gene in range(0, len(best)-1):
-		if int(gene) == 1:
-			ind = gene
-			index = index + ind
+	for gene in range(0, len(best)):
+		if int(best[gene]) == 1:
+			index.append(int(gene))
    
-	print(index)
+	# print(index)
 
 	if test != '':
 		df_test = pl.read_csv(test)
 
+	# print(index)
 	btrain = df_x[:, index]
 	path_btrain = path_bio + '/best_train.csv'
 	btrain.write_csv(path_btrain)
@@ -217,7 +214,9 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			fasta_list.append(preprocessed_fasta)
 			
 	dataset = path + '/Chaos.csv'
-	labels_list = ftrain_labels + ftest_labels
+	labels_list = ftrain_labels
+	if fasta_test:
+		labels_list = ftrain_labels + ftest_labels
 	text_input = ''
 	for i in range(len(fasta_list)):
 		text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
