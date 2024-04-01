@@ -1,0 +1,10 @@
+[theme]
+base="light"
+primaryColor="#106eea"
+
+[server]
+runOnSave = true
+maxUploadSize = 128
+
+[browser]
+gatherUsageStats = false

@@ -1,0 +1,24 @@
+/* Upload text */
+.st-emotion-cache-1aehpvj.e1bju1570 {
+    display: none;
+}
+
+/* Settings */
+#MainMenu {
+    visibility: hidden;
+}
+
+header {
+    visibility: hidden;
+}
+
+footer {
+    visibility: hidden;
+}
+
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 0rem;
+    padding-left: 5rem;
+    padding-right: 5rem;
+}
