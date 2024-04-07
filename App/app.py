@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
-import utils, setup
+import utils, modules
 
 def runUI():
     st.set_page_config(page_title = "BioAutoML", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
@@ -15,11 +15,11 @@ def runUI():
         st.session_state["queue"] = False
 
     if page == "Home":
-        setup.home.runUI()
+        modules.home.runUI()
     elif page == "Jobs":
-        setup.jobs.runUI()
+        modules.jobs.runUI()
     elif page == "Model Repository":
-        setup.repo.runUI()
+        modules.repo.runUI()
 
 if __name__ == "__main__":
     runUI()
