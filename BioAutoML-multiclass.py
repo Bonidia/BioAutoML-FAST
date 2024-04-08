@@ -510,7 +510,7 @@ def generate_all_plots(model, train, test, preds, feature_names, path='explanati
 
     print("Training the explainer model...")
     explainer = shap.TreeExplainer(model, data=train, feature_names=feature_names)
-    shap_values = np.array(explainer.shap_values(test))
+    shap_values = np.array(explainer.shap_values(test)).transpose()
     print("Explainer trained successfully!")
 
     classes = sorted(set(preds))
@@ -536,13 +536,13 @@ def generate_all_plots(model, train, test, preds, feature_names, path='explanati
     print("Plotting each class with summary and waterfall plots...")
     for i, cl in enumerate(classes):
         generated_plt[SUMMARY].append(
-            generate_summary_plot(shap_values[i], cl, test, feature_names, path)
+            generate_summary_plot(shap_values[i].transpose(), cl, test, feature_names, path)
         )
 
         random_samples = randomize_samples(preds, cl, n_samples=n_samples)
         for j, sample in enumerate(random_samples):
             generated_plt[WATERFALL].append(
-                generate_waterfall_plot(j+1, shap_values[i][sample], cl, test[sample], 
+                generate_waterfall_plot(j+1, shap_values[i].transpose()[sample], cl, test[sample], 
                                         explainer.expected_value[i], feature_names, path)
             )
 

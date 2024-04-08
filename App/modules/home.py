@@ -14,11 +14,19 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx
 import utils
 
 def submit_job(train_files, test_files, job_path, seq_type):
-    train_fasta, test_fasta, seq_type = utils.process_files(train_files, test_files, job_path, seq_type)
+    train_path = os.path.join(job_path, 'train')
+    os.makedirs(train_path)
 
+    for file in train_files:
+        save_path = os.path.join(train_path, file.name)
+        with open(save_path, mode='wb') as f:
+            f.write(file.getvalue())
+
+    train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
+    
     command = [
         "python",
-        "../BioAutoML-feature.py" if seq_type == "DNA/RNA" else "../BioAutoML-feature-protein.py",
+        "BioAutoML-BigData-DNA.py" if seq_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
         "--fasta_train",
     ]
 
@@ -26,10 +34,26 @@ def submit_job(train_files, test_files, job_path, seq_type):
     command.append("--fasta_label_train")
     command.extend(train_fasta.keys())
 
+    if test_files:
+        test_path = os.path.join(job_path, 'test')
+        os.makedirs(test_path)
+
+        for file in test_files:
+            save_path = os.path.join(test_path, file.name)
+            with open(save_path, mode='wb') as f:
+                f.write(file.getvalue())
+
+        test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+        command.append("--fasta_test")
+        command.extend(test_fasta.values())
+        command.append("--fasta_label_test")
+        command.extend(test_fasta.keys())
+
     command.extend(["--n_cpu", "-1"])
     command.extend(["--output", job_path])
 
-    subprocess.run(command)
+    subprocess.run(command, cwd="..")
     # with open(os.path.join(job_path, "predict.fasta"), "w") as f: 
     #     for record in SeqIO.parse(fasta_sequences, "fasta"):
     #         f.write(record.format("fasta"))
@@ -72,6 +96,8 @@ def runUI():
 
     st.markdown("""##### Classification""", unsafe_allow_html=True)
 
+    queue_info = st.container()
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -81,7 +107,7 @@ def runUI():
         seq_type = st.selectbox(":dna: Sequence type", ["DNA/RNA", "Protein"], 
                                     help="Only sequences without ambiguous nucleotides or amino acids are supported") #index=None
 
-    with st.form("sequences_submit"):
+    with st.form("sequences_submit", clear_on_submit=True):
         
         if evaluation == "Training and test set":
             set1, set2 = st.columns(2)
@@ -105,13 +131,13 @@ def runUI():
         os.makedirs(job_path)
         if evaluation == "Training and test set":
             job_queue.put((train_files, test_files, job_path, seq_type))
+            train_files, test_files
         else:
             job_queue.put((train_files, None, job_path, seq_type))
 
-        st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-
+        with queue_info:
+            st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
         
-
     #     if fasta_text:
     #         job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
     #         job_path = os.path.join(predict_path, job_id)

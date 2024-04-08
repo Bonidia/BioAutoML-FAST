@@ -1,0 +1,16 @@
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9834,0.01,0.9742,0.02,0.9834,0.01,0.9832,0.01,0.9834,0.01,0.9738,0.02
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9758,0.02,0.9621,0.03,0.9758,0.02,0.9756,0.02,0.9757,0.02,0.9617,0.03
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9808,0.02,0.9701,0.03,0.9808,0.02,0.9788,0.02,0.9807,0.02,0.9695,0.03
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9745,0.02,0.9601,0.03,0.9745,0.02,0.9730,0.02,0.9745,0.02,0.9594,0.04
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9745,0.02,0.9600,0.03,0.9745,0.02,0.9728,0.02,0.9743,0.02,0.9594,0.03
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9732,0.01,0.9580,0.01,0.9732,0.01,0.9722,0.01,0.9730,0.01,0.9574,0.01
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9706,0.02,0.9540,0.03,0.9706,0.02,0.9697,0.02,0.9704,0.02,0.9532,0.03
+ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa
+0.9834,0.02,0.9743,0.03,0.9834,0.02,0.9826,0.02,0.9834,0.02,0.9737,0.03
