@@ -125,35 +125,18 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-        job_path = os.path.join(predict_path, job_id)
+        if (evaluation == "Training and test set" and train_files and test_files) or (evaluation == "Training set" and train_files):
+            job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
+            job_path = os.path.join(predict_path, job_id)
 
-        os.makedirs(job_path)
-        if evaluation == "Training and test set":
-            job_queue.put((train_files, test_files, job_path, seq_type))
-            train_files, test_files
+            os.makedirs(job_path)
+            if evaluation == "Training and test set":
+                job_queue.put((train_files, test_files, job_path, seq_type))
+            else:
+                job_queue.put((train_files, None, job_path, seq_type))
+
+            with queue_info:
+                st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
         else:
-            job_queue.put((train_files, None, job_path, seq_type))
-
-        with queue_info:
-            st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-        
-    #     if fasta_text:
-    #         job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-    #         job_path = os.path.join(predict_path, job_id)
-    #         fasta_sequences = StringIO(fasta_text)
-
-    #         os.makedirs(job_path)
-    #         job_queue.put((fasta_sequences, job_path))
-    #         st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-
-    #     elif fasta_file:
-    #         job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-    #         job_path = os.path.join(predict_path, job_id)
-    #         fasta_sequences = StringIO(fasta_file.getvalue().decode("utf-8"))
-
-    #         os.makedirs(job_path)
-    #         job_queue.put((fasta_sequences, job_path))
-    #         st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-    #     else:
-    #         st.error("No sequences submitted!")
+            with queue_info:
+                st.error("No sequences submitted!")

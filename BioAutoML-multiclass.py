@@ -98,7 +98,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
     scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
     save_measures(output_cross, scores)
     y_pred = cross_val_predict(model, X, y, cv=kfold)
-    conf_mat = (pd.crosstab(y, y_pred, rownames=['REAL'], colnames=['PREDITO'], margins=True))
+    conf_mat = (pd.crosstab(lb_encoder.inverse_transform(y), lb_encoder.inverse_transform(y_pred), rownames=['REAL'], colnames=['PREDITO'], margins=True))
     conf_mat.to_csv(matrix_output)
 
 
@@ -609,6 +609,7 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
 
     """Preprocessing:  Label Encoding"""
 
+    global lb_encoder
     lb_encoder = LabelEncoder()
     train_labels = lb_encoder.fit_transform(train_labels)
 
