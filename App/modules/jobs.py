@@ -10,7 +10,7 @@ def runUI():
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "0ySizcAnrKyLIg1p"
+        st.session_state["job_input"] = "29JToUX0qaDtIqaO"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -57,9 +57,13 @@ def runUI():
             train_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
             st.dataframe(train_stats, hide_index=True, use_container_width=True)
 
-            st.markdown("**Test set**")
-            test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
-            st.dataframe(test_stats, hide_index=True, use_container_width=True)
+            test_fold = os.path.join(st.session_state["job_path"], "test")
+            test_set = True if os.path.exists(test_fold) else False
+
+            if test_set:
+                st.markdown("**Test set**")
+                test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
+                st.dataframe(test_stats, hide_index=True, use_container_width=True)
 
         tab1, tab2, tab3 = st.tabs(["Performance Metrics", "Predictions", "Feature Importance"])
         
@@ -128,19 +132,42 @@ def runUI():
 
                     st.plotly_chart(fig, use_container_width=True)
 
-        # df_results = pd.read_csv(predictions)
+        with tab2:
+            predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
+            predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
+            labels = predictions.columns[1:-1]
 
-        # df_results["Probability"] = df_results.apply(lambda x: max(x[["Cis-reg", "coding", "rRNA", "sRNA", "tRNA", "unknown"]])*100, axis=1)
-
-        # df_results = df_results[["nameseq", "prediction", "Probability"]]
+            st.dataframe(
+                predictions,
+                hide_index=True,
+                height=500,
+                column_config = {label: st.column_config.ProgressColumn(
+                                    help="Label probability",
+                                    format="%.2f%%",
+                                    min_value=0,
+                                    max_value=100
+                                ) for label in labels},
+                use_container_width=True
+            )
         
-        # df_results.columns = ["Name", "Prediction", "Probability"]
+        with tab3:
+            df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
 
-        # st.dataframe(df_results,
-        #             column_config = {"Probability": st.column_config.ProgressColumn(
-        #                 help="Prediction probability",
-        #                 format="%.2f%%",
-        #                 min_value=0,
-        #                 max_value=100
-        #             )},
-        #             hide_index=True, use_container_width=True)
+            features = df[2].str.extract(r'\((.*?)\)')[0][::-1]
+
+            score_importances = df[3].str.extract(r'\((.*?)\)')[0].values.astype(float)[::-1]
+
+            fig = go.Figure(data=go.Bar(
+                x=features,
+                y=score_importances,
+                marker=dict(color=score_importances, colorscale='blues'),
+                hovertemplate='Feature: %{x}<br>Importance: %{y}<extra></extra>'
+            ))
+
+            fig.update_layout(
+                title="Feature Importance",
+                xaxis_title="Features",
+                yaxis_title="Importance",
+            )
+
+            st.plotly_chart(fig, use_container_width=True)

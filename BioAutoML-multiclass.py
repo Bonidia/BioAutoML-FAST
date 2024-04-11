@@ -437,21 +437,17 @@ def imbalanced_function(clf, train, train_labels):
     return train, train_labels
 
 
-def save_prediction(prediction, nameseqs, pred_output):
+def save_prediction(probs, nameseqs, pred_output):
 
     """Saving prediction - test set"""
-    
-    map(str, prediction)
 
-	# From where does "nameseq_test" come from????
-    with open(pred_output, 'a') as f:
-        if os.path.exists(nameseq_test) is True:
-            map(str, nameseqs)
-            for seq, pred in zip(nameseqs, prediction):
-                f.write(f"{seq},{pred}\n") 
-        else:
-            for pred in prediction:
-                f.write(f"{pred}\n") 
+    nameseq_df = pd.DataFrame(nameseqs, columns=["nameseq"])
+
+    probs_df = pd.DataFrame(probs, columns=lb_encoder.classes_)
+    probs_df["prediction"] = probs_df.idxmax(axis=1)
+
+    preds_df = pd.concat([nameseq_df, probs_df], axis=1)
+    preds_df.to_csv(pred_output, index=False)
 
 
 def randomize_samples(targets, _class, n_samples=1):
@@ -739,10 +735,10 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
     if os.path.exists(ftest) is True:
         print('Generating Performance Test...')
         preds = lb_encoder.inverse_transform(clf.predict(test))
-
+        probs = clf.predict_proba(test)
         pred_output = os.path.join(output, 'test_predictions.csv')
         print('Saving prediction in ' + pred_output + '...')
-        save_prediction(preds, test_nameseq, pred_output)
+        save_prediction(probs, test_nameseq, pred_output)
 
         """Generating Explainable Machine Learning plots from the test set..."""
 

@@ -55,8 +55,8 @@ def submit_job(train_files, test_files, job_path, seq_type):
 
     subprocess.run(command, cwd="..")
 
-    utils.summary_stats(os.path.join(st.session_state["job_path"], "feat_extraction/train"), job_path)
-    utils.summary_stats(os.path.join(st.session_state["job_path"], "feat_extraction/test"), job_path)
+    utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
+    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
 
 def queue_listener():
     while True:
