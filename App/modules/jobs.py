@@ -3,19 +3,29 @@ import polars as pl
 import pandas as pd
 import plotly.graph_objects as go
 import os
+import utils
 
 def runUI():
     if not st.session_state["queue"]:
         st.session_state["queue"] = True
 
+    def get_job_example():
+        st.session_state["job_input"] = "0ySizcAnrKyLIg1p"
+
+    with st.container(border=True):
+        col1, col2 = st.columns([9, 1])
+
+        with col2:
+            example_job = st.button("Example", use_container_width=True, on_click=get_job_example)
+
+        with st.form("sequences_submit", border=False):
+            job_id = st.text_input("Enter Job ID", key="job_input")
+
+            submitted = st.form_submit_button("Submit", use_container_width=True,  type="primary")
+
     predict_path = "jobs"
-    with st.form("sequences_submit"):
-        job_id = st.text_input("Enter Job ID")
 
-        submitted = st.form_submit_button("Submit")
-    
     if submitted:
-
         if job_id:
             job_path = os.path.join(predict_path, job_id)
             if os.path.exists(job_path):
@@ -31,24 +41,31 @@ def runUI():
                 if os.path.exists(predictions):
                     st.session_state["job_path"] = job_path
                 else:
-                    del st.session_state["job_path"]
+                    if "job_path" in st.session_state:
+                        del st.session_state["job_path"]
                     st.info("Job is still in progress. Come back later.")
             else:
-                del st.session_state["job_path"]
+                if "job_path" in st.session_state:
+                    del st.session_state["job_path"]
                 st.error("Job does not exist!")
 
     if "job_path" in st.session_state:
-        st.divider()
+        st.success("Job was completed with the following results")
 
-        st.success("Job was completed with the following results.")
+        with st.expander("Summary Statistics"):
+            st.markdown("**Training set**")
+            train_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
+            st.dataframe(train_stats, hide_index=True, use_container_width=True)
 
-        st.markdown("Sequence statistics")
+            st.markdown("**Test set**")
+            test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
+            st.dataframe(test_stats, hide_index=True, use_container_width=True)
 
-        tab1, tab2, tab3 = st.tabs(['Performance Metrics', 'Predictions', 'Feature Importance'])
+        tab1, tab2, tab3 = st.tabs(["Performance Metrics", "Predictions", "Feature Importance"])
         
         with tab1:
             evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
-                        help="Training set evaluated with 10-fold cross-validation") #index=None
+                                        help="Training set evaluated with 10-fold cross-validation")
 
             col1, col2 = st.columns(2)
 

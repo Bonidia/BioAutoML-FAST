@@ -54,13 +54,9 @@ def submit_job(train_files, test_files, job_path, seq_type):
     command.extend(["--output", job_path])
 
     subprocess.run(command, cwd="..")
-    # with open(os.path.join(job_path, "predict.fasta"), "w") as f: 
-    #     for record in SeqIO.parse(fasta_sequences, "fasta"):
-    #         f.write(record.format("fasta"))
 
-    # subprocess.run(["python", "../Classification/main.py", "--test", job_path] +
-    #                 ["--path_model", "../Classification/results/enc1_cnn_bilstm_4conv_k1_concat2_bio/model.h5"] +
-    #                 ["--encoding", "1", "--k", "1", "--concat", "1", "--feat_extraction", "1", "--features_exist", "1", "--output", job_path])
+    utils.summary_stats(os.path.join(st.session_state["job_path"], "feat_extraction/train"), job_path)
+    utils.summary_stats(os.path.join(st.session_state["job_path"], "feat_extraction/test"), job_path)
 
 def queue_listener():
     while True:
@@ -120,7 +116,7 @@ def runUI():
         else:
             train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
 
-        submitted = st.form_submit_button("Submit")
+        submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
     predict_path = os.path.abspath("jobs")
 
