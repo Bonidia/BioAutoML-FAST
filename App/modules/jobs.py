@@ -2,8 +2,162 @@ import streamlit as st
 import polars as pl
 import pandas as pd
 import plotly.graph_objects as go
+from itertools import chain
+import plotly.express as px
+import plotly.figure_factory as ff
+import numpy as np
 import os
 import utils
+from umap import UMAP
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+def dimensionality_reduction(scaled_data, labels, nameseqs):
+    dim_col1, dim_col2 = st.columns(2)
+
+    with dim_col1:
+        reduction = st.selectbox("Select dimensionality reduction technique", 
+                                ["Principal Component Analysis (PCA)",
+                                "t-Distributed Stochastic Neighbor Embedding (t-SNE)",
+                                "Uniform Manifold Approximation and Projection (UMAP)"])
+        
+        if reduction == "t-Distributed Stochastic Neighbor Embedding (t-SNE)":
+            perplexity = st.slider("Perplexity", min_value=5, max_value=50, value=30)
+            learning_rate = st.slider("Learning rate", min_value=10, max_value=1000, value=200)
+            n_iter = st.slider("Number of iterations", min_value=100, max_value=10000, value=1000)
+            reducer = TSNE(n_components=3, perplexity=perplexity, learning_rate=learning_rate, n_iter=n_iter, random_state=0)
+        elif reduction == "Uniform Manifold Approximation and Projection (UMAP)":
+            n_neighbors = st.slider("Number of neighbors", min_value=2, max_value=100, value=15)
+            min_dist = st.slider("Minimum distance", min_value=0.0, max_value=1.0, value=0.1)
+            reducer = UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=min_dist, random_state=0)
+        else:
+            # No additional parameters for PCA
+            reducer = PCA(n_components=3)
+
+    names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
+
+    if reduction:
+        with dim_col2:
+            with st.spinner('Loading...'):
+                reduced_data = pd.DataFrame(reducer.fit_transform(scaled_data))
+
+                fig = go.Figure()
+
+                for i, label in enumerate(np.unique(labels)):
+                    mask = [True if l == label else False for l in labels]
+                    fig.add_trace(go.Scatter3d(
+                        x=reduced_data[mask][0],
+                        y=reduced_data[mask][1],
+                        z=reduced_data[mask][2],
+                        mode='markers',
+                        name=f'{label}',
+                        marker=dict(
+                            color=utils.get_colors(len(np.unique(labels)))[i], size=3,
+                        ),
+                        hovertemplate=names[names["label"] == label]["nameseq"].tolist(),
+                        textposition='top center',
+                        hoverinfo='text'
+                    ))
+
+                fig.update_layout(
+                    height=500,
+                    scene=dict(
+                        xaxis_title='Dimension 1',
+                        yaxis_title='Dimension 2',
+                        zaxis_title='Dimension 3'
+                    ),
+                    title=reduction,
+                    margin=dict(t=30, b=50)
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+def feature_correlation(features):
+    correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
+
+    if correlation_method == 'Pearson':
+        correlation_matrix = features.corr(method='pearson')
+    else:
+        correlation_matrix = features.corr(method='spearman')
+    
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Correlation between features sorted by the correlation coefficient**")
+        correlation_df = pd.DataFrame(correlation_matrix.stack(), columns=['Correlation coefficient'])
+
+        # Reset the index to get the feature pairs as separate columns
+        correlation_df.reset_index(inplace=True)
+
+        correlation_df.columns = ['Feature 1', 'Feature 2', 'Correlation coefficient']
+
+        correlation_df = correlation_df.drop(correlation_df[correlation_df['Feature 1'] == correlation_df['Feature 2']].index)
+
+        # Sort the DataFrame by correlation coefficient in descending order
+        correlation_df = correlation_df.sort_values('Correlation coefficient', ascending=False).reset_index(drop=True)
+
+        # Display the sorted dataframe
+        st.dataframe(correlation_df, hide_index=True, use_container_width=True)
+
+    with col2:
+        fig = px.imshow(correlation_matrix, x=correlation_matrix.columns, y=correlation_matrix.columns,
+                        color_continuous_scale='RdBu', title='Correlation heatmap')
+        
+        fig.update_traces(hovertemplate='Feature 1 (x-axis): %{x}<br>Feature 2 (y-axis): %{y}<br>Correlation: %{z}<extra></extra>')
+
+        fig.update_layout(height=500, margin=dict(t=30, b=50))
+        st.plotly_chart(fig, use_container_width=True)
+
+def feature_distribution(features, labels, nameseqs):
+    col1, col2 = st.columns(2)
+
+    # Select feature to plot
+    with col1:
+        selected_feature = st.selectbox("Select a feature", features.columns)
+
+    # Get unique labels and assign colors
+    unique_labels = labels["label"].unique()
+    color_map = utils.get_colors(len(unique_labels))[:len(unique_labels)]
+
+    with col2:
+        num_bins = st.slider("Number of bins", min_value=5, max_value=50, value=30)
+
+    with st.spinner('Loading...'):
+        fig_data = []
+        fig_rug_text = []
+
+        feature_data = features[selected_feature].values.astype(float)
+
+        for label in unique_labels:
+            
+            group_indices = list(chain(*(labels == label).values))
+            group_data = feature_data[group_indices]
+            fig_data.append(group_data)
+
+            group_names = nameseqs[group_indices]["nameseq"]
+            fig_rug_text.append(group_names.tolist())
+
+        bin_edges = np.histogram(fig_data[0], bins=num_bins)[1]
+
+        fig = ff.create_distplot(
+            fig_data,
+            unique_labels,
+            bin_size=bin_edges,
+            colors=color_map,
+            rug_text=fig_rug_text,
+            histnorm="probability density"
+        )
+
+        fig.update_layout(
+            title=f"Feature distribution for {selected_feature}",
+            xaxis_title=selected_feature,
+            yaxis_title="Density",
+            height=800,
+            margin=dict(t=30, b=50)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 def runUI():
     if not st.session_state["queue"]:
@@ -65,7 +219,10 @@ def runUI():
                 test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
                 st.dataframe(test_stats, hide_index=True, use_container_width=True)
 
-        tab1, tab2, tab3 = st.tabs(["Performance Metrics", "Predictions", "Feature Importance"])
+        if test_set:
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
+        else:
+            tab1, tab3, tab4, tab5, tab6 = st.tabs(["Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
         
         with tab1:
             evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
@@ -105,7 +262,8 @@ def runUI():
                     fig.update_layout(
                         title='Confusion Matrix',
                         xaxis_title='Predicted label',
-                        yaxis_title='True label'
+                        yaxis_title='True label',
+                        margin=dict(t=30, b=50)
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
@@ -127,28 +285,30 @@ def runUI():
                     fig.update_layout(
                         title='Confusion Matrix',
                         xaxis_title='Predicted label',
-                        yaxis_title='True label'
+                        yaxis_title='True label',
+                        margin=dict(t=30, b=50)
                     )
 
                     st.plotly_chart(fig, use_container_width=True)
 
-        with tab2:
-            predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
-            predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
-            labels = predictions.columns[1:-1]
+        if test_set:
+            with tab2:
+                predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
+                predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
+                labels = predictions.columns[1:-1]
 
-            st.dataframe(
-                predictions,
-                hide_index=True,
-                height=500,
-                column_config = {label: st.column_config.ProgressColumn(
-                                    help="Label probability",
-                                    format="%.2f%%",
-                                    min_value=0,
-                                    max_value=100
-                                ) for label in labels},
-                use_container_width=True
-            )
+                st.dataframe(
+                    predictions,
+                    hide_index=True,
+                    height=500,
+                    column_config = {label: st.column_config.ProgressColumn(
+                                        help="Label probability",
+                                        format="%.2f%%",
+                                        min_value=0,
+                                        max_value=100
+                                    ) for label in labels},
+                    use_container_width=True
+                )
         
         with tab3:
             df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
@@ -165,9 +325,30 @@ def runUI():
             ))
 
             fig.update_layout(
-                title="Feature Importance",
                 xaxis_title="Features",
                 yaxis_title="Importance",
+                margin=dict(t=0, b=50)
             )
 
+            st.markdown("**Importance of features regarding model training**", help="It is possible to zoom in to visualize features properly.")
             st.plotly_chart(fig, use_container_width=True)
+
+        with tab4:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
+            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))
+            
+            feature_distribution(features, labels, nameseqs)
+        with tab5:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
+            feature_correlation(features)
+        
+        with tab6:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
+            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
+            
+            scaler = StandardScaler()
+            scaled_data = pd.DataFrame(scaler.fit_transform(features))
+
+            dimensionality_reduction(scaled_data, labels, nameseqs)

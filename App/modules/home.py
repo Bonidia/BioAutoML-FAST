@@ -97,7 +97,7 @@ def runUI():
     col1, col2 = st.columns(2)
 
     with col1:
-        evaluation = st.selectbox(":mag_right: Dataset", ["Training set", "Training and test set"],
+        evaluation = st.selectbox(":mag_right: Dataset", ["Training set", "Training and test set", "Training set and predict", "Load model and predict"],
                                     help="Training set evaluated with 10-fold cross-validation") #index=None
     with col2:
         seq_type = st.selectbox(":dna: Sequence type", ["DNA/RNA", "Protein"], 
