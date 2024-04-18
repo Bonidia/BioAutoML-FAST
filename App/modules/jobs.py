@@ -13,10 +13,24 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-def dimensionality_reduction(scaled_data, labels, nameseqs):
+def dimensionality_reduction():
     dim_col1, dim_col2 = st.columns(2)
 
     with dim_col1:
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="reduction")
+
+        if evaluation == "Training set":
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))["label"].tolist()
+            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
+        else:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
+            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
+        
+        scaler = StandardScaler()
+        scaled_data = pd.DataFrame(scaler.fit_transform(features))
+
         reduction = st.selectbox("Select dimensionality reduction technique", 
                                 ["Principal Component Analysis (PCA)",
                                 "t-Distributed Stochastic Neighbor Embedding (t-SNE)",
@@ -32,7 +46,6 @@ def dimensionality_reduction(scaled_data, labels, nameseqs):
             min_dist = st.slider("Minimum distance", min_value=0.0, max_value=1.0, value=0.1)
             reducer = UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=min_dist, random_state=0)
         else:
-            # No additional parameters for PCA
             reducer = PCA(n_components=3)
 
     names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
@@ -41,11 +54,12 @@ def dimensionality_reduction(scaled_data, labels, nameseqs):
         with dim_col2:
             with st.spinner('Loading...'):
                 reduced_data = pd.DataFrame(reducer.fit_transform(scaled_data))
-
+                
                 fig = go.Figure()
 
                 for i, label in enumerate(np.unique(labels)):
                     mask = [True if l == label else False for l in labels]
+
                     fig.add_trace(go.Scatter3d(
                         x=reduced_data[mask][0],
                         y=reduced_data[mask][1],
@@ -56,6 +70,13 @@ def dimensionality_reduction(scaled_data, labels, nameseqs):
                             color=utils.get_colors(len(np.unique(labels)))[i], size=3,
                         ),
                         hovertemplate=names[names["label"] == label]["nameseq"].tolist(),
+                        hoverlabel = dict(
+                                        font=dict(
+                                        family="Open Sans, History Sans Pro Light",
+                                        color="white",
+                                        size=12),
+                                        bgcolor="black"
+                                        ),
                         textposition='top center',
                         hoverinfo='text'
                     ))
@@ -63,9 +84,9 @@ def dimensionality_reduction(scaled_data, labels, nameseqs):
                 fig.update_layout(
                     height=500,
                     scene=dict(
-                        xaxis_title='Dimension 1',
-                        yaxis_title='Dimension 2',
-                        zaxis_title='Dimension 3'
+                        xaxis_title='Component 1',
+                        yaxis_title='Component 2',
+                        zaxis_title='Component 3'
                     ),
                     title=reduction,
                     margin=dict(t=30, b=50)
@@ -73,16 +94,25 @@ def dimensionality_reduction(scaled_data, labels, nameseqs):
 
                 st.plotly_chart(fig, use_container_width=True)
 
-def feature_correlation(features):
-    correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
-
-    if correlation_method == 'Pearson':
-        correlation_matrix = features.corr(method='pearson')
-    else:
-        correlation_matrix = features.corr(method='spearman')
-    
+def feature_correlation():
     col1, col2 = st.columns(2)
 
+    with col1:
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="correlation")
+
+        if evaluation == "Training set":
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
+        else:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+
+    with col2:
+        correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
+
+        if correlation_method == 'Pearson':
+            correlation_matrix = features.corr(method='pearson')
+        else:
+            correlation_matrix = features.corr(method='spearman')
+        
     with col1:
         st.markdown("**Correlation between features sorted by the correlation coefficient**")
         correlation_df = pd.DataFrame(correlation_matrix.stack(), columns=['Correlation coefficient'])
@@ -109,7 +139,19 @@ def feature_correlation(features):
         fig.update_layout(height=500, margin=dict(t=30, b=50))
         st.plotly_chart(fig, use_container_width=True)
 
-def feature_distribution(features, labels, nameseqs):
+def feature_distribution():
+    evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
+                                help="Training set evaluated with 10-fold cross-validation", key="distribution")
+
+    if evaluation == "Training set":
+        features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
+        labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))
+        nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))
+    else:
+        features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+        labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
+        nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))
+    
     col1, col2 = st.columns(2)
 
     # Select feature to plot
@@ -159,12 +201,120 @@ def feature_distribution(features, labels, nameseqs):
 
         st.plotly_chart(fig, use_container_width=True)
 
+def performance_metrics():
+    evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
+                                        help="Training set evaluated with 10-fold cross-validation")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if evaluation == "Training set":
+            df_cv = pl.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
+
+            st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
+            st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
+            st.markdown(f"""**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}""")
+            st.markdown(f"""**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}""")
+            st.markdown(f"""**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}""")
+            st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
+        else:
+            df_report = pl.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+            st.dataframe(df_report, hide_index=True, use_container_width=True)
+    with col2:
+        if evaluation == "Training set":
+            df = pd.read_csv(os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv"))
+
+            # Extract labels and confusion matrix values
+            labels = df.columns[1:-1].tolist()
+            
+            values = df.iloc[0:-1, 1:-1].values.tolist()
+
+            fig = go.Figure(data=go.Heatmap(
+                z=values,
+                x=labels,
+                y=labels,
+                colorscale='Blues'
+            ))
+
+            fig.update_layout(
+                title='Confusion Matrix',
+                xaxis_title='Predicted label',
+                yaxis_title='True label',
+                margin=dict(t=30, b=50)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            df = pd.read_csv(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+
+            # Extract labels and confusion matrix values
+            labels = df.columns[1:-1].tolist()
+            
+            values = df.iloc[0:-1, 1:-1].values.tolist()
+
+            fig = go.Figure(data=go.Heatmap(
+                z=values,
+                x=labels,
+                y=labels,
+                colorscale='Blues'
+            ))
+
+            fig.update_layout(
+                title='Confusion Matrix',
+                xaxis_title='Predicted label',
+                yaxis_title='True label',
+                margin=dict(t=30, b=50)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+def show_predictions():
+    predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
+    predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
+    labels = predictions.columns[1:-1]
+
+    st.dataframe(
+        predictions,
+        hide_index=True,
+        height=500,
+        column_config = {label: st.column_config.ProgressColumn(
+                            help="Label probability",
+                            format="%.2f%%",
+                            min_value=0,
+                            max_value=100
+                        ) for label in labels},
+        use_container_width=True
+    )
+
+def feature_importance():
+    df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
+
+    features = df[2].str.extract(r'\((.*?)\)')[0][::-1]
+
+    score_importances = df[3].str.extract(r'\((.*?)\)')[0].values.astype(float)[::-1]
+
+    fig = go.Figure(data=go.Bar(
+        x=features[::-1],
+        y=score_importances[::-1],
+        marker=dict(color=score_importances[::-1], colorscale='blues'),
+        hovertemplate='Feature: %{x}<br>Importance: %{y}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        xaxis_title="Features",
+        yaxis_title="Importance",
+        margin=dict(t=0, b=50)
+    )
+
+    st.markdown("**Importance of features regarding model training**", help="It is possible to zoom in to visualize features properly.")
+    st.plotly_chart(fig, use_container_width=True)
+
 def runUI():
     if not st.session_state["queue"]:
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "29JToUX0qaDtIqaO"
+        st.session_state["job_input"] = "V2B4LkGYfa7gEJtd"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -225,130 +375,20 @@ def runUI():
             tab1, tab3, tab4, tab5, tab6 = st.tabs(["Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
         
         with tab1:
-            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
-                                        help="Training set evaluated with 10-fold cross-validation")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if evaluation == "Training set":
-                    df_cv = pl.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
-
-                    st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
-                    st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
-                    st.markdown(f"""**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}""")
-                    st.markdown(f"""**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}""")
-                    st.markdown(f"""**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}""")
-                    st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
-                else:
-                    df_report = pl.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
-                    st.dataframe(df_report, hide_index=True, use_container_width=True)
-            with col2:
-                if evaluation == "Training set":
-                    df = pd.read_csv(os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv"))
-
-                    # Extract labels and confusion matrix values
-                    labels = df.columns[1:-1].tolist()
-                    
-                    values = df.iloc[0:-1, 1:-1].values.tolist()
-
-                    fig = go.Figure(data=go.Heatmap(
-                        z=values,
-                        x=labels,
-                        y=labels,
-                        colorscale='Blues'
-                    ))
-
-                    fig.update_layout(
-                        title='Confusion Matrix',
-                        xaxis_title='Predicted label',
-                        yaxis_title='True label',
-                        margin=dict(t=30, b=50)
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    df = pd.read_csv(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
-
-                    # Extract labels and confusion matrix values
-                    labels = df.columns[1:-1].tolist()
-                    
-                    values = df.iloc[0:-1, 1:-1].values.tolist()
-
-                    fig = go.Figure(data=go.Heatmap(
-                        z=values,
-                        x=labels,
-                        y=labels,
-                        colorscale='Blues'
-                    ))
-
-                    fig.update_layout(
-                        title='Confusion Matrix',
-                        xaxis_title='Predicted label',
-                        yaxis_title='True label',
-                        margin=dict(t=30, b=50)
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
+            performance_metrics()
 
         if test_set:
             with tab2:
-                predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
-                predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
-                labels = predictions.columns[1:-1]
-
-                st.dataframe(
-                    predictions,
-                    hide_index=True,
-                    height=500,
-                    column_config = {label: st.column_config.ProgressColumn(
-                                        help="Label probability",
-                                        format="%.2f%%",
-                                        min_value=0,
-                                        max_value=100
-                                    ) for label in labels},
-                    use_container_width=True
-                )
+                show_predictions()
         
         with tab3:
-            df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
-
-            features = df[2].str.extract(r'\((.*?)\)')[0][::-1]
-
-            score_importances = df[3].str.extract(r'\((.*?)\)')[0].values.astype(float)[::-1]
-
-            fig = go.Figure(data=go.Bar(
-                x=features,
-                y=score_importances,
-                marker=dict(color=score_importances, colorscale='blues'),
-                hovertemplate='Feature: %{x}<br>Importance: %{y}<extra></extra>'
-            ))
-
-            fig.update_layout(
-                xaxis_title="Features",
-                yaxis_title="Importance",
-                margin=dict(t=0, b=50)
-            )
-
-            st.markdown("**Importance of features regarding model training**", help="It is possible to zoom in to visualize features properly.")
-            st.plotly_chart(fig, use_container_width=True)
+            feature_importance()
 
         with tab4:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
-            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))
-            
-            feature_distribution(features, labels, nameseqs)
+            feature_distribution()
+
         with tab5:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
-            feature_correlation(features)
+            feature_correlation()
         
         with tab6:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
-            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
-            
-            scaler = StandardScaler()
-            scaled_data = pd.DataFrame(scaler.fit_transform(features))
-
-            dimensionality_reduction(scaled_data, labels, nameseqs)
+            dimensionality_reduction()
