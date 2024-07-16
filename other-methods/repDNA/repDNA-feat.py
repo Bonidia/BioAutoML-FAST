@@ -107,7 +107,7 @@ if __name__ == '__main__':
 	for col in range(0, len(df.columns)):
 		new_names.append('repDNA-' + str(col))
 	# df = df.add_prefix('repDNA_')
-	df.set_axis(new_names, inplace=True, axis=1)
+	df = df.set_axis(new_names, axis=1)
 	df.insert(0, "nameseq", names_seq)
 	df.insert(len(df.columns), "label", label)
 	df.to_csv(output_file, index=False, mode='a')

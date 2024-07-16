@@ -714,10 +714,15 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
     train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
     matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
     model_output = os.path.join(output, 'trained_model.sav')
+
     evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
     
     clf.fit(train, train_labels)
-    joblib.dump(clf, model_output)
+
+    model_dict = {"clf": clf, "scaler": sc if norm is True else False, "label_encoder": lb_encoder}
+
+    joblib.dump(model_dict, model_output)
+
     print('Saving results in ' + train_output + '...')
     print('Saving confusion matrix in ' + matrix_output + '...')
     print('Saving trained model in ' + model_output + '...')

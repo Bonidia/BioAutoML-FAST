@@ -236,13 +236,17 @@ def objective(trial, train, train_labels):
 
 	kfold = StratifiedKFold(n_splits=5, shuffle=True)
 	le = LabelEncoder()
-	metric = cross_val_score(model,
-							 train[:, index],
-        					 le.fit_transform(pl.read_csv(train_labels)),
-							 cv=kfold,
-							 scoring=score,
-							 n_jobs=n_cpu).mean()
-	
+
+	try:
+		metric = cross_val_score(model,
+								train[:, index],
+								le.fit_transform(pl.read_csv(train_labels)),
+								cv=kfold,
+								scoring=score,
+								n_jobs=n_cpu).mean()
+	except Exception as e:
+		metric = 0.0
+		
 	return metric
 
 

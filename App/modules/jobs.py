@@ -322,7 +322,7 @@ def runUI():
         with col2:
             example_job = st.button("Example", use_container_width=True, on_click=get_job_example)
 
-        with st.form("sequences_submit", border=False):
+        with st.form("jobs_submit", border=False):
             job_id = st.text_input("Enter Job ID", key="job_input")
 
             submitted = st.form_submit_button("Submit", use_container_width=True,  type="primary")

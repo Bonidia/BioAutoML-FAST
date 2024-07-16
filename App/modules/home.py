@@ -26,7 +26,7 @@ def submit_job(train_files, test_files, job_path, seq_type):
     
     command = [
         "python",
-        "BioAutoML-BigData-DNA.py" if seq_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
+        "BioAutoML-feature.py" if seq_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
         "--fasta_train",
     ]
 
@@ -100,7 +100,7 @@ def runUI():
         evaluation = st.selectbox(":mag_right: Dataset", ["Training set", "Training and test set", "Training set and predict", "Load model and predict"],
                                     help="Training set evaluated with 10-fold cross-validation") #index=None
     with col2:
-        seq_type = st.selectbox(":dna: Sequence type", ["DNA/RNA", "Protein"], 
+        seq_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
                                     help="Only sequences without ambiguous nucleotides or amino acids are supported") #index=None
 
     with st.form("sequences_submit", clear_on_submit=True):
