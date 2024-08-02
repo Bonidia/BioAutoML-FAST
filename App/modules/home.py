@@ -12,8 +12,9 @@ from queue import Queue
 from threading import Thread
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 import utils
+import base64
 
-def submit_job(train_files, test_files, job_path, seq_type):
+def submit_job(train_files, test_files, job_path, data_type, training, testing):
     train_path = os.path.join(job_path, 'train')
     os.makedirs(train_path)
 
@@ -55,14 +56,20 @@ def submit_job(train_files, test_files, job_path, seq_type):
 
     subprocess.run(command, cwd="..")
 
+    # ['python', 'BioAutoML-multiclass.py', 
+    # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
+    # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
+    # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
+    # '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk']
+
     utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
     utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
 
 def queue_listener():
     while True:
         if not job_queue.empty():
-            train_files, test_files, job_path, seq_type = job_queue.get()
-            submit_job(train_files, test_files, job_path, seq_type)
+            train_files, test_files, job_path, data_type, training, testing = job_queue.get()
+            submit_job(train_files, test_files, job_path, data_type, training, testing)
             
 def runUI():
     global job_queue
@@ -74,19 +81,32 @@ def runUI():
         add_script_run_ctx(queue_thread)
         queue_thread.start()
         st.session_state["queue"] = True
+    
+    file_ = open("imgs/logo_loop.gif", "rb")
+    contents = file_.read()
+    data_url = base64.b64encode(contents).decode("utf-8")
+    file_.close()
 
-    img_cols = st.columns([3, 2, 3])
-
-    with img_cols[1]:
-        st.image("imgs/logo.png")
-
-    st.markdown("""
+    st.markdown(f"""
         <div style='text-align: center;'>
-            <h5 style="color:gray">Democratizing Machine Learning in Life Sciences</h5>
+            <img src="data:image/gif;base64,{data_url}" alt="logo" width="600">
+            <h5 style="color:gray">Empowering researchers with machine learning</h5>
         </div>
     """, unsafe_allow_html=True)
 
-    st.info("""BioAutoML is ...""")
+    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
+     BioAutoML, optimized for speed and enhanced functionality. It allows
+     users to input their sequences or structured data for classification, 
+     generating models that can be saved for future use. The application 
+     features a repository of around 50 trained models for various problems,
+     such as cancer, COVID-19, and other diseases. By automating feature extraction, 
+     selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
+     learning tools accessible to researchers, biologists, and physicians, 
+     even those with limited ML expertise. This user-friendly interface 
+     supports innovative solutions to critical health challenges, advancing 
+     the field of bioinformatics and enabling the scientific community to 
+     develop new treatments and interventions, ultimately improving health 
+     outcomes and benefiting society.""")
 
     st.divider()
 
@@ -94,42 +114,89 @@ def runUI():
 
     queue_info = st.container()
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        evaluation = st.selectbox(":mag_right: Dataset", ["Training set", "Training and test set", "Training set and predict", "Load model and predict"],
+        training = st.selectbox(":brain: Training", ["Training set", "Load model"],
                                     help="Training set evaluated with 10-fold cross-validation") #index=None
     with col2:
-        seq_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
+        testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
+                                    help="Test set ")
+    with col3:
+        data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
                                     help="Only sequences without ambiguous nucleotides or amino acids are supported") #index=None
 
     with st.form("sequences_submit", clear_on_submit=True):
-        
-        if evaluation == "Training and test set":
-            set1, set2 = st.columns(2)
+        if training == "Training set":
+            if testing == "No test set":
+                if data_type == "Structured data":
+                    train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                else:
+                    train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+            elif testing == "Test set":
+                set1, set2 = st.columns(2)
 
-            with set1:
-                train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+                with set1:
+                    if data_type == "Structured data":
+                        train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                    else:
+                        train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+                with set2:
+                    if data_type == "Structured data":
+                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                    else:
+                        test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+            elif testing == "Prediction set":
+                set1, set2 = st.columns(2)
 
-            with set2:
-                test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+                with set1:
+                    if data_type == "Structured data":
+                        train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                    else:
+                        train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+                with set2:
+                    if data_type == "Structured data":
+                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
+                    else:
+                        test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
         else:
-            train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+            if testing == "No test set":
+                st.warning("You need a set for using against the trained model.")
+            elif testing == "Test set":
+                set1, set2 = st.columns(2)
+
+                with set1:
+                    train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
+                with set2:
+                    if data_type == "Structured data":
+                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                    else:
+                        test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
+            elif testing == "Prediction set":
+                set1, set2 = st.columns(2)
+
+                with set1:
+                    train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
+                with set2:
+                    if data_type == "Structured data":
+                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
+                    else:
+                        test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
 
         submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        if (evaluation == "Training and test set" and train_files and test_files) or (evaluation == "Training set" and train_files):
+        if (training == "Training and test set" and train_files and test_files) or (training == "Training set" and train_files):
             job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
             job_path = os.path.join(predict_path, job_id)
 
             os.makedirs(job_path)
-            if evaluation == "Training and test set":
-                job_queue.put((train_files, test_files, job_path, seq_type))
+            if testing == "No test set":
+                job_queue.put((train_files, None, job_path, data_type, training, testing))
             else:
-                job_queue.put((train_files, None, job_path, seq_type))
+                job_queue.put((train_files, test_files, job_path, data_type, training, testing))
 
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")

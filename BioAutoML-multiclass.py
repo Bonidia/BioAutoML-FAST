@@ -565,16 +565,24 @@ def build_interpretability_report(generated_plt,  n_samples, report_name="interp
     report.build()
 
 
-def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tuning, output, exp_n_samples):
+def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tuning, output, exp_n_samples):
 
     global clf, train, train_labels
 
     if not os.path.exists(output):
         os.mkdir(output)
 
-    train = train_read
-    train_labels = train_labels_read
-    column_train = train.columns
+    if model:
+        train = model["train"]
+        train_labels = model["train_labels"]
+        column_train = model["column_train"]
+    else:
+        train = train_read
+        train_labels = train_labels_read
+        column_train = train.columns
+
+        model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
+    
     column_test = ''
 
     #  tmp = sys.stdout
@@ -606,8 +614,13 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
     """Preprocessing:  Label Encoding"""
 
     global lb_encoder
-    lb_encoder = LabelEncoder()
-    train_labels = lb_encoder.fit_transform(train_labels)
+
+    if model:
+        lb_encoder = model["label_encoder"]
+    else:
+        lb_encoder = LabelEncoder()
+        train_labels = lb_encoder.fit_transform(train_labels)
+        model_dict["label_encoder"] = lb_encoder
 
     """Preprocessing:  Missing Values"""
 
@@ -633,8 +646,14 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
 
     if norm is True:
         print('Applying StandardScaler()....')
-        sc = StandardScaler()
-        train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
+        if model:
+            sc = model["scaler"]
+            train = pd.DataFrame(sc.transform(train), columns=column_train)
+        else:
+            sc = StandardScaler()
+            train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
+            model_dict["scaler"] = sc
+
         if os.path.exists(ftest) is True:
             test = pd.DataFrame(sc.transform(test), columns=column_test)
 
@@ -646,7 +665,7 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Classifier: XGBClassifier')
         clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63, use_label_encoder=False)
         if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
+            train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             print('Tuning not yet available for XGBClassifier')
     elif classifier == 1:
@@ -654,7 +673,7 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Classifier: Random Forest')
         clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
         if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
+            train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_rf_bayesian()
             print('Finished Tuning')
@@ -663,7 +682,7 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         print('Classifier: LightGBM')
         clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
         if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
+            train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_lightgbm_bayesian()
             print('Finished Tuning')
@@ -673,7 +692,7 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
         clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
                                  logging_level='Silent', random_state=63)
         if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
+            train, train_labels = imbalanced_function(clf, train, train_labels)
         if tuning is True:
             best_tuning, clf = tuning_catboost_bayesian()
             print('Finished Tuning')
@@ -717,9 +736,11 @@ def multiclass_pipeline(test, test_labels, test_nameseq, norm, classifier, tunin
 
     evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
     
-    clf.fit(train, train_labels)
-
-    model_dict = {"clf": clf, "scaler": sc if norm is True else False, "label_encoder": lb_encoder}
+    if model:
+        clf = model["clf"]
+    else:
+        clf.fit(train, train_labels)
+        model_dict["clf"] = clf
 
     joblib.dump(model_dict, model_output)
 
@@ -809,6 +830,7 @@ if __name__ == '__main__':
     print('###################################################################################')
     print('\n')
     parser = argparse.ArgumentParser()
+    parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
@@ -829,6 +851,7 @@ if __name__ == '__main__':
     parser.add_argument('-n_exp_samples', '--n_exp_samples', default=3, 
                         help='number of samples taken for each class in explanation analysis')
     args = parser.parse_args()
+    path_model = args.path_model
     ftrain = str(args.train)
     ftrain_labels = str(args.train_label)
     ftest = str(args.test)
@@ -843,19 +866,23 @@ if __name__ == '__main__':
     n_exp_samples = int(args.n_exp_samples)
     start_time = time.time()
 
-    if os.path.exists(ftrain) is True:
-        train_read = pd.read_csv(ftrain)
-        print('Train - %s: Found File' % ftrain)
+    model = ''
+    if path_model:
+        model = joblib.load(path_model)
     else:
-        print('Train - %s: File not exists' % ftrain)
-        sys.exit()
+        if os.path.exists(ftrain) is True:
+            train_read = pd.read_csv(ftrain)
+            print('Train - %s: Found File' % ftrain)
+        else:
+            print('Train - %s: File not exists' % ftrain)
+            sys.exit()
 
-    if os.path.exists(ftrain_labels) is True:
-        train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
-        print('Train_labels - %s: Found File' % ftrain_labels)
-    else:
-        print('Train_labels - %s: File not exists' % ftrain_labels)
-        sys.exit()
+        if os.path.exists(ftrain_labels) is True:
+            train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
+            print('Train_labels - %s: Found File' % ftrain_labels)
+        else:
+            print('Train_labels - %s: File not exists' % ftrain_labels)
+            sys.exit()
 
     test_read = ''
     if ftest != '':
@@ -885,7 +912,7 @@ if __name__ == '__main__':
             sys.exit()
 
     multiclass_pipeline(
-        test_read, test_labels_read, test_nameseq_read, norm, classifier, 
+        model, test_read, test_labels_read, test_nameseq_read, norm, classifier, 
         tuning, foutput, n_exp_samples
     )
     cost = (time.time() - start_time)/60

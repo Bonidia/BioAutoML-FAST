@@ -776,7 +776,7 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
-	parser.add_argument('-estimations', '--estimations', default=100, help='number of estimations - BioAutoML - default = 50')
+	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 50')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 
@@ -836,11 +836,13 @@ if __name__ == '__main__':
 	print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
 	if len(fasta_label_train) > 2:
-		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
+		cmd = ['python', 'BioAutoML-multiclass.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test,
 						 '-test_label', ftest_labels, '-test_nameseq',
 						 fnameseqtest, '-nf', 'True', '-n_cpu', str(n_cpu), 
-       					 '-classifier', str(classifier), '-output', foutput])
+       					 '-classifier', str(classifier), '-output', foutput]
+		print(cmd)
+		subprocess.run(cmd)
 	else:
 		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
