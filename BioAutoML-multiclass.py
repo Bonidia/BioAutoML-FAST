@@ -98,6 +98,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
     scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
     save_measures(output_cross, scores)
     y_pred = cross_val_predict(model, X, y, cv=kfold)
+
     conf_mat = (pd.crosstab(lb_encoder.inverse_transform(y), lb_encoder.inverse_transform(y_pred), rownames=['REAL'], colnames=['PREDITO'], margins=True))
     conf_mat.to_csv(matrix_output)
 
@@ -617,6 +618,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
     if model:
         lb_encoder = model["label_encoder"]
+        train_labels = lb_encoder.fit_transform(train_labels)
     else:
         lb_encoder = LabelEncoder()
         train_labels = lb_encoder.fit_transform(train_labels)
@@ -659,45 +661,46 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
     """Choosing Classifier """
     
-    print('Choosing Classifier...')
-    if classifier == 3:
-        print('Tuning: ' + str(tuning))
-        print('Classifier: XGBClassifier')
-        clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63, use_label_encoder=False)
-        if imbalance_data is True:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning is True:
-            print('Tuning not yet available for XGBClassifier')
-    elif classifier == 1:
-        print('Tuning: ' + str(tuning))
-        print('Classifier: Random Forest')
-        clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-        if imbalance_data is True:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning is True:
-            best_tuning, clf = tuning_rf_bayesian()
-            print('Finished Tuning')
-    elif classifier == 2:
-        print('Tuning: ' + str(tuning))
-        print('Classifier: LightGBM')
-        clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-        if imbalance_data is True:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning is True:
-            best_tuning, clf = tuning_lightgbm_bayesian()
-            print('Finished Tuning')
-    elif classifier == 0:
-        print('Tuning: ' + str(tuning))
-        print('Classifier: CatBoost')
-        clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                 logging_level='Silent', random_state=63)
-        if imbalance_data is True:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning is True:
-            best_tuning, clf = tuning_catboost_bayesian()
-            print('Finished Tuning')
-    else:
-        sys.exit('This classifier option does not exist - Try again')
+    if not model:
+        print('Choosing Classifier...')
+        if classifier == 3:
+            print('Tuning: ' + str(tuning))
+            print('Classifier: XGBClassifier')
+            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63, use_label_encoder=False)
+            if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
+            if tuning is True:
+                print('Tuning not yet available for XGBClassifier')
+        elif classifier == 1:
+            print('Tuning: ' + str(tuning))
+            print('Classifier: Random Forest')
+            clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
+            if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
+            if tuning is True:
+                best_tuning, clf = tuning_rf_bayesian()
+                print('Finished Tuning')
+        elif classifier == 2:
+            print('Tuning: ' + str(tuning))
+            print('Classifier: LightGBM')
+            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
+            if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
+            if tuning is True:
+                best_tuning, clf = tuning_lightgbm_bayesian()
+                print('Finished Tuning')
+        elif classifier == 0:
+            print('Tuning: ' + str(tuning))
+            print('Classifier: CatBoost')
+            clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
+                                    logging_level='Silent', random_state=63)
+            if imbalance_data is True:
+                train, train_labels = imbalanced_function(clf, train, train_labels)
+            if tuning is True:
+                best_tuning, clf = tuning_catboost_bayesian()
+                print('Finished Tuning')
+        else:
+            sys.exit('This classifier option does not exist - Try again')
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
     
@@ -730,31 +733,42 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
     print('Training: StratifiedKFold (cross-validation = 10)...')
+    
     train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
     matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
+    importance_output = os.path.join(output, 'feature_importance.csv')
     model_output = os.path.join(output, 'trained_model.sav')
 
-    evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
-    
     if model:
         clf = model["clf"]
+
+        model["cross_validation"].to_csv(train_output, index=False)
+        model["confusion_matrix"].to_csv(matrix_output, index=False)
+        model["feature_importance"].to_csv(importance_output, index=False)
     else:
         clf.fit(train, train_labels)
+
         model_dict["clf"] = clf
 
-    joblib.dump(model_dict, model_output)
+        evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
 
-    print('Saving results in ' + train_output + '...')
-    print('Saving confusion matrix in ' + matrix_output + '...')
-    print('Saving trained model in ' + model_output + '...')
-    print('Training: Finished...')
+        model_dict["cross_validation"] = pd.read_csv(train_output)
+        model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
+        
+        print('Saving results in ' + train_output + '...')
+        print('Saving confusion matrix in ' + matrix_output + '...')
+        print('Saving trained model in ' + model_output + '...')
+        print('Training: Finished...')
 
-    """Generating Feature Importance - Selected feature subset..."""
+        """Generating Feature Importance - Selected feature subset..."""
 
-    print('Generating Feature Importance - Selected feature subset...')
-    importance_output = os.path.join(output, 'feature_importance.csv')
-    features_importance_ensembles(clf, feature_name, importance_output)
-    print('Saving results in ' + importance_output + '...')
+        print('Generating Feature Importance - Selected feature subset...')
+        features_importance_ensembles(clf, feature_name, importance_output)
+        print('Saving results in ' + importance_output + '...')
+
+        model_dict["feature_importance"] = pd.read_csv(importance_output)
+
+        joblib.dump(model_dict, model_output)
 
     """Testing model..."""
 

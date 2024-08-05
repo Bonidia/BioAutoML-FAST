@@ -13,57 +13,84 @@ from threading import Thread
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 import utils
 import base64
+import joblib
 
 def submit_job(train_files, test_files, job_path, data_type, training, testing):
     train_path = os.path.join(job_path, 'train')
     os.makedirs(train_path)
 
-    for file in train_files:
-        save_path = os.path.join(train_path, file.name)
-        with open(save_path, mode='wb') as f:
-            f.write(file.getvalue())
-
-    train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
-    
-    command = [
-        "python",
-        "BioAutoML-feature.py" if seq_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
-        "--fasta_train",
-    ]
-
-    command.extend(train_fasta.values())
-    command.append("--fasta_label_train")
-    command.extend(train_fasta.keys())
-
-    if test_files:
-        test_path = os.path.join(job_path, 'test')
-        os.makedirs(test_path)
-
-        for file in test_files:
-            save_path = os.path.join(test_path, file.name)
+    if training == "Training set":
+        for file in train_files:
+            save_path = os.path.join(train_path, file.name)
             with open(save_path, mode='wb') as f:
                 f.write(file.getvalue())
+        
+        train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
+    
+        command = [
+            "python",
+            "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
+            "--fasta_train",
+        ]
 
-        test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+        command.extend(train_fasta.values())
+        command.append("--fasta_label_train")
+        command.extend(train_fasta.keys())
 
-        command.append("--fasta_test")
-        command.extend(test_fasta.values())
-        command.append("--fasta_label_test")
-        command.extend(test_fasta.keys())
+        if test_files:
+            test_path = os.path.join(job_path, 'test')
+            os.makedirs(test_path)
 
-    command.extend(["--n_cpu", "-1"])
-    command.extend(["--output", job_path])
+            for file in test_files:
+                save_path = os.path.join(test_path, file.name)
+                with open(save_path, mode='wb') as f:
+                    f.write(file.getvalue())
 
-    subprocess.run(command, cwd="..")
+            test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-    # ['python', 'BioAutoML-multiclass.py', 
-    # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
-    # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
-    # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
-    # '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk']
+            command.append("--fasta_test")
+            command.extend(test_fasta.values())
+            command.append("--fasta_label_test")
+            command.extend(test_fasta.keys())
 
-    utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
-    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+        command.extend(["--n_cpu", "-1"])
+        command.extend(["--output", job_path])
+
+        subprocess.run(command, cwd="..")
+
+        utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
+
+        if test_files:
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+  
+        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
+        joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+
+    elif training == "Load model":
+        save_path = os.path.join(train_path, "trained_model.sav")
+        with open(save_path, mode='wb') as f:
+            f.write(train_files.getvalue())
+
+        command = [
+            "python",
+            "BioAutoML-multiclass.py",
+            "-path_model", save_path,
+            "-nf", "True",
+            "-n_cpu", "-1",
+            "--output", job_path
+        ]
+
+        subprocess.run(command, cwd="..")
+
+        model = joblib.load(os.path.join(job_path, "train/trained_model.sav"))
+        model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
+
+        # ['python', 'BioAutoML-multiclass.py', 
+        # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
+        # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
+        # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
+        # '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk']
 
 def queue_listener():
     while True:
@@ -82,14 +109,14 @@ def runUI():
         queue_thread.start()
         st.session_state["queue"] = True
     
-    file_ = open("imgs/logo_loop.gif", "rb")
+    file_ = open("imgs/logo.png", "rb")
     contents = file_.read()
     data_url = base64.b64encode(contents).decode("utf-8")
     file_.close()
 
     st.markdown(f"""
         <div style='text-align: center;'>
-            <img src="data:image/gif;base64,{data_url}" alt="logo" width="600">
+            <img src="data:image/gif;base64,{data_url}" alt="logo" width="400">
             <h5 style="color:gray">Empowering researchers with machine learning</h5>
         </div>
     """, unsafe_allow_html=True)
@@ -161,7 +188,8 @@ def runUI():
                         test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
         else:
             if testing == "No test set":
-                st.warning("You need a set for using against the trained model.")
+                # st.warning("You need a set for using against the trained model.")
+                train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
             elif testing == "Test set":
                 set1, set2 = st.columns(2)
 
@@ -188,7 +216,11 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        if (training == "Training and test set" and train_files and test_files) or (training == "Training set" and train_files):
+        if train_files is None:
+            st.error("Please upload the required training file(s).")
+        elif (testing != "No test set" and not test_files):
+            st.error("Please upload the required test or prediction file(s).")
+        else:
             job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
             job_path = os.path.join(predict_path, job_id)
 
@@ -200,6 +232,3 @@ def runUI():
 
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-        else:
-            with queue_info:
-                st.error("No sequences submitted!")

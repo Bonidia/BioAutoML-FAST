@@ -836,13 +836,11 @@ if __name__ == '__main__':
 	print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
 	if len(fasta_label_train) > 2:
-		cmd = ['python', 'BioAutoML-multiclass.py', '-train', path_train,
+		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test,
 						 '-test_label', ftest_labels, '-test_nameseq',
 						 fnameseqtest, '-nf', 'True', '-n_cpu', str(n_cpu), 
-       					 '-classifier', str(classifier), '-output', foutput]
-		print(cmd)
-		subprocess.run(cmd)
+       					 '-classifier', str(classifier), '-output', foutput])
 	else:
 		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
