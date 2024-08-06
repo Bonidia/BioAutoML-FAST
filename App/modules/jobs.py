@@ -8,6 +8,7 @@ import plotly.figure_factory as ff
 import numpy as np
 import os
 import utils
+import joblib
 from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
@@ -17,12 +18,22 @@ def dimensionality_reduction():
     dim_col1, dim_col2 = st.columns(2)
 
     with dim_col1:
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="reduction")
+        if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
+            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="reduction")
+        else:
+            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"], key="reduction")
 
         if evaluation == "Training set":
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))["label"].tolist()
-            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
+            path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+            if os.path.exists(path_best_train):
+                features = pd.read_csv(path_best_train)
+                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))["label"].tolist()
+                nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
+            else:
+                model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+                features = model["train"]
+                labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
+                nameseqs = model["nameseq_train"]["nameseq"].tolist()
         else:
             features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
             labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
@@ -67,7 +78,7 @@ def dimensionality_reduction():
                         mode='markers',
                         name=f'{label}',
                         marker=dict(
-                            color=utils.get_colors(len(np.unique(labels)))[i], size=3,
+                            color=utils.get_colors(len(np.unique(labels)))[i], size=2,
                         ),
                         hovertemplate=names[names["label"] == label]["nameseq"].tolist(),
                         hoverlabel = dict(
@@ -98,10 +109,18 @@ def feature_correlation():
     col1, col2 = st.columns(2)
 
     with col1:
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="correlation")
+        if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
+            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="correlation")
+        else:
+            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"], key="correlation")
 
         if evaluation == "Training set":
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
+            path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+            if os.path.exists(path_best_train):
+                features = pd.read_csv(path_best_train)
+            else:
+                model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+                features = model["train"]
         else:
             features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
 
@@ -140,13 +159,24 @@ def feature_correlation():
         st.plotly_chart(fig, use_container_width=True)
 
 def feature_distribution():
-    evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
+    if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
+                                help="Training set evaluated with 10-fold cross-validation", key="distribution")
+    else:
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
                                 help="Training set evaluated with 10-fold cross-validation", key="distribution")
 
     if evaluation == "Training set":
-        features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv"))
-        labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))
-        nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))
+        path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+        if os.path.exists(path_best_train):
+            features = pd.read_csv(path_best_train)
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))
+            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))
+        else:
+            model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+            features = model["train"]
+            labels = pd.DataFrame(model["train_labels"], columns=["label"])
+            nameseqs = model["nameseq_train"]
     else:
         features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
         labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
@@ -202,14 +232,21 @@ def feature_distribution():
         st.plotly_chart(fig, use_container_width=True)
 
 def performance_metrics():
-    evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
-                                        help="Training set evaluated with 10-fold cross-validation")
-
+    if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
+                                help="Training set evaluated with 10-fold cross-validation")
+    else:
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
+                                help="Training set evaluated with 10-fold cross-validation")
     col1, col2 = st.columns(2)
 
     with col1:
         if evaluation == "Training set":
-            df_cv = pl.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
+            path_kfold = os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv")
+            if os.path.exists(path_kfold):
+                df_cv = pl.read_csv(path_kfold)
+            else:
+                df_cv = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["cross_validation"]
 
             st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
             st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
@@ -222,7 +259,11 @@ def performance_metrics():
             st.dataframe(df_report, hide_index=True, use_container_width=True)
     with col2:
         if evaluation == "Training set":
-            df = pd.read_csv(os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv"))
+            path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
+            if os.path.exists(path_matrix):
+                df = pl.read_csv(path_matrix)
+            else:
+                df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["confusion_matrix"]
 
             # Extract labels and confusion matrix values
             labels = df.columns[1:-1].tolist()
@@ -287,21 +328,31 @@ def show_predictions():
     )
 
 def feature_importance():
-    df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
+    path_feat = os.path.join(st.session_state["job_path"], "feature_importance.csv")
+    if os.path.exists(path_feat):
+        df = pd.read_csv(path_feat, sep=' ', header=None)
+    else:
+        df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["feature_importance"]
+
+    # df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
 
     features = df[2].str.extract(r'\((.*?)\)')[0][::-1]
 
     score_importances = df[3].str.extract(r'\((.*?)\)')[0].values.astype(float)[::-1]
 
     fig = go.Figure(data=go.Bar(
-        x=features[::-1],
-        y=score_importances[::-1],
-        marker=dict(color=score_importances[::-1], colorscale='blues'),
+        x=features,
+        y=score_importances,
+        marker=dict(color=score_importances, colorscale='blues'),
         hovertemplate='Feature: %{x}<br>Importance: %{y}<extra></extra>'
     ))
 
     fig.update_layout(
-        xaxis_title="Features",
+        xaxis=dict(
+            title="Features",
+            tickmode='linear',
+            tickangle=90
+        ),
         yaxis_title="Importance",
         margin=dict(t=0, b=50)
     )
@@ -358,7 +409,13 @@ def runUI():
 
         with st.expander("Summary Statistics"):
             st.markdown("**Training set**")
-            train_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
+
+            path_stats = os.path.join(st.session_state["job_path"], "train_stats.csv")
+            if os.path.exists(path_stats):
+                train_stats = pl.read_csv(path_stats)
+            else:
+                train_stats = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["train_stats"]
+
             st.dataframe(train_stats, hide_index=True, use_container_width=True)
 
             test_fold = os.path.join(st.session_state["job_path"], "test")

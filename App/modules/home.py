@@ -16,7 +16,7 @@ import base64
 import joblib
 
 def submit_job(train_files, test_files, job_path, data_type, training, testing):
-    
+
     if training == "Training set":
         train_path = os.path.join(job_path, 'train')
         os.makedirs(train_path)
@@ -78,9 +78,12 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
             "BioAutoML-multiclass.py",
             "-path_model", save_path,
             "-nf", "True",
-            "-n_cpu", "-1",
-            "--output", job_path
         ]
+
+        # NEED TO EXTRACT FEATURES FROM TEST SET HERE
+
+        command.extend(["--n_cpu", "-1"])
+        command.extend(["--output", job_path])
 
         subprocess.run(command, cwd="..")
 

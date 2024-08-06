@@ -763,7 +763,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         features_importance_ensembles(clf, feature_name, importance_output)
         print('Saving results in ' + importance_output + '...')
 
-        model_dict["feature_importance"] = pd.read_csv(importance_output)
+        model_dict["feature_importance"] = pd.read_csv(importance_output, sep=' ', header=None)
 
         joblib.dump(model_dict, model_output)
 
