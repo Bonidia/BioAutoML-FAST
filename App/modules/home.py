@@ -16,10 +16,11 @@ import base64
 import joblib
 
 def submit_job(train_files, test_files, job_path, data_type, training, testing):
-    train_path = os.path.join(job_path, 'train')
-    os.makedirs(train_path)
-
+    
     if training == "Training set":
+        train_path = os.path.join(job_path, 'train')
+        os.makedirs(train_path)
+
         for file in train_files:
             save_path = os.path.join(train_path, file.name)
             with open(save_path, mode='wb') as f:
@@ -68,7 +69,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
         joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
 
     elif training == "Load model":
-        save_path = os.path.join(train_path, "trained_model.sav")
+        save_path = os.path.join(job_path, "trained_model.sav")
         with open(save_path, mode='wb') as f:
             f.write(train_files.getvalue())
 
@@ -83,8 +84,8 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
         subprocess.run(command, cwd="..")
 
-        model = joblib.load(os.path.join(job_path, "train/trained_model.sav"))
-        model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
+        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        #model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
 
         # ['python', 'BioAutoML-multiclass.py', 
         # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 

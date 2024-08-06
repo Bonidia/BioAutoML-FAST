@@ -741,10 +741,6 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
     if model:
         clf = model["clf"]
-
-        model["cross_validation"].to_csv(train_output, index=False)
-        model["confusion_matrix"].to_csv(matrix_output, index=False)
-        model["feature_importance"].to_csv(importance_output, index=False)
     else:
         clf.fit(train, train_labels)
 
@@ -754,6 +750,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
         model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
+        model_dict["nameseq_train"] = pd.read_csv(os.path.join(output, 'feat_extraction/fnameseqtrain.csv'))
         
         print('Saving results in ' + train_output + '...')
         print('Saving confusion matrix in ' + matrix_output + '...')

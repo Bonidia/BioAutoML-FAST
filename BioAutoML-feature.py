@@ -727,7 +727,9 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		dataframes = dataframes[~dataframes.nameseq.str.contains("nameseq")]
 
 	X_train = dataframes.iloc[:train_size, :]
-	X_train.pop('nameseq')
+	nameseq_train = X_train.pop('nameseq')
+	fnameseqtrain = path + '/fnameseqtrain.csv'
+	nameseq_train.to_csv(fnameseqtrain, index=False, header=True)
 	y_train = X_train.pop('label')
 	ftrain = path + '/ftrain.csv'
 	X_train.to_csv(ftrain, index=False)

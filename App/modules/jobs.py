@@ -340,7 +340,7 @@ def runUI():
                 if test_set:
                     predictions = os.path.join(job_path, "test_confusion_matrix.csv")
                 else:
-                    predictions = os.path.join(job_path, "training_confusion_matrix.csv")
+                    predictions = os.path.join(job_path, "trained_model.sav")
                 
                 if os.path.exists(predictions):
                     st.session_state["job_path"] = job_path
