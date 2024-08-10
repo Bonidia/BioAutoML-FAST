@@ -4,6 +4,7 @@ import pandas as pd
 from io import StringIO
 from Bio import SeqIO
 import subprocess
+from subprocess import Popen
 import streamlit.components.v1 as components
 import os
 from secrets import choice
@@ -14,16 +15,118 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx
 import utils
 import base64
 import joblib
+import shutil
+
+def test_extraction(job_path, test_data):
+    datasets = []
+
+    path = os.path.join(job_path, "feat_extraction", "test")
+    feat_path = os.path.join(job_path, "feat_extraction")
+
+    try:
+        shutil.rmtree(path)
+    except OSError as e:
+        print("Error: %s - %s." % (e.filename, e.strerror))
+
+    print("Creating Directory...")
+    os.makedirs(path)
+
+    for label in test_data:
+        subprocess.run(["python", "MathFeature/preprocessing/preprocessing.py",
+                    "-i", test_data[label], 
+                    "-o", os.path.join(path, f"pre_{label}.fasta")],
+                    cwd="..",
+                    stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+        datasets.append(feat_path + "/NAC.csv")
+        datasets.append(feat_path + "/DNC.csv")
+        datasets.append(feat_path + "/TNC.csv")
+        datasets.append(feat_path + "/kGap_di.csv")
+        datasets.append(feat_path + "/kGap_tri.csv")
+        datasets.append(feat_path + "/ORF.csv")
+        datasets.append(feat_path + "/Fickett.csv")
+        datasets.append(feat_path + "/Shannon.csv")
+        datasets.append(feat_path + "/FourierBinary.csv")
+        datasets.append(feat_path + "/FourierComplex.csv")
+        datasets.append(feat_path + "/Tsallis.csv")
+        datasets.append(feat_path + "/repDNA.csv")
+
+        commands = [["python", "MathFeature/methods/ExtractionTechniques.py",
+                            "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/NAC.csv", "-l", label,
+                            "-t", "NAC", "-seq", "1"],
+
+                    ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DNC.csv", "-l", label,
+                            "-t", "DNC", "-seq", "1"],
+
+                    ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TNC.csv", "-l", label,
+                            "-t", "TNC", "-seq", "1"],
+                    ["python", "MathFeature/methods/Kgap.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
+                            label, "-k", "1", "-bef", "1",
+                            "-aft", "2", "-seq", "1"],
+                    ["python", "MathFeature/methods/Kgap.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_tri.csv", "-l",
+                            label, "-k", "1", "-bef", "1",
+                            "-aft", "3", "-seq", "1"],
+                    ["python", "MathFeature/methods/CodingClass.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ORF.csv", "-l", label],
+                    ["python", "MathFeature/methods/FickettScore.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
+                            "-seq", "1"],
+                    ["python", "MathFeature/methods/EntropyClass.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
+                            "-k", "5", "-e", "Shannon"],
+                    ["python", "MathFeature/methods/FourierClass.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierBinary.csv", "-l", label,
+                            "-r", "1"],
+                    ["python", "other-methods/FourierClass.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierComplex.csv", "-l", label,
+                            "-r", "6"],
+                    ["python", "other-methods/TsallisEntropy.py", "-i",
+                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis.csv", "-l", label,
+                            "-k", "5", "-q", "2.3"],
+                    ["python", "other-methods/repDNA/repDNA-feat.py", "--file",
+                            os.path.join(path, f"pre_{label}.fasta"), "--output", feat_path + "/repDNA.csv", "--label", label]
+        ]
+
+        processes = [Popen(cmd, cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+        for p in processes: p.wait()
+
+    if datasets:
+        datasets = list(dict.fromkeys(datasets))
+        dataframes = pd.concat([pd.read_csv(f) for f in datasets], axis=1)
+        dataframes = dataframes.loc[:, ~dataframes.columns.duplicated()]
+        dataframes = dataframes[~dataframes.nameseq.str.contains("nameseq")]
+
+    y_test = dataframes.pop("label")
+    nameseq_test = dataframes.pop("nameseq")
+    flabeltest = feat_path + '/flabeltest.csv'
+    fnameseqtest = feat_path + '/fnameseqtest.csv'
+    nameseq_test.to_csv(fnameseqtest, index=False, header=True)
+    y_test.to_csv(flabeltest, index=False, header=True)
+
+    path_bio = os.path.join(job_path, "best_descriptors")
+    if not os.path.exists(path_bio):
+        os.mkdir(path_bio)
+
+    df_train = joblib.load(os.path.join(job_path, "trained_model.sav"))["train"]
+
+    common_columns = dataframes.columns.intersection(df_train.columns)
+    df_predict = dataframes[common_columns]
+
+    df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
 def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
     if training == "Training set":
-        train_path = os.path.join(job_path, 'train')
+        train_path = os.path.join(job_path, "train")
         os.makedirs(train_path)
 
         for file in train_files:
             save_path = os.path.join(train_path, file.name)
-            with open(save_path, mode='wb') as f:
+            with open(save_path, mode="wb") as f:
                 f.write(file.getvalue())
         
         train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
@@ -39,12 +142,12 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
         command.extend(train_fasta.keys())
 
         if test_files:
-            test_path = os.path.join(job_path, 'test')
+            test_path = os.path.join(job_path, "test")
             os.makedirs(test_path)
 
             for file in test_files:
                 save_path = os.path.join(test_path, file.name)
-                with open(save_path, mode='wb') as f:
+                with open(save_path, mode="wb") as f:
                     f.write(file.getvalue())
 
             test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
@@ -70,7 +173,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
     elif training == "Load model":
         save_path = os.path.join(job_path, "trained_model.sav")
-        with open(save_path, mode='wb') as f:
+        with open(save_path, mode="wb") as f:
             f.write(train_files.getvalue())
 
         command = [
@@ -80,17 +183,34 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
             "-nf", "True",
         ]
 
-        # NEED TO EXTRACT FEATURES FROM TEST SET HERE
+        if test_files:
+            test_path = os.path.join(job_path, "test")
+            os.makedirs(test_path)
+
+            for file in test_files:
+                save_path = os.path.join(test_path, file.name)
+                with open(save_path, mode="wb") as f:
+                    f.write(file.getvalue())
+
+            test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+            test_extraction(job_path, test_fasta)
+
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+
+            command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+            command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+            command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
 
         command.extend(["--n_cpu", "-1"])
         command.extend(["--output", job_path])
 
         subprocess.run(command, cwd="..")
 
-        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        #model = joblib.load(os.path.join(job_path, "trained_model.sav"))
         #model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
 
-        # ['python', 'BioAutoML-multiclass.py', 
+        # [1python', 'BioAutoML-multiclass.py', 
         # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
         # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
         # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
