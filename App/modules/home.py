@@ -17,7 +17,7 @@ import base64
 import joblib
 import shutil
 
-def test_extraction(job_path, test_data):
+def test_extraction(job_path, test_data, model):
     datasets = []
 
     path = os.path.join(job_path, "feat_extraction", "test")
@@ -111,7 +111,7 @@ def test_extraction(job_path, test_data):
     if not os.path.exists(path_bio):
         os.mkdir(path_bio)
 
-    df_train = joblib.load(os.path.join(job_path, "trained_model.sav"))["train"]
+    df_train = model["train"]
 
     common_columns = dataframes.columns.intersection(df_train.columns)
     df_predict = dataframes[common_columns]
@@ -176,9 +176,11 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
         with open(save_path, mode="wb") as f:
             f.write(train_files.getvalue())
 
+        model = joblib.load(save_path)
+
         command = [
             "python",
-            "BioAutoML-multiclass.py",
+            "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
             "-path_model", save_path,
             "-nf", "True",
         ]
@@ -194,7 +196,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
             test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-            test_extraction(job_path, test_fasta)
+            test_extraction(job_path, test_fasta, model)
 
             utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
 

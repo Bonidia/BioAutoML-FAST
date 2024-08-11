@@ -244,24 +244,32 @@ def performance_metrics():
         if evaluation == "Training set":
             path_kfold = os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv")
             if os.path.exists(path_kfold):
-                df_cv = pl.read_csv(path_kfold)
+                df_cv = pd.read_csv(path_kfold)
             else:
                 df_cv = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["cross_validation"]
 
-            st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
-            st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
-            st.markdown(f"""**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}""")
-            st.markdown(f"""**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}""")
-            st.markdown(f"""**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}""")
-            st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
+            if "F1_micro" not in df_cv.columns:
+                st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
+                st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
+                st.markdown(f"""**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}""")
+                st.markdown(f"""**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}""")
+                st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
+                st.markdown(f"""**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}""")
+            else: 
+                st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
+                st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
+                st.markdown(f"""**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}""")
+                st.markdown(f"""**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}""")
+                st.markdown(f"""**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}""")
+                st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
         else:
-            df_report = pl.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+            df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
             st.dataframe(df_report, hide_index=True, use_container_width=True)
     with col2:
         if evaluation == "Training set":
             path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
             if os.path.exists(path_matrix):
-                df = pl.read_csv(path_matrix)
+                df = pd.read_csv(path_matrix)
             else:
                 df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["confusion_matrix"]
 
@@ -348,11 +356,12 @@ def feature_importance():
     ))
 
     fig.update_layout(
-        xaxis=dict(
-            title="Features",
-            tickmode='linear',
-            tickangle=90
-        ),
+        xaxis_title="Features",
+        # xaxis=dict(
+        #     title="Features",
+        #     tickmode='linear',
+        #     tickangle=90
+        # ),
         yaxis_title="Importance",
         margin=dict(t=0, b=50)
     )

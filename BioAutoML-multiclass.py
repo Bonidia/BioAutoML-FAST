@@ -568,7 +568,7 @@ def build_interpretability_report(generated_plt,  n_samples, report_name="interp
 
 def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tuning, output, exp_n_samples):
 
-    global clf, train, train_labels
+    global clf, train, train_labels, lb_encoder
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -613,8 +613,6 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         print('Number of features (test): ' + str(len(column_test)))
 
     """Preprocessing:  Label Encoding"""
-
-    global lb_encoder
 
     if model:
         lb_encoder = model["label_encoder"]

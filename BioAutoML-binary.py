@@ -100,7 +100,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
     scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
     save_measures(output_cross, scores)
     y_pred = cross_val_predict(model, X, y, cv=kfold)
-    conf_mat = (pd.crosstab(y, y_pred, rownames=['REAL'], colnames=['PREDITO'], margins=True))
+    conf_mat = (pd.crosstab(lb_encoder.inverse_transform(y), lb_encoder.inverse_transform(y_pred), rownames=['REAL'], colnames=['PREDITO'], margins=True))
     conf_mat.to_csv(matrix_output)
     return
 
@@ -453,21 +453,17 @@ def imbalanced_function(clf, train, train_labels):
     return train, train_labels
 
 
-def save_prediction(prediction, nameseqs, pred_output):
+def save_prediction(probs, nameseqs, pred_output):
+    
     """Saving prediction - test set"""
 
-    file = open(pred_output, 'a')
+    nameseq_df = pd.DataFrame(nameseqs, columns=["nameseq"])
 
-    if os.path.exists(nameseq_test) is True:
-        for i in range(len(prediction)):
-            file.write('%s,' % str(nameseqs[i]))
-            file.write('%s' % str(prediction[i]))
-            file.write('\n')
-    else:
-        for i in range(len(prediction)):
-            file.write('%s' % str(prediction[i]))
-            file.write('\n')
-    return
+    probs_df = pd.DataFrame(probs, columns=lb_encoder.classes_)
+    probs_df["prediction"] = probs_df.idxmax(axis=1)
+
+    preds_df = pd.concat([nameseq_df, probs_df], axis=1)
+    preds_df.to_csv(pred_output, index=False)
 
 
 def type_model(explainer, model, data, labels):
@@ -582,19 +578,25 @@ def build_interpretability_report(generated_plt=[], report_name="interpretabilit
     report.build()
 
 
-def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tuning, output):
+def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier, tuning, output):
     
-    global clf, train, train_labels, le
+    global clf, train, train_labels, lb_encoder
 
     if not os.path.exists(output):
         os.mkdir(output)
 
-    train = train_read
-    train_labels = train_labels_read
-    column_train = train.columns
-    column_test = ''
-    output = output + '/'
+    if model:
+        train = model["train"]
+        train_labels = model["train_labels"]
+        column_train = model["column_train"]
+    else:
+        train = train_read
+        train_labels = train_labels_read
+        column_train = train.columns
 
+        model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
+    
+    column_test = ''
     #  tmp = sys.stdout
     #  log_file = open(output + 'task.log', 'a')
     #  sys.stdout = log_file
@@ -619,12 +621,15 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
     if os.path.exists(ftest_labels) is True:
         print('Number of features (test): ' + str(len(column_test)))
 
-
     """Preprocessing:  Label Encoding"""
 
-    le = LabelEncoder()
-    train_labels = le.fit_transform(train_labels)
-    
+    if model:
+        lb_encoder = model["label_encoder"]
+        train_labels = lb_encoder.fit_transform(train_labels)
+    else:
+        lb_encoder = LabelEncoder()
+        train_labels = lb_encoder.fit_transform(train_labels)
+        model_dict["label_encoder"] = lb_encoder
     
     """Preprocessing:  Missing Values"""
 
@@ -654,82 +659,88 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
 
     if norm is True:
         print('Applying StandardScaler()....')
-        sc = StandardScaler()
-        train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
+        if model:
+            sc = model["scaler"]
+            train = pd.DataFrame(sc.transform(train), columns=column_train)
+        else:
+            sc = StandardScaler()
+            train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
+            model_dict["scaler"] = sc
+
         if os.path.exists(ftest) is True:
             test = pd.DataFrame(sc.transform(test), columns=column_test)
-        else:
-            pass
 
     """Choosing Classifier """
 
     print('Choosing Classifier...')
-    if classifier == 0:
-        if tuning is True:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: CatBoost')
-            clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                     logging_level='Silent', random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-            best_tuning, clf = tuning_catboost_bayesian()
-            print('Finished Tuning')
+    if not model:
+        if classifier == 0:
+            if tuning is True:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: CatBoost')
+                clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
+                                        logging_level='Silent', random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+                best_tuning, clf = tuning_catboost_bayesian()
+                print('Finished Tuning')
+            else:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: CatBoost')
+                clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
+                                        logging_level='Silent', random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+        elif classifier == 1:
+            if tuning is True:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: Random Forest')
+                clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+                best_tuning, clf = tuning_rf_bayesian()
+                print('Finished Tuning')
+            else:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: Random Forest')
+                clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+        elif classifier == 2:
+            if tuning is True:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: LightGBM')
+                clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+                best_tuning, clf = tuning_lightgbm_bayesian()
+                print('Finished Tuning')
+            else:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: LightGBM')
+                clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+        elif classifier == 3:
+            if tuning is True:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: XGBClassifier')
+                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
+                print('Tuning not yet available for XGBClassifier.')
+            else:
+                print('Tuning: ' + str(tuning))
+                print('Classifier: XGBClassifier')
+                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
+                if imbalance_data is True:
+                    train, train_labels = imbalanced_function(clf, train, train_labels)
         else:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: CatBoost')
-            clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                     logging_level='Silent', random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-    elif classifier == 1:
-        if tuning is True:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: Random Forest')
-            clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-            best_tuning, clf = tuning_rf_bayesian()
-            print('Finished Tuning')
-        else:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: Random Forest')
-            clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-    elif classifier == 2:
-        if tuning is True:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: LightGBM')
-            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-            best_tuning, clf = tuning_lightgbm_bayesian()
-            print('Finished Tuning')
-        else:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: LightGBM')
-            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-    elif classifier == 3:
-        if tuning is True:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: XGBClassifier')
-            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-            print('Tuning not yet available for XGBClassifier.')
-        else:
-            print('Tuning: ' + str(tuning))
-            print('Classifier: XGBClassifier')
-            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
-            if imbalance_data is True:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-    else:
-        sys.exit('This classifier option does not exist - Try again')
+            sys.exit('This classifier option does not exist - Try again')
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
 
+    fs = 0
     feature_name = column_train
     if fs == 1:
         print('Applying Feature Importance-Based Feature Selection...')
@@ -755,42 +766,79 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
             test.to_csv(fs_test, index=False)
         print('Feature Selection - Finished...')
 
+    # """Training - StratifiedKFold (cross-validation = 10)..."""
+
+    # print('Training: StratifiedKFold (cross-validation = 10)...')
+    # train_output = output + 'training_kfold(10)_metrics.csv'
+    # matrix_output = output + 'training_confusion_matrix.csv'
+    # model_output = output + 'trained_model.sav'
+    # evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
+    # clf.fit(train, train_labels)
+    # joblib.dump(clf, model_output)
+    # print('Saving results in ' + train_output + '...')
+    # print('Saving confusion matrix in ' + matrix_output + '...')
+    # print('Saving trained model in ' + model_output + '...')
+    # print('Training: Finished...')
+
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
     print('Training: StratifiedKFold (cross-validation = 10)...')
-    train_output = output + 'training_kfold(10)_metrics.csv'
-    matrix_output = output + 'training_confusion_matrix.csv'
-    model_output = output + 'trained_model.sav'
-    evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
-    clf.fit(train, train_labels)
-    joblib.dump(clf, model_output)
-    print('Saving results in ' + train_output + '...')
-    print('Saving confusion matrix in ' + matrix_output + '...')
-    print('Saving trained model in ' + model_output + '...')
-    print('Training: Finished...')
+    
+    train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
+    matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
+    importance_output = os.path.join(output, 'feature_importance.csv')
+    model_output = os.path.join(output, 'trained_model.sav')
 
-    """Generating Interpretability Summary """
-
-    try:
-        generated_plt = interp_shap(clf, train, train_labels, output)
-        build_interpretability_report(generated_plt=generated_plt, directory=output)
-    except ValueError as e:
-        print(e)
-        print("If you believe this is a bug, please report it to https://github.com/Bonidia/BioAutoML.")
-        print("Generation of explanation plots and report failed. Proceeding without it...")
-    except AssertionError as e:
-        print(e)
-        print("This is certainly a bug. Please report it to https://github.com/Bonidia/BioAutoML.")
-        print("Generation of explanation plots and report failed. Proceeding without it...")
+    if model:
+        clf = model["clf"]
     else:
-        print("Explanation plots and report generated successfully!")
+        clf.fit(train, train_labels)
 
-    """Generating Feature Importance - Selected feature subset..."""
+        model_dict["clf"] = clf
 
-    print('Generating Feature Importance - Selected feature subset...')
-    importance_output = output + 'feature_importance.csv'
-    features_importance_ensembles(clf, feature_name, importance_output)
-    print('Saving results in ' + importance_output + '...')
+        evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
+
+        model_dict["cross_validation"] = pd.read_csv(train_output)
+        model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
+        model_dict["nameseq_train"] = pd.read_csv(os.path.join(output, 'feat_extraction/fnameseqtrain.csv'))
+        
+        print('Saving results in ' + train_output + '...')
+        print('Saving confusion matrix in ' + matrix_output + '...')
+        print('Saving trained model in ' + model_output + '...')
+        print('Training: Finished...')
+
+        """Generating Feature Importance - Selected feature subset..."""
+
+        print('Generating Feature Importance - Selected feature subset...')
+        features_importance_ensembles(clf, feature_name, importance_output)
+        print('Saving results in ' + importance_output + '...')
+
+        model_dict["feature_importance"] = pd.read_csv(importance_output, sep=' ', header=None)
+
+        joblib.dump(model_dict, model_output)
+
+    # """Generating Interpretability Summary """
+
+    # try:
+    #     generated_plt = interp_shap(clf, train, train_labels, output)
+    #     build_interpretability_report(generated_plt=generated_plt, directory=output)
+    # except ValueError as e:
+    #     print(e)
+    #     print("If you believe this is a bug, please report it to https://github.com/Bonidia/BioAutoML.")
+    #     print("Generation of explanation plots and report failed. Proceeding without it...")
+    # except AssertionError as e:
+    #     print(e)
+    #     print("This is certainly a bug. Please report it to https://github.com/Bonidia/BioAutoML.")
+    #     print("Generation of explanation plots and report failed. Proceeding without it...")
+    # else:
+    #     print("Explanation plots and report generated successfully!")
+
+    # """Generating Feature Importance - Selected feature subset..."""
+
+    # print('Generating Feature Importance - Selected feature subset...')
+    # importance_output = output + 'feature_importance.csv'
+    # features_importance_ensembles(clf, feature_name, importance_output)
+    # print('Saving results in ' + importance_output + '...')
 
     """Testing model..."""
     # test_labels = le.fit_transform(test_labels)
@@ -800,11 +848,11 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
 
         # test_labels = le.fit_transform(test_labels)
         
-        preds = le.inverse_transform(clf.predict(test))
-        # print(preds)
-        pred_output = output + 'test_predictions.csv'
+        preds = lb_encoder.inverse_transform(clf.predict(test))
+        probs = clf.predict_proba(test)
+        pred_output = os.path.join(output, "test_predictions.csv")
         print('Saving prediction in ' + pred_output + '...')
-        save_prediction(preds, test_nameseq, pred_output)
+        save_prediction(probs, test_nameseq, pred_output)
         if os.path.exists(ftest_labels) is True:
             print('Generating Metrics - Test set...')
             labels = np.unique(test_labels)
@@ -818,29 +866,17 @@ def binary_pipeline(test, test_labels, test_nameseq, norm, fs, classifier, tunin
             mcc = matthews_corrcoef(test_labels, preds)
             matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDITO"], margins=True))
 
-            metrics_output = output + 'metrics_test.csv'
+            metrics_output = os.path.join(output, "metrics_test.csv")
             print('Saving Metrics - Test set: ' + metrics_output + '...')
-            file = open(metrics_output, 'a')
-            file.write('Metrics: Test Set')
-            file.write('\n')
-            file.write('Accuracy: %s' % accu)
-            file.write('\n')
-            file.write('Recall: %s' % recall)
-            file.write('\n')
-            file.write('Precision: %s' % precision)
-            file.write('\n')
-            file.write('F1: %s' % f1)
-            file.write('\n')
-            file.write('AUC: %s' % auc)
-            file.write('\n')
-            file.write('balanced ACC: %s' % balanced)
-            file.write('\n')
-            file.write('gmean: %s' % gmean)
-            file.write('\n')
-            file.write('MCC: %s' % mcc)
-            file.write('\n')
+            metrics = {
+                'Metric': ['Accuracy', 'Recall', 'Precision', 'F1-score', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
+                'Value': [accu, recall, precision, f1, auc, balanced, gmean, mcc]
+            }
 
-            matrix_output_test = output + 'test_confusion_matrix.csv'
+            metrics_df = pd.DataFrame(metrics)
+            metrics_df.to_csv(metrics_output, index=False)
+
+            matrix_output_test = os.path.join(output, "test_confusion_matrix.csv")
             matrix_test.to_csv(matrix_output_test)
             print('Saving confusion matrix in ' + matrix_output_test + '...')
             print('Task completed - results generated in ' + output + '!')
@@ -871,6 +907,7 @@ if __name__ == '__main__':
     print('###################################################################################')
     print('\n')
     parser = argparse.ArgumentParser()
+    parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
@@ -891,6 +928,7 @@ if __name__ == '__main__':
                         help='Tuning Classifier - True = Yes, False = No, default = False')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
     args = parser.parse_args()
+    path_model = args.path_model
     ftrain = str(args.train)
     ftrain_labels = str(args.train_label)
     ftest = str(args.test)
@@ -905,19 +943,23 @@ if __name__ == '__main__':
     foutput = str(args.output)
     start_time = time.time()
 
-    if os.path.exists(ftrain) is True:
-        train_read = pd.read_csv(ftrain)
-        print('Train - %s: Found File' % ftrain)
+    model = ''
+    if path_model:
+        model = joblib.load(path_model)
     else:
-        print('Train - %s: File not exists' % ftrain)
-        sys.exit()
+        if os.path.exists(ftrain) is True:
+            train_read = pd.read_csv(ftrain)
+            print('Train - %s: Found File' % ftrain)
+        else:
+            print('Train - %s: File not exists' % ftrain)
+            sys.exit()
 
-    if os.path.exists(ftrain_labels) is True:
-        train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
-        print('Train_labels - %s: Found File' % ftrain_labels)
-    else:
-        print('Train_labels - %s: File not exists' % ftrain_labels)
-        sys.exit()
+        if os.path.exists(ftrain_labels) is True:
+            train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
+            print('Train_labels - %s: Found File' % ftrain_labels)
+        else:
+            print('Train_labels - %s: File not exists' % ftrain_labels)
+            sys.exit()
 
     test_read = ''
     if ftest:
@@ -946,7 +988,7 @@ if __name__ == '__main__':
             print('Test_nameseq - %s: File not exists' % nameseq_test)
             sys.exit()
 
-    binary_pipeline(test_read, test_labels_read, test_nameseq_read, norm, fs, classifier, tuning, foutput)
+    binary_pipeline(model, test_read, test_labels_read, test_nameseq_read, norm, fs, classifier, tuning, foutput)
     cost = (time.time() - start_time) / 60
     print('Computation time - Pipeline: %s minutes' % cost)
 ##########################################################################
