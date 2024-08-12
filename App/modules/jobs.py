@@ -123,7 +123,6 @@ def feature_correlation():
                 features = model["train"]
         else:
             features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-
     with col2:
         correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
 
@@ -132,9 +131,21 @@ def feature_correlation():
         else:
             correlation_matrix = features.corr(method='spearman')
         
+        corr_pairs = correlation_matrix.abs().unstack()
+        corr_pairs = corr_pairs[corr_pairs.index.get_level_values(0) != corr_pairs.index.get_level_values(1)]  # Remove self-correlations
+
+        sorted_pairs = corr_pairs.sort_values(ascending=False)
+
+        top_1000_pairs = sorted_pairs.head(1000)
+
+        top_features = np.unique(top_1000_pairs.index.get_level_values(0).tolist() + top_1000_pairs.index.get_level_values(1).tolist())
+
+        top_features = top_features[:1000]
+
+        top_1000_corr_matrix = correlation_matrix.loc[top_features, top_features]
     with col1:
         st.markdown("**Correlation between features sorted by the correlation coefficient**")
-        correlation_df = pd.DataFrame(correlation_matrix.stack(), columns=['Correlation coefficient'])
+        correlation_df = pd.DataFrame(top_1000_corr_matrix.stack(), columns=['Correlation coefficient'])
 
         # Reset the index to get the feature pairs as separate columns
         correlation_df.reset_index(inplace=True)
@@ -148,9 +159,8 @@ def feature_correlation():
 
         # Display the sorted dataframe
         st.dataframe(correlation_df, hide_index=True, use_container_width=True)
-
     with col2:
-        fig = px.imshow(correlation_matrix, x=correlation_matrix.columns, y=correlation_matrix.columns,
+        fig = px.imshow(top_1000_corr_matrix, x=top_1000_corr_matrix.columns, y=top_1000_corr_matrix.columns,
                         color_continuous_scale='RdBu', title='Correlation heatmap')
         
         fig.update_traces(hovertemplate='Feature 1 (x-axis): %{x}<br>Feature 2 (y-axis): %{y}<br>Correlation: %{z}<extra></extra>')
@@ -357,11 +367,6 @@ def feature_importance():
 
     fig.update_layout(
         xaxis_title="Features",
-        # xaxis=dict(
-        #     title="Features",
-        #     tickmode='linear',
-        #     tickangle=90
-        # ),
         yaxis_title="Importance",
         margin=dict(t=0, b=50)
     )

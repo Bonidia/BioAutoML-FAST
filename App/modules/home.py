@@ -17,7 +17,7 @@ import base64
 import joblib
 import shutil
 
-def test_extraction(job_path, test_data, model):
+def test_extraction(job_path, test_data, model, data_type):
     datasets = []
 
     path = os.path.join(job_path, "feat_extraction", "test")
@@ -31,68 +31,209 @@ def test_extraction(job_path, test_data, model):
     print("Creating Directory...")
     os.makedirs(path)
 
-    for label in test_data:
-        subprocess.run(["python", "MathFeature/preprocessing/preprocessing.py",
-                    "-i", test_data[label], 
-                    "-o", os.path.join(path, f"pre_{label}.fasta")],
-                    cwd="..",
-                    stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    if data_type == "DNA/RNA":
+        for label in test_data:
+            subprocess.run(["python", "MathFeature/preprocessing/preprocessing.py",
+                        "-i", test_data[label], 
+                        "-o", os.path.join(path, f"pre_{label}.fasta")],
+                        cwd="..",
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-        datasets.append(feat_path + "/NAC.csv")
-        datasets.append(feat_path + "/DNC.csv")
-        datasets.append(feat_path + "/TNC.csv")
-        datasets.append(feat_path + "/kGap_di.csv")
-        datasets.append(feat_path + "/kGap_tri.csv")
-        datasets.append(feat_path + "/ORF.csv")
-        datasets.append(feat_path + "/Fickett.csv")
-        datasets.append(feat_path + "/Shannon.csv")
-        datasets.append(feat_path + "/FourierBinary.csv")
-        datasets.append(feat_path + "/FourierComplex.csv")
-        datasets.append(feat_path + "/Tsallis.csv")
-        datasets.append(feat_path + "/repDNA.csv")
+            datasets.append(feat_path + "/NAC.csv")
+            datasets.append(feat_path + "/DNC.csv")
+            datasets.append(feat_path + "/TNC.csv")
+            datasets.append(feat_path + "/kGap_di.csv")
+            datasets.append(feat_path + "/kGap_tri.csv")
+            datasets.append(feat_path + "/ORF.csv")
+            datasets.append(feat_path + "/Fickett.csv")
+            datasets.append(feat_path + "/Shannon.csv")
+            datasets.append(feat_path + "/FourierBinary.csv")
+            datasets.append(feat_path + "/FourierComplex.csv")
+            datasets.append(feat_path + "/Tsallis.csv")
+            datasets.append(feat_path + "/repDNA.csv")
 
-        commands = [["python", "MathFeature/methods/ExtractionTechniques.py",
-                            "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/NAC.csv", "-l", label,
-                            "-t", "NAC", "-seq", "1"],
+            commands = [["python", "MathFeature/methods/ExtractionTechniques.py",
+                                "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/NAC.csv", "-l", label,
+                                "-t", "NAC", "-seq", "1"],
 
-                    ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DNC.csv", "-l", label,
-                            "-t", "DNC", "-seq", "1"],
+                        ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DNC.csv", "-l", label,
+                                "-t", "DNC", "-seq", "1"],
 
-                    ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TNC.csv", "-l", label,
-                            "-t", "TNC", "-seq", "1"],
-                    ["python", "MathFeature/methods/Kgap.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
-                            label, "-k", "1", "-bef", "1",
-                            "-aft", "2", "-seq", "1"],
-                    ["python", "MathFeature/methods/Kgap.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_tri.csv", "-l",
-                            label, "-k", "1", "-bef", "1",
-                            "-aft", "3", "-seq", "1"],
-                    ["python", "MathFeature/methods/CodingClass.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ORF.csv", "-l", label],
-                    ["python", "MathFeature/methods/FickettScore.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
-                            "-seq", "1"],
-                    ["python", "MathFeature/methods/EntropyClass.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
-                            "-k", "5", "-e", "Shannon"],
-                    ["python", "MathFeature/methods/FourierClass.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierBinary.csv", "-l", label,
-                            "-r", "1"],
-                    ["python", "other-methods/FourierClass.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierComplex.csv", "-l", label,
-                            "-r", "6"],
-                    ["python", "other-methods/TsallisEntropy.py", "-i",
-                            os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis.csv", "-l", label,
-                            "-k", "5", "-q", "2.3"],
-                    ["python", "other-methods/repDNA/repDNA-feat.py", "--file",
-                            os.path.join(path, f"pre_{label}.fasta"), "--output", feat_path + "/repDNA.csv", "--label", label]
-        ]
+                        ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TNC.csv", "-l", label,
+                                "-t", "TNC", "-seq", "1"],
+                        ["python", "MathFeature/methods/Kgap.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
+                                label, "-k", "1", "-bef", "1",
+                                "-aft", "2", "-seq", "1"],
+                        ["python", "MathFeature/methods/Kgap.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_tri.csv", "-l",
+                                label, "-k", "1", "-bef", "1",
+                                "-aft", "3", "-seq", "1"],
+                        ["python", "MathFeature/methods/CodingClass.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ORF.csv", "-l", label],
+                        ["python", "MathFeature/methods/FickettScore.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
+                                "-seq", "1"],
+                        ["python", "MathFeature/methods/EntropyClass.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
+                                "-k", "5", "-e", "Shannon"],
+                        ["python", "MathFeature/methods/FourierClass.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierBinary.csv", "-l", label,
+                                "-r", "1"],
+                        ["python", "other-methods/FourierClass.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierComplex.csv", "-l", label,
+                                "-r", "6"],
+                        ["python", "other-methods/TsallisEntropy.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis.csv", "-l", label,
+                                "-k", "5", "-q", "2.3"],
+                        ["python", "other-methods/repDNA/repDNA-feat.py", "--file",
+                                os.path.join(path, f"pre_{label}.fasta"), "--output", feat_path + "/repDNA.csv", "--label", label]
+            ]
 
-        processes = [Popen(cmd, cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
-        for p in processes: p.wait()
+            processes = [Popen(cmd, cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+            for p in processes: p.wait()
+    elif data_type == "Protein":
+        for label in test_data:
+            subprocess.run(["python", "other-methods/preprocessing.py",
+            "-i", test_data[label], 
+            "-o", os.path.join(path, f"pre_{label}.fasta")],
+            cwd="..",
+            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+            datasets.append(feat_path + "/Shannon.csv")
+            datasets.append(feat_path + "/Tsallis_23.csv")
+            datasets.append(feat_path + "/Tsallis_30.csv")
+            datasets.append(feat_path + "/Tsallis_40.csv")
+            # datasets.append(feat_path + "/ComplexNetworks.csv")
+            datasets.append(feat_path + "/kGap_di.csv")
+            datasets.append(feat_path + "/AAC.csv")
+            datasets.append(feat_path + "/DPC.csv")
+            datasets.append(feat_path + "/iFeature-features.csv")
+            datasets.append(feat_path + "/Global.csv")
+            datasets.append(feat_path + "/Peptide.csv")
+            
+            commands = [["python", "MathFeature/methods/EntropyClass.py",
+                                "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
+                                "-k", "5", "-e", "Shannon"],
+
+                        ["python", "other-methods/TsallisEntropy.py",
+                                "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_23.csv", "-l", label,
+                                "-k", "5", "-q", "2.3"],
+        
+                        ["python", "other-methods/TsallisEntropy.py",
+                                "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_30.csv", "-l", label,
+                                "-k", "5", "-q", "3.0"],
+        
+                        ["python", "other-methods/TsallisEntropy.py",
+                                "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_40.csv", "-l", label,
+                                "-k", "5", "-q", "4.0"],
+        
+                        ["python", "MathFeature/methods/ComplexNetworksClass-v2.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ComplexNetworks.csv", "-l", label,
+                                "-k", "3"],
+        
+                        ["python", "MathFeature/methods/Kgap.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
+                                label, "-k", "1", "-bef", "1",
+                                "-aft", "1", "-seq", "3"],
+        
+                        ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/AAC.csv", "-l", label,
+                                "-t", "AAC"],
+        
+                        ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DPC.csv", "-l", label,
+                                "-t", "DPC"],
+        
+                        ["python", "other-methods/iFeature-modified/iFeature.py", "--file",
+                                os.path.join(path, f"pre_{label}.fasta"), "--type", "All", "--label", label, 
+                                "--out", feat_path + "/iFeature-features.csv"],
+        
+                        ["python", "other-methods/modlAMP-modified/descriptors.py", "-option",
+                                "global", "-label", label, "-input", os.path.join(path, f"pre_{label}.fasta"), 
+                                "-output", feat_path + "/Global.csv"],
+        
+                        ["python", "other-methods/modlAMP-modified/descriptors.py", "-option",
+                                "peptide", "-label", label, "-input", os.path.join(path, f"pre_{label}.fasta"), 
+                                "-output", feat_path + "/Peptide.csv"],
+            ]
+
+            processes = [Popen(cmd, cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+            for p in processes: p.wait()
+
+        # text_input = ''
+        # for label in test_data:
+        #     text_input += os.path.join(path, f"pre_{label}.fasta") + '\n' + label + '\n'
+
+        # dataset = feat_path + '/Fourier_Integer.csv'
+
+        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        #                 '-n', str(len(test_data)), '-o',
+        #                 dataset, '-r', '6'], cwd="..", text=True, input=text_input,
+        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+        # with open(dataset, 'r') as temp_f:
+        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+        # colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
+
+        # df = pd.read_csv(dataset, names=colnames, header=0)
+        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        # df.to_csv(dataset, index=False)
+        # datasets.append(dataset)
+
+        # dataset = feat_path + '/Fourier_EIIP.csv'
+
+        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        #                 '-n', str(len(test_data)), '-o',
+        #                 dataset, '-r', '8'], cwd="..", text=True, input=text_input,
+        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+        # with open(dataset, 'r') as temp_f:
+        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+        # colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
+
+        # df = pd.read_csv(dataset, names=colnames, header=0)
+        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        # df.to_csv(dataset, index=False)
+        # datasets.append(dataset)
+
+        # dataset = feat_path + '/EIIP.csv'
+
+        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        #                 '-n', str(len(test_data)), '-o',
+        #                 dataset, '-r', '7'], cwd="..", text=True, input=text_input,
+        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+        # with open(dataset, 'r') as temp_f:
+        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+        # colnames = ['EIIP_' + str(i) for i in range(0, max(col_count))]
+
+        # df = pd.read_csv(dataset, names=colnames, header=None)
+        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        # df.to_csv(dataset, index=False)
+        # datasets.append(dataset)
+
+        # dataset = feat_path + '/AAAF.csv'
+
+        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        #                 '-n', str(len(test_data)), '-o',
+        #                 dataset, '-r', '1'], cwd="..", text=True, input=text_input,
+        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+        # with open(dataset, 'r') as temp_f:
+        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+        # colnames = ['AccumulatedFrequency_' + str(i) for i in range(0, max(col_count))]
+
+        # df = pd.read_csv(dataset, names=colnames, header=None)
+        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        # df.to_csv(dataset, index=False)
+        # datasets.append(dataset)
 
     if datasets:
         datasets = list(dict.fromkeys(datasets))
@@ -133,7 +274,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
     
         command = [
             "python",
-            "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-feature-protein.py",
+            "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
             "--fasta_train",
         ]
 
@@ -196,7 +337,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
             test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-            test_extraction(job_path, test_fasta, model)
+            test_extraction(job_path, test_fasta, model, data_type)
 
             utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
 

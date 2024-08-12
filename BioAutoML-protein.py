@@ -181,10 +181,10 @@ def objective(trial, train, train_labels):
 			 'KSCTriad': trial.suggest_categorical('KSCTriad', [0, 1]),
 			 'Global': trial.suggest_categorical('Global', [0, 1]),
 			 'Peptide': trial.suggest_categorical('Peptide', [0, 1]),
-			 'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
-			 'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1]),
-			 'EIIP': trial.suggest_categorical('EIIP', [0, 1]),
-			 'AAAF': trial.suggest_categorical('AAAF', [0, 1]),
+			#  'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
+			#  'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1]),
+			#  'EIIP': trial.suggest_categorical('EIIP', [0, 1]),
+			#  'AAAF': trial.suggest_categorical('AAAF', [0, 1]),
 			 'Classifier': trial.suggest_categorical('Classifier', [1, 2, 3])}
 
 	position = int((len(train.columns) - 5046) / 2)
@@ -206,11 +206,11 @@ def objective(trial, train, train_labels):
 			 	   'CTriad': list(range(4296, 4639)),
 			 	   'KSCTriad': list(range(4639, 4982)), 
 				   'Global': list(range(4982, 4992)),
-				   'Peptide': list(range(4992, 5008)),
-				   'Fourier_Integer': list(range(5008, 5027)),
-				   'Fourier_EIIP': list(range(5027, 5046)),
-				   'EIIP': list(range(5046, (5046 + position))),
-				   'AAAF': list(range((5046 + position), len(train.columns)))} 
+				   'Peptide': list(range(4992, 5008)),}
+				#    'Fourier_Integer': list(range(5008, 5027)),
+				#    'Fourier_EIIP': list(range(5027, 5046)),
+				#    'EIIP': list(range(5046, (5046 + position))),
+				#    'AAAF': list(range((5046 + position), len(train.columns)))} 
  
 	for descriptor, ind in descriptors.items():
 		if int(space[descriptor]) == 1:
@@ -265,7 +265,6 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
 
-
 	param = {'Shannon': [0, 1], 'Tsallis_23': [0, 1],
 			 'Tsallis_30': [0, 1], 'Tsallis_40': [0, 1],
 			 'ComplexNetworks': [0, 1],
@@ -284,12 +283,11 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 'KSCTriad': [0, 1],
 			 'Global': [0, 1],
 			 'Peptide': [0, 1],
-			 'Fourier_Integer': [0, 1],
-			 'Fourier_EIIP': [0, 1], 'EIIP': [0, 1],
-			 'AAAF': [0, 1],
+			#  'Fourier_Integer': [0, 1],
+			#  'Fourier_EIIP': [0, 1], 'EIIP': [0, 1],
+			#  'AAAF': [0, 1],
 			 'Classifier': [1, 2, 3]}
  
-
 	func = lambda trial: objective(trial, ns.df, train_labels)
 	
 	results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
@@ -299,7 +297,6 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
  
 	print(best_tuning)
 	
- 
 	position = int((len(df_x.columns) - 5046) / 2)
 	index = list()
 	descriptors = {'Shannon': list(range(0, 5)), 'Tsallis_23': list(range(5, 10)),
@@ -319,11 +316,11 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 	   'CTriad': list(range(4296, 4639)),
 			 	   'KSCTriad': list(range(4639, 4982)), 
 				   'Global': list(range(4982, 4992)),
-				   'Peptide': list(range(4992, 5008)),
-				   'Fourier_Integer': list(range(5008, 5027)),
-				   'Fourier_EIIP': list(range(5027, 5046)),
-				   'EIIP': list(range(5046, (5046 + position))),
-				   'AAAF': list(range((5046 + position), len(df_x.columns)))}
+				   'Peptide': list(range(4992, 5008)),}
+				#    'Fourier_Integer': list(range(5008, 5027)),
+				#    'Fourier_EIIP': list(range(5027, 5046)),
+				#    'EIIP': list(range(5046, (5046 + position))),
+				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
  
 	for descriptor, ind in descriptors.items():
@@ -414,7 +411,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			datasets.append(path + '/Tsallis_23.csv')
 			datasets.append(path + '/Tsallis_30.csv')
 			datasets.append(path + '/Tsallis_40.csv')
-			datasets.append(path + '/ComplexNetworks.csv')
+			# datasets.append(path + '/ComplexNetworks.csv')
 			datasets.append(path + '/kGap_di.csv')
 			datasets.append(path + '/AAC.csv')
 			datasets.append(path + '/DPC.csv')
@@ -472,109 +469,82 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
 			for p in processes: p.wait()
 
+	# dataset = path + '/Fourier_Integer.csv'
+	# if fasta_test:
+	# 	labels_list = ftrain_labels + ftest_labels
+	# else:
+	# 	labels_list = ftrain_labels
+	# text_input = ''
+	# for i in range(len(fasta_list)):
+	# 	text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
+
+	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+	# 				'-n', str(len(fasta_list)), '-o',
+	# 				dataset, '-r', '6'], text=True, input=text_input,
+	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+	# with open(dataset, 'r') as temp_f:
+	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+	# colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
+
+	# df = pd.read_csv(dataset, names=colnames, header=0)
+	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	# df.to_csv(dataset, index=False)
+	# datasets.append(dataset)
+
+	# dataset = path + '/Fourier_EIIP.csv'
+
+	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+	# 				'-n', str(len(fasta_list)), '-o',
+	# 				dataset, '-r', '8'], text=True, input=text_input,
+	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+	# with open(dataset, 'r') as temp_f:
+	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+	# colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
+
+	# df = pd.read_csv(dataset, names=colnames, header=0)
+	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	# df.to_csv(dataset, index=False)
+	# datasets.append(dataset)
+
+	# dataset = path + '/EIIP.csv'
+
+	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+	# 				'-n', str(len(fasta_list)), '-o',
+	# 				dataset, '-r', '7'], text=True, input=text_input,
+	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+	# with open(dataset, 'r') as temp_f:
+	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+	# colnames = ['EIIP_' + str(i) for i in range(0, max(col_count))]
+
+	# df = pd.read_csv(dataset, names=colnames, header=None)
+	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	# df.to_csv(dataset, index=False)
+	# datasets.append(dataset)
+
+	# dataset = path + '/AAAF.csv'
+
+	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+	# 				'-n', str(len(fasta_list)), '-o',
+	# 				dataset, '-r', '1'], text=True, input=text_input,
+	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+	# with open(dataset, 'r') as temp_f:
+	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+
+	# colnames = ['AccumulatedFrequency_' + str(i) for i in range(0, max(col_count))]
+
+	# df = pd.read_csv(dataset, names=colnames, header=None)
+	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	# df.to_csv(dataset, index=False)
+	# datasets.append(dataset)
+
 	"""Concatenating all the extracted features"""
-
-	features = [1, 2, 3, 4]
-
-	if 1 in features:
-		dataset = path + '/Fourier_Integer.csv'
-		if fasta_test:
-			labels_list = ftrain_labels + ftest_labels
-		else:
-			labels_list = ftrain_labels
-		text_input = ''
-		for i in range(len(fasta_list)):
-			text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
-
-		subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-						'-n', str(len(fasta_list)), '-o',
-						dataset, '-r', '6'], text=True, input=text_input,
-					   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-		with open(dataset, 'r') as temp_f:
-			col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-		colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
-
-		df = pd.read_csv(dataset, names=colnames, header=0)
-		df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-		df.to_csv(dataset, index=False)
-		datasets.append(dataset)
-
-	if 2 in features:
-		dataset = path + '/Fourier_EIIP.csv'
-		if fasta_test:
-			labels_list = ftrain_labels + ftest_labels
-		else:
-			labels_list = ftrain_labels
-		text_input = ''
-		for i in range(len(fasta_list)):
-			text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
-
-		subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-						'-n', str(len(fasta_list)), '-o',
-						dataset, '-r', '8'], text=True, input=text_input,
-					   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-		with open(dataset, 'r') as temp_f:
-			col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-		colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
-
-		df = pd.read_csv(dataset, names=colnames, header=0)
-		df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-		df.to_csv(dataset, index=False)
-		datasets.append(dataset)
-
-	if 3 in features:
-		dataset = path + '/EIIP.csv'
-		if fasta_test:
-			labels_list = ftrain_labels + ftest_labels
-		else:
-			labels_list = ftrain_labels
-		text_input = ''
-		for i in range(len(fasta_list)):
-			text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
-
-		subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-						'-n', str(len(fasta_list)), '-o',
-						dataset, '-r', '7'], text=True, input=text_input,
-					   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-		with open(dataset, 'r') as temp_f:
-			col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-		colnames = ['EIIP_' + str(i) for i in range(0, max(col_count))]
-
-		df = pd.read_csv(dataset, names=colnames, header=None)
-		df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-		df.to_csv(dataset, index=False)
-		datasets.append(dataset)
-
-	if 4 in features:
-		dataset = path + '/AAAF.csv'
-		if fasta_test:
-			labels_list = ftrain_labels + ftest_labels
-		else:
-			labels_list = ftrain_labels
-		text_input = ''
-		for i in range(len(fasta_list)):
-			text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
-
-		subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-						'-n', str(len(fasta_list)), '-o',
-						dataset, '-r', '1'], text=True, input=text_input,
-					   stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-		with open(dataset, 'r') as temp_f:
-			col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-		colnames = ['AccumulatedFrequency_' + str(i) for i in range(0, max(col_count))]
-
-		df = pd.read_csv(dataset, names=colnames, header=None)
-		df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-		df.to_csv(dataset, index=False)
-		datasets.append(dataset)
 	
 	if datasets:
 		datasets = list(dict.fromkeys(datasets))
@@ -583,7 +553,9 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		dataframes = dataframes[~dataframes.nameseq.str.contains("nameseq")]
 
 	X_train = dataframes.iloc[:train_size, :]
-	X_train.pop('nameseq')
+	nameseq_train = X_train.pop('nameseq')
+	fnameseqtrain = path + '/fnameseqtrain.csv'
+	nameseq_train.to_csv(fnameseqtrain, index=False, header=True)
 	y_train = X_train.pop('label')
 	ftrain = path + '/ftrain.csv'
 	X_train.to_csv(ftrain, index=False)
@@ -632,7 +604,7 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
-	parser.add_argument('-estimations', '--estimations', default=100, help='number of estimations - BioAutoML - default = 50')
+	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 50')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 
