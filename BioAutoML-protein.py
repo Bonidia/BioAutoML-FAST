@@ -181,8 +181,8 @@ def objective(trial, train, train_labels):
 			 'KSCTriad': trial.suggest_categorical('KSCTriad', [0, 1]),
 			 'Global': trial.suggest_categorical('Global', [0, 1]),
 			 'Peptide': trial.suggest_categorical('Peptide', [0, 1]),
-			#  'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
-			#  'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1]),
+			 'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
+			 'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1]),
 			#  'EIIP': trial.suggest_categorical('EIIP', [0, 1]),
 			#  'AAAF': trial.suggest_categorical('AAAF', [0, 1]),
 			 'Classifier': trial.suggest_categorical('Classifier', [1, 2, 3])}
@@ -206,9 +206,9 @@ def objective(trial, train, train_labels):
 			 	   'CTriad': list(range(4296, 4639)),
 			 	   'KSCTriad': list(range(4639, 4982)), 
 				   'Global': list(range(4982, 4992)),
-				   'Peptide': list(range(4992, 5008)),}
-				#    'Fourier_Integer': list(range(5008, 5027)),
-				#    'Fourier_EIIP': list(range(5027, 5046)),
+				   'Peptide': list(range(4992, 5008)),
+				   'Fourier_Integer': list(range(5008, 5027)),
+				   'Fourier_EIIP': list(range(5027, 5046)),}
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(train.columns)))} 
  
@@ -283,8 +283,8 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 'KSCTriad': [0, 1],
 			 'Global': [0, 1],
 			 'Peptide': [0, 1],
-			#  'Fourier_Integer': [0, 1],
-			#  'Fourier_EIIP': [0, 1], 'EIIP': [0, 1],
+			 'Fourier_Integer': [0, 1],
+		  	 'Fourier_EIIP': [0, 1], # 'EIIP': [0, 1],
 			#  'AAAF': [0, 1],
 			 'Classifier': [1, 2, 3]}
  
@@ -316,9 +316,9 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 	   'CTriad': list(range(4296, 4639)),
 			 	   'KSCTriad': list(range(4639, 4982)), 
 				   'Global': list(range(4982, 4992)),
-				   'Peptide': list(range(4992, 5008)),}
-				#    'Fourier_Integer': list(range(5008, 5027)),
-				#    'Fourier_EIIP': list(range(5027, 5046)),
+				   'Peptide': list(range(4992, 5008)),
+				   'Fourier_Integer': list(range(5008, 5027)),
+				   'Fourier_EIIP': list(range(5027, 5046)),}
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
@@ -411,7 +411,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			datasets.append(path + '/Tsallis_23.csv')
 			datasets.append(path + '/Tsallis_30.csv')
 			datasets.append(path + '/Tsallis_40.csv')
-			# datasets.append(path + '/ComplexNetworks.csv')
+			datasets.append(path + '/ComplexNetworks.csv')
 			datasets.append(path + '/kGap_di.csv')
 			datasets.append(path + '/AAC.csv')
 			datasets.append(path + '/DPC.csv')
@@ -463,52 +463,51 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 						['python', 'other-methods/modlAMP-modified/descriptors.py', '-option',
 								'peptide', '-label', labels[i][j], '-input', preprocessed_fasta, 
         						'-output', path + '/Peptide.csv'],
-      
 			]
 
 			processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
 			for p in processes: p.wait()
 
-	# dataset = path + '/Fourier_Integer.csv'
-	# if fasta_test:
-	# 	labels_list = ftrain_labels + ftest_labels
-	# else:
-	# 	labels_list = ftrain_labels
-	# text_input = ''
-	# for i in range(len(fasta_list)):
-	# 	text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
+	dataset = path + '/Fourier_Integer.csv'
+	if fasta_test:
+		labels_list = ftrain_labels + ftest_labels
+	else:
+		labels_list = ftrain_labels
+	text_input = ''
+	for i in range(len(fasta_list)):
+		text_input += fasta_list[i] + '\n' + labels_list[i] + '\n'
 
-	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-	# 				'-n', str(len(fasta_list)), '-o',
-	# 				dataset, '-r', '6'], text=True, input=text_input,
-	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+	subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+					'-n', str(len(fasta_list)), '-o',
+					dataset, '-r', '6'], text=True, input=text_input,
+					stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-	# with open(dataset, 'r') as temp_f:
-	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+	with open(dataset, 'r') as temp_f:
+		col_count = [len(l.split(",")) for l in temp_f.readlines()]
 
-	# colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
+	colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
 
-	# df = pd.read_csv(dataset, names=colnames, header=0)
-	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-	# df.to_csv(dataset, index=False)
-	# datasets.append(dataset)
+	df = pd.read_csv(dataset, names=colnames, header=0)
+	df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	df.to_csv(dataset, index=False)
+	datasets.append(dataset)
 
-	# dataset = path + '/Fourier_EIIP.csv'
+	dataset = path + '/Fourier_EIIP.csv'
 
-	# subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-	# 				'-n', str(len(fasta_list)), '-o',
-	# 				dataset, '-r', '8'], text=True, input=text_input,
-	# 				stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+	subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+					'-n', str(len(fasta_list)), '-o',
+					dataset, '-r', '8'], text=True, input=text_input,
+					stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-	# with open(dataset, 'r') as temp_f:
-	# 	col_count = [len(l.split(",")) for l in temp_f.readlines()]
+	with open(dataset, 'r') as temp_f:
+		col_count = [len(l.split(",")) for l in temp_f.readlines()]
 
-	# colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
+	colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
 
-	# df = pd.read_csv(dataset, names=colnames, header=0)
-	# df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-	# df.to_csv(dataset, index=False)
-	# datasets.append(dataset)
+	df = pd.read_csv(dataset, names=colnames, header=0)
+	df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+	df.to_csv(dataset, index=False)
+	datasets.append(dataset)
 
 	# dataset = path + '/EIIP.csv'
 

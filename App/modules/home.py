@@ -55,11 +55,9 @@ def test_extraction(job_path, test_data, model, data_type):
             commands = [["python", "MathFeature/methods/ExtractionTechniques.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/NAC.csv", "-l", label,
                                 "-t", "NAC", "-seq", "1"],
-
                         ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DNC.csv", "-l", label,
                                 "-t", "DNC", "-seq", "1"],
-
                         ["python", "MathFeature/methods/ExtractionTechniques.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TNC.csv", "-l", label,
                                 "-t", "TNC", "-seq", "1"],
@@ -106,7 +104,7 @@ def test_extraction(job_path, test_data, model, data_type):
             datasets.append(feat_path + "/Tsallis_23.csv")
             datasets.append(feat_path + "/Tsallis_30.csv")
             datasets.append(feat_path + "/Tsallis_40.csv")
-            # datasets.append(feat_path + "/ComplexNetworks.csv")
+            datasets.append(feat_path + "/ComplexNetworks.csv")
             datasets.append(feat_path + "/kGap_di.csv")
             datasets.append(feat_path + "/AAC.csv")
             datasets.append(feat_path + "/DPC.csv")
@@ -117,44 +115,34 @@ def test_extraction(job_path, test_data, model, data_type):
             commands = [["python", "MathFeature/methods/EntropyClass.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
-
                         ["python", "other-methods/TsallisEntropy.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_23.csv", "-l", label,
                                 "-k", "5", "-q", "2.3"],
-        
                         ["python", "other-methods/TsallisEntropy.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_30.csv", "-l", label,
                                 "-k", "5", "-q", "3.0"],
-        
                         ["python", "other-methods/TsallisEntropy.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Tsallis_40.csv", "-l", label,
                                 "-k", "5", "-q", "4.0"],
-        
                         ["python", "MathFeature/methods/ComplexNetworksClass-v2.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ComplexNetworks.csv", "-l", label,
                                 "-k", "3"],
-        
                         ["python", "MathFeature/methods/Kgap.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
                                 label, "-k", "1", "-bef", "1",
                                 "-aft", "1", "-seq", "3"],
-        
                         ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/AAC.csv", "-l", label,
                                 "-t", "AAC"],
-        
                         ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DPC.csv", "-l", label,
                                 "-t", "DPC"],
-        
                         ["python", "other-methods/iFeature-modified/iFeature.py", "--file",
                                 os.path.join(path, f"pre_{label}.fasta"), "--type", "All", "--label", label, 
                                 "--out", feat_path + "/iFeature-features.csv"],
-        
                         ["python", "other-methods/modlAMP-modified/descriptors.py", "-option",
                                 "global", "-label", label, "-input", os.path.join(path, f"pre_{label}.fasta"), 
                                 "-output", feat_path + "/Global.csv"],
-        
                         ["python", "other-methods/modlAMP-modified/descriptors.py", "-option",
                                 "peptide", "-label", label, "-input", os.path.join(path, f"pre_{label}.fasta"), 
                                 "-output", feat_path + "/Peptide.csv"],
@@ -163,43 +151,43 @@ def test_extraction(job_path, test_data, model, data_type):
             processes = [Popen(cmd, cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
             for p in processes: p.wait()
 
-        # text_input = ''
-        # for label in test_data:
-        #     text_input += os.path.join(path, f"pre_{label}.fasta") + '\n' + label + '\n'
+        text_input = ''
+        for label in test_data:
+            text_input += os.path.join(path, f"pre_{label}.fasta") + '\n' + label + '\n'
 
-        # dataset = feat_path + '/Fourier_Integer.csv'
+        dataset = feat_path + '/Fourier_Integer.csv'
 
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '6'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+                        '-n', str(len(test_data)), '-o',
+                        dataset, '-r', '6'], cwd="..", text=True, input=text_input,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+        with open(dataset, 'r') as temp_f:
+            col_count = [len(l.split(",")) for l in temp_f.readlines()]
 
-        # colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
+        colnames = ['Integer_Fourier_' + str(i) for i in range(0, max(col_count))]
 
-        # df = pd.read_csv(dataset, names=colnames, header=0)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
+        df = pd.read_csv(dataset, names=colnames, header=0)
+        df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        df.to_csv(dataset, index=False)
+        datasets.append(dataset)
 
-        # dataset = feat_path + '/Fourier_EIIP.csv'
+        dataset = feat_path + '/Fourier_EIIP.csv'
 
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '8'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+                        '-n', str(len(test_data)), '-o',
+                        dataset, '-r', '8'], cwd="..", text=True, input=text_input,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
+        with open(dataset, 'r') as temp_f:
+            col_count = [len(l.split(",")) for l in temp_f.readlines()]
 
-        # colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
+        colnames = ['EIIP_Fourier_' + str(i) for i in range(0, max(col_count))]
 
-        # df = pd.read_csv(dataset, names=colnames, header=0)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
+        df = pd.read_csv(dataset, names=colnames, header=0)
+        df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
+        df.to_csv(dataset, index=False)
+        datasets.append(dataset)
 
         # dataset = feat_path + '/EIIP.csv'
 
@@ -286,17 +274,27 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
             test_path = os.path.join(job_path, "test")
             os.makedirs(test_path)
 
-            for file in test_files:
-                save_path = os.path.join(test_path, file.name)
+            if testing == "Test set":
+                for file in test_files:
+                    save_path = os.path.join(test_path, file.name)
+                    with open(save_path, mode="wb") as f:
+                        f.write(file.getvalue())
+
+                test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                command.append("--fasta_test")
+                command.extend(test_fasta.values())
+                command.append("--fasta_label_test")
+                command.extend(test_fasta.keys())
+            else:
+                save_path = os.path.join(test_path, "predicted.fasta")
                 with open(save_path, mode="wb") as f:
-                    f.write(file.getvalue())
-
-            test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
-
-            command.append("--fasta_test")
-            command.extend(test_fasta.values())
-            command.append("--fasta_label_test")
-            command.extend(test_fasta.keys())
+                    f.write(test_files.getvalue())
+                
+                command.append("--fasta_test")
+                command.append(save_path)
+                command.append("--fasta_label_test")
+                command.append("Predicted")
 
         command.extend(["--n_cpu", "-1"])
         command.extend(["--output", job_path])

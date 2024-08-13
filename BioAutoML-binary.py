@@ -361,13 +361,17 @@ def feature_importance_fs(model, train, train_labels, column_train):
 def features_importance_ensembles(model, features, output_importances):
     """Generate feature importance values"""
 
-    file = open(output_importances, 'a')
+    # file = open(output_importances, 'a')
     importances = model.feature_importances_
     indices = np.argsort(importances)[::-1]
     names = [features[i] for i in indices]
-    for f in range(len(features)):
-        file.write('%d. Feature (%s): (%f)' % (f + 1, names[f], importances[indices[f]]))
-        file.write('\n')
+    with open(output_importances, 'w') as file:
+        file.write('Feature\tImportance\n')  # Write header
+        for f in range(len(features)):
+            file.write('%s\t%f\n' % (names[f], importances[indices[f]]))
+    # for f in range(len(features)):
+    #     file.write('%d. Feature (%s): (%f)' % (f + 1, names[f], importances[indices[f]]))
+    #     file.write('\n')
     #  print('%d. %s: (%f)' % (f + 1, names[f], importances[indices[f]]))
     return names
 
@@ -813,7 +817,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier
         features_importance_ensembles(clf, feature_name, importance_output)
         print('Saving results in ' + importance_output + '...')
 
-        model_dict["feature_importance"] = pd.read_csv(importance_output, sep=' ', header=None)
+        model_dict["feature_importance"] = pd.read_csv(importance_output, sep='\t')
 
         joblib.dump(model_dict, model_output)
 

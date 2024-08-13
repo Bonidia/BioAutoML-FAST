@@ -242,12 +242,15 @@ def feature_distribution():
         st.plotly_chart(fig, use_container_width=True)
 
 def performance_metrics():
-    if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
+    test_path = os.path.join(st.session_state["job_path"], "test")
+    if os.path.exists(os.path.join(test_path, "predict.fasta")) or \
+        not os.path.exists(test_path):
+        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
+                        help="Training set evaluated with 10-fold cross-validation")
+    else:
         evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
                                 help="Training set evaluated with 10-fold cross-validation")
-    else:
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
-                                help="Training set evaluated with 10-fold cross-validation")
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -348,15 +351,12 @@ def show_predictions():
 def feature_importance():
     path_feat = os.path.join(st.session_state["job_path"], "feature_importance.csv")
     if os.path.exists(path_feat):
-        df = pd.read_csv(path_feat, sep=' ', header=None)
+        df = pd.read_csv(path_feat, sep='\t')
     else:
         df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["feature_importance"]
 
-    # df = pd.read_csv(os.path.join(st.session_state["job_path"], "feature_importance.csv"), sep=' ', header=None)
-
-    features = df[2].str.extract(r'\((.*?)\)')[0][::-1]
-
-    score_importances = df[3].str.extract(r'\((.*?)\)')[0].values.astype(float)[::-1]
+    features = df["Feature"][::-1]
+    score_importances = df["Importance"][::-1]
 
     fig = go.Figure(data=go.Bar(
         x=features,
