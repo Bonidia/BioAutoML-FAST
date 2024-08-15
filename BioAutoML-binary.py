@@ -582,7 +582,7 @@ def build_interpretability_report(generated_plt=[], report_name="interpretabilit
     report.build()
 
 
-def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier, tuning, output):
+def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tuning, imbalance_data, fs, output):
     
     global clf, train, train_labels, lb_encoder
 
@@ -676,15 +676,14 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier
 
     """Choosing Classifier """
 
-    print('Choosing Classifier...')
     if not model:
         if classifier == 0:
-            if tuning is True:
+            if tuning:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: CatBoost')
                 clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
                                         logging_level='Silent', random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                 best_tuning, clf = tuning_catboost_bayesian()
                 print('Finished Tuning')
@@ -693,14 +692,14 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier
                 print('Classifier: CatBoost')
                 clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
                                         logging_level='Silent', random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
         elif classifier == 1:
-            if tuning is True:
+            if tuning:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: Random Forest')
                 clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                 best_tuning, clf = tuning_rf_bayesian()
                 print('Finished Tuning')
@@ -708,14 +707,14 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier
                 print('Tuning: ' + str(tuning))
                 print('Classifier: Random Forest')
                 clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
         elif classifier == 2:
-            if tuning is True:
+            if tuning:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: LightGBM')
                 clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                 best_tuning, clf = tuning_lightgbm_bayesian()
                 print('Finished Tuning')
@@ -723,66 +722,52 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, fs, classifier
                 print('Tuning: ' + str(tuning))
                 print('Classifier: LightGBM')
                 clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
         elif classifier == 3:
-            if tuning is True:
+            if tuning:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: XGBClassifier')
                 clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                 print('Tuning not yet available for XGBClassifier.')
             else:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: XGBClassifier')
                 clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
-                if imbalance_data is True:
+                if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
         else:
             sys.exit('This classifier option does not exist - Try again')
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
 
-    fs = 0
-    feature_name = column_train
-    if fs == 1:
-        print('Applying Feature Importance-Based Feature Selection...')
-        # best_t, best_baac = feature_importance_fs(clf, train, train_labels, column_train)
-        best_t = feature_importance_fs_bayesian(clf, train, train_labels)
-        fs = SelectFromModel(clf, threshold=best_t)
-        fs.fit(train, train_labels)
-        feature_idx = fs.get_support()
-        feature_name = column_train[feature_idx]
-        train = pd.DataFrame(fs.transform(train), columns=feature_name)
-        if os.path.exists(ftest) is True:
-            test = pd.DataFrame(fs.transform(test), columns=feature_name)
-        else:
-            pass
-        print('Best Feature Subset: ' + str(len(feature_name)))
-        print('Reduction: ' + str(len(column_train) - len(feature_name)) + ' features')
-        fs_train = output + 'best_feature_train.csv'
-        fs_test = output + 'best_feature_test.csv'
-        print('Saving dataset with selected feature subset - train: ' + fs_train)
-        train.to_csv(fs_train, index=False)
-        if os.path.exists(ftest) is True:
-            print('Saving dataset with selected feature subset - test: ' + fs_test)
-            test.to_csv(fs_test, index=False)
-        print('Feature Selection - Finished...')
-
-    # """Training - StratifiedKFold (cross-validation = 10)..."""
-
-    # print('Training: StratifiedKFold (cross-validation = 10)...')
-    # train_output = output + 'training_kfold(10)_metrics.csv'
-    # matrix_output = output + 'training_confusion_matrix.csv'
-    # model_output = output + 'trained_model.sav'
-    # evaluate_model_cross(train, train_labels, clf, train_output, matrix_output)
-    # clf.fit(train, train_labels)
-    # joblib.dump(clf, model_output)
-    # print('Saving results in ' + train_output + '...')
-    # print('Saving confusion matrix in ' + matrix_output + '...')
-    # print('Saving trained model in ' + model_output + '...')
-    # print('Training: Finished...')
+    if not model:
+        feature_name = column_train
+        if fs:
+            print('Applying Feature Importance-Based Feature Selection...')
+            # best_t, best_baac = feature_importance_fs(clf, train, train_labels, column_train)
+            best_t = feature_importance_fs_bayesian(clf, train, train_labels)
+            fs = SelectFromModel(clf, threshold=best_t)
+            fs.fit(train, train_labels)
+            feature_idx = fs.get_support()
+            feature_name = column_train[feature_idx]
+            train = pd.DataFrame(fs.transform(train), columns=feature_name)
+            if os.path.exists(ftest) is True:
+                test = pd.DataFrame(fs.transform(test), columns=feature_name)
+            else:
+                pass
+            print('Best Feature Subset: ' + str(len(feature_name)))
+            print('Reduction: ' + str(len(column_train) - len(feature_name)) + ' features')
+            fs_train = output + 'best_feature_train.csv'
+            fs_test = output + 'best_feature_test.csv'
+            print('Saving dataset with selected feature subset - train: ' + fs_train)
+            train.to_csv(fs_train, index=False)
+            if os.path.exists(ftest) is True:
+                print('Saving dataset with selected feature subset - test: ' + fs_test)
+                test.to_csv(fs_test, index=False)
+            print('Feature Selection - Finished...')
 
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
@@ -917,19 +902,13 @@ if __name__ == '__main__':
     parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
-    parser.add_argument('-nf', '--normalization', type=bool, default=False,
-                        help='Normalization - Features (default = False)')
-    parser.add_argument('-fs', '--featureselection', default=1,
-                        help='Feature Selection (default = True)')
+    parser.add_argument('-nf', '--normalization', type=bool, default=False, help='Normalization - Features (default = False)')
     parser.add_argument('-n_cpu', '--n_cpu', default=1, help='number of cpus - default = 1')
     parser.add_argument('-classifier', '--classifier', default=0,
-                        help='Classifier - 0: CatBoost, 1: Random Forest'
-                             '2: LightGBM, 3: XGBoost')
-    parser.add_argument('-imbalance', '--imbalance', type=bool, default=False,
-                        help='To deal with the imbalanced dataset problem - True = Yes, False = No, '
-                             'default = False')
-    parser.add_argument('-tuning', '--tuning_classifier', type=bool, default=False,
-                        help='Tuning Classifier - True = Yes, False = No, default = False')
+                        help='Classifier - 0: CatBoost, 1: Random Forest, 2: LightGBM, 3: XGBoost')
+    parser.add_argument('-tuning', '--tuning', default=0, help='Hyperparameter tuning - 0: False, 1: True - Default: False')
+    parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
+    parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
     args = parser.parse_args()
     path_model = args.path_model
@@ -939,11 +918,11 @@ if __name__ == '__main__':
     ftest_labels = str(args.test_label)
     nameseq_test = str(args.test_nameseq)
     norm = args.normalization
-    fs = int(args.featureselection)
     n_cpu = int(args.n_cpu)
     classifier = int(args.classifier)
-    imbalance_data = args.imbalance
-    tuning = args.tuning_classifier
+    tuning = int(args.tuning)
+    imbalance_data = int(args.imbalance)
+    fs = int(args.fselection)
     foutput = str(args.output)
     start_time = time.time()
 
@@ -992,7 +971,7 @@ if __name__ == '__main__':
             print('Test_nameseq - %s: File not exists' % nameseq_test)
             sys.exit()
 
-    binary_pipeline(model, test_read, test_labels_read, test_nameseq_read, norm, fs, classifier, tuning, foutput)
+    binary_pipeline(model, test_read, test_labels_read, test_nameseq_read, norm, classifier, tuning, imbalance_data, fs, foutput)
     cost = (time.time() - start_time) / 60
     print('Computation time - Pipeline: %s minutes' % cost)
 ##########################################################################

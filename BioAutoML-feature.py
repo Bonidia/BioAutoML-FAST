@@ -778,6 +778,9 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
+	parser.add_argument('-tuning', '--tuning', default=0, help='Hyperparameter tuning - 0: False, 1: True - Default: False')
+	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
+	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
 	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 50')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -789,6 +792,9 @@ if __name__ == '__main__':
 	fasta_label_test = args.fasta_label_test
 	algo = int(args.algorithm)
 	estimations = int(args.estimations)
+	tuning = args.tuning
+	imbalance_data = args.imbalance
+	fs = args.fselection
 	n_cpu = int(args.n_cpu)
 	foutput = str(args.output)
 
@@ -841,14 +847,16 @@ if __name__ == '__main__':
 		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test,
 						 '-test_label', ftest_labels, '-test_nameseq',
-						 fnameseqtest, '-nf', 'True', '-n_cpu', str(n_cpu), 
-       					 '-classifier', str(classifier), '-output', foutput])
+						 fnameseqtest, '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+       					 '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
+						 '-classifier', str(classifier), '-output', foutput])
 	else:
 		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
 						 ftest_labels, '-test_nameseq', fnameseqtest,
-						 '-nf', 'True', '-fs', str(0), '-classifier', str(classifier), 
-       					 '-imbalance', 'True', '-n_cpu', str(n_cpu), '-output', foutput])
+						 '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+       					 '-imbalance', imbalance_data, '-classifier', str(classifier), 
+						 '-n_cpu', str(n_cpu), '-output', foutput])
 
 ##########################################################################
 ##########################################################################

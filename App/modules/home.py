@@ -108,6 +108,7 @@ def test_extraction(job_path, test_data, model, data_type):
             datasets.append(feat_path + "/kGap_di.csv")
             datasets.append(feat_path + "/AAC.csv")
             datasets.append(feat_path + "/DPC.csv")
+            datasets.append(feat_path + "/TPC.csv")
             datasets.append(feat_path + "/iFeature-features.csv")
             datasets.append(feat_path + "/Global.csv")
             datasets.append(feat_path + "/Peptide.csv")
@@ -137,6 +138,9 @@ def test_extraction(job_path, test_data, model, data_type):
                         ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DPC.csv", "-l", label,
                                 "-t", "DPC"],
+                        ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TPC.csv", "-l", label,
+                                "-t", "TPC"],
                         ["python", "other-methods/iFeature-modified/iFeature.py", "--file",
                                 os.path.join(path, f"pre_{label}.fasta"), "--type", "All", "--label", label, 
                                 "--out", feat_path + "/iFeature-features.csv"],
@@ -247,7 +251,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def submit_job(train_files, test_files, job_path, data_type, training, testing):
+def submit_job(train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection):
 
     if training == "Training set":
         train_path = os.path.join(job_path, "train")
@@ -263,6 +267,12 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
         command = [
             "python",
             "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
+            "--tuning",
+            "1" if tuning else "0",
+            "--imbalance",
+            "1" if imbalance else "0",
+            "--fselection",
+            "1" if fselection else "0",
             "--fasta_train",
         ]
 
@@ -348,10 +358,10 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 
         subprocess.run(command, cwd="..")
 
-        #model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-        #model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
+        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
 
-        # [1python', 'BioAutoML-multiclass.py', 
+        # ['python', 'BioAutoML-multiclass.py', 
         # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
         # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
         # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
@@ -360,8 +370,8 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing):
 def queue_listener():
     while True:
         if not job_queue.empty():
-            train_files, test_files, job_path, data_type, training, testing = job_queue.get()
-            submit_job(train_files, test_files, job_path, data_type, training, testing)
+            train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection = job_queue.get()
+            submit_job(train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection)
             
 def runUI():
     global job_queue
@@ -410,13 +420,16 @@ def runUI():
 
     with col1:
         training = st.selectbox(":brain: Training", ["Training set", "Load model"],
-                                    help="Training set evaluated with 10-fold cross-validation") #index=None
+                                    help="Training set evaluated with 10-fold cross-validation")
+        tuning = st.checkbox("Hyperparameter tuning", help="tooptip to add")
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
-                                    help="Test set ")
+                                    help="tooptip to add")
+        imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
     with col3:
         data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
-                                    help="Only sequences without ambiguous nucleotides or amino acids are supported") #index=None
+                                    help="Only sequences without ambiguous nucleotides or amino acids are supported")
+        fselection = st.checkbox("Feature Selection", help="tooptip to add")
 
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
@@ -453,7 +466,6 @@ def runUI():
                         test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
         else:
             if testing == "No test set":
-                # st.warning("You need a set for using against the trained model.")
                 train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
             elif testing == "Test set":
                 set1, set2 = st.columns(2)
@@ -481,19 +493,24 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        if train_files is None:
-            st.error("Please upload the required training file(s).")
-        elif (testing != "No test set" and not test_files):
-            st.error("Please upload the required test or prediction file(s).")
+        if training == "Training set" and len(train_files) < 2:
+            with queue_info:
+                st.error("Training set requires at least 2 classes.")
+        elif testing != "No test set" and not test_files:
+            with queue_info:
+                st.error("Please upload the required test or prediction file(s).")
+        elif testing == "Test set" and len(test_files) < 2:
+            with queue_info:
+                st.error("Test set requires at least 2 classes.")
         else:
             job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
             job_path = os.path.join(predict_path, job_id)
 
             os.makedirs(job_path)
             if testing == "No test set":
-                job_queue.put((train_files, None, job_path, data_type, training, testing))
+                job_queue.put((train_files, None, job_path, data_type, training, testing, tuning, imbalance, fselection))
             else:
-                job_queue.put((train_files, test_files, job_path, data_type, training, testing))
+                job_queue.put((train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection))
 
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")

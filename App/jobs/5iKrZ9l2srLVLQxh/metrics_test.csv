@@ -1,7 +1,0 @@
-,precision,recall,f1-score,support
-predict,0.0,0.0,0.0,267.0
-sRNA,0.0,0.0,0.0,0.0
-tRNA,0.0,0.0,0.0,0.0
-accuracy,0.0,0.0,0.0,0.0
-macro avg,0.0,0.0,0.0,267.0
-weighted avg,0.0,0.0,0.0,267.0
