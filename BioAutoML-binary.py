@@ -685,6 +685,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                                         logging_level='Silent', random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
                 best_tuning, clf = tuning_catboost_bayesian()
                 print('Finished Tuning')
             else:
@@ -694,6 +695,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                                         logging_level='Silent', random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
         elif classifier == 1:
             if tuning:
                 print('Tuning: ' + str(tuning))
@@ -701,6 +703,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
                 best_tuning, clf = tuning_rf_bayesian()
                 print('Finished Tuning')
             else:
@@ -709,6 +712,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
         elif classifier == 2:
             if tuning:
                 print('Tuning: ' + str(tuning))
@@ -716,6 +720,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
                 best_tuning, clf = tuning_lightgbm_bayesian()
                 print('Finished Tuning')
             else:
@@ -724,6 +729,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
         elif classifier == 3:
             if tuning:
                 print('Tuning: ' + str(tuning))
@@ -731,6 +737,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
                 print('Tuning not yet available for XGBClassifier.')
             else:
                 print('Tuning: ' + str(tuning))
@@ -738,8 +745,13 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
+                    model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
         else:
             sys.exit('This classifier option does not exist - Try again')
+    else:
+        if "train_imbalance" in model:
+            print('Checking for imbalanced labels...')
+            train, train_labels = model["train_imbalance"], model["train_labels_imbalance"]
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
 
@@ -760,14 +772,25 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
                 pass
             print('Best Feature Subset: ' + str(len(feature_name)))
             print('Reduction: ' + str(len(column_train) - len(feature_name)) + ' features')
-            fs_train = output + 'best_feature_train.csv'
-            fs_test = output + 'best_feature_test.csv'
-            print('Saving dataset with selected feature subset - train: ' + fs_train)
-            train.to_csv(fs_train, index=False)
-            if os.path.exists(ftest) is True:
-                print('Saving dataset with selected feature subset - test: ' + fs_test)
-                test.to_csv(fs_test, index=False)
+            model_dict["fs"] = fs
+            # fs_train = os.path.join(output, "best_feature_train.csv")
+            # fs_test = os.path.join(output, "best_feature_test.csv")
+            # print('Saving dataset with selected feature subset - train: ' + fs_train)
+            # train.to_csv(fs_train, index=False)
+            # if os.path.exists(ftest) is True:
+            #     print('Saving dataset with selected feature subset - test: ' + fs_test)
+            #     test.to_csv(fs_test, index=False)
             print('Feature Selection - Finished...')
+    else:
+        if "fs" in model:
+            feature_idx = model["fs"].get_support()
+            feature_name = column_train[feature_idx]
+
+            train = pd.DataFrame(model["fs"].transform(train), columns=feature_name)
+            if os.path.exists(ftest) is True:
+                test = pd.DataFrame(model["fs"].transform(test), columns=feature_name)
+            else:
+                pass
 
     """Training - StratifiedKFold (cross-validation = 10)..."""
 

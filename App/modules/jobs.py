@@ -13,6 +13,8 @@ from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn import tree
+import matplotlib.pyplot as plt
 
 def dimensionality_reduction():
     dim_col1, dim_col2 = st.columns(2)
@@ -374,6 +376,54 @@ def feature_importance():
     st.markdown("**Importance of features regarding model training**", help="It is possible to zoom in to visualize features properly.")
     st.plotly_chart(fig, use_container_width=True)
 
+def model_information():
+
+    model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+
+    # st.markdown(model.keys())
+    # st.markdown(model["clf"])
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        
+        if "RandomForest" in str(model["clf"]):
+            st.image("imgs/models/rf.png", use_column_width=True)
+
+
+    with col2:
+        with st.container(border=True):
+            cont1, cont2 = st.columns([3, 1])
+
+            with cont1:
+                st.markdown("**Model**")
+
+            with cont2:
+                with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
+                    st.download_button(
+                        label="Download model",
+                        data=model_file,
+                        file_name="trained_model.sav",
+                        mime="application/octet-stream",
+                        use_container_width=True,
+                        help="SAV file can be loaded into the application"
+                    )
+
+            if "RandomForest" in str(model["clf"]):
+                st.markdown("**Classifier:** Random Forest")
+                #st.markdown(model)
+                params = model["clf"].get_params()
+                # st.markdown(params)
+                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                st.markdown(f"**Criterion:** {params['criterion']}")
+                
+                # fig, axes = plt.subplots(nrows = 1,ncols = 1,figsize = (4,4), dpi=800)
+                # tree.plot_tree(model["clf"].estimators_[0],
+                #             feature_names = model["train"].columns, 
+                #             class_names=model["train_labels"],
+                #             filled = True)
+                # fig.savefig('rf_individualtree.png')
+
 def runUI():
     if not st.session_state["queue"]:
         st.session_state["queue"] = True
@@ -441,25 +491,28 @@ def runUI():
                 st.dataframe(test_stats, hide_index=True, use_container_width=True)
 
         if test_set:
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
         else:
-            tab1, tab3, tab4, tab5, tab6 = st.tabs(["Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
+            tab1, tab2, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
         
         with tab1:
+            model_information()
+
+        with tab2:
             performance_metrics()
 
         if test_set:
-            with tab2:
+            with tab3:
                 show_predictions()
         
-        with tab3:
+        with tab4:
             feature_importance()
 
-        with tab4:
+        with tab5:
             feature_distribution()
 
-        with tab5:
+        with tab6:
             feature_correlation()
         
-        with tab6:
+        with tab7:
             dimensionality_reduction()

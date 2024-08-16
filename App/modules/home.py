@@ -358,8 +358,8 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
         subprocess.run(command, cwd="..")
 
-        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-        model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
+        # model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        # model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
 
         # ['python', 'BioAutoML-multiclass.py', 
         # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
@@ -384,14 +384,13 @@ def runUI():
         queue_thread.start()
         st.session_state["queue"] = True
     
-    file_ = open("imgs/logo.png", "rb")
-    contents = file_.read()
-    data_url = base64.b64encode(contents).decode("utf-8")
-    file_.close()
+    with open("imgs/logo.png", "rb") as file_:
+        contents = file_.read()
+        data_url = base64.b64encode(contents).decode("utf-8")
 
     st.markdown(f"""
         <div style='text-align: center;'>
-            <img src="data:image/gif;base64,{data_url}" alt="logo" width="400">
+            <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
             <h5 style="color:gray">Empowering researchers with machine learning</h5>
         </div>
     """, unsafe_allow_html=True)
@@ -421,15 +420,18 @@ def runUI():
     with col1:
         training = st.selectbox(":brain: Training", ["Training set", "Load model"],
                                     help="Training set evaluated with 10-fold cross-validation")
-        tuning = st.checkbox("Hyperparameter tuning", help="tooptip to add")
+        if training == "Training set":
+            tuning = st.checkbox("Hyperparameter tuning", help="tooptip to add")
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
                                     help="tooptip to add")
-        imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
+        if training == "Training set":
+            imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
     with col3:
         data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
                                     help="Only sequences without ambiguous nucleotides or amino acids are supported")
-        fselection = st.checkbox("Feature Selection", help="tooptip to add")
+        if training == "Training set":
+            fselection = st.checkbox("Feature Selection", help="tooptip to add")
 
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
@@ -507,6 +509,10 @@ def runUI():
             job_path = os.path.join(predict_path, job_id)
 
             os.makedirs(job_path)
+
+            if training == "Load model":
+                tuning, imbalance, fselection = False, False, False
+
             if testing == "No test set":
                 job_queue.put((train_files, None, job_path, data_type, training, testing, tuning, imbalance, fselection))
             else:
