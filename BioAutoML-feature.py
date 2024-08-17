@@ -778,7 +778,6 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
-	parser.add_argument('-tuning', '--tuning', default=0, help='Hyperparameter tuning - 0: False, 1: True - Default: False')
 	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
 	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
 	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 50')
@@ -847,14 +846,14 @@ if __name__ == '__main__':
 		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test,
 						 '-test_label', ftest_labels, '-test_nameseq',
-						 fnameseqtest, '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+						 fnameseqtest, '-nf', 'True', '-fselection', fs,  
        					 '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
 						 '-classifier', str(classifier), '-output', foutput])
 	else:
 		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
 						 ftest_labels, '-test_nameseq', fnameseqtest,
-						 '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+						 '-nf', 'True', '-fselection', fs,  
        					 '-imbalance', imbalance_data, '-classifier', str(classifier), 
 						 '-n_cpu', str(n_cpu), '-output', foutput])
 

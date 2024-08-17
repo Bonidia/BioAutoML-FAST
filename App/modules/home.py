@@ -108,7 +108,6 @@ def test_extraction(job_path, test_data, model, data_type):
             datasets.append(feat_path + "/kGap_di.csv")
             datasets.append(feat_path + "/AAC.csv")
             datasets.append(feat_path + "/DPC.csv")
-            datasets.append(feat_path + "/TPC.csv")
             datasets.append(feat_path + "/iFeature-features.csv")
             datasets.append(feat_path + "/Global.csv")
             datasets.append(feat_path + "/Peptide.csv")
@@ -138,9 +137,6 @@ def test_extraction(job_path, test_data, model, data_type):
                         ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/DPC.csv", "-l", label,
                                 "-t", "DPC"],
-                        ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
-                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/TPC.csv", "-l", label,
-                                "-t", "TPC"],
                         ["python", "other-methods/iFeature-modified/iFeature.py", "--file",
                                 os.path.join(path, f"pre_{label}.fasta"), "--type", "All", "--label", label, 
                                 "--out", feat_path + "/iFeature-features.csv"],
@@ -251,7 +247,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def submit_job(train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection):
+def submit_job(train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection):
 
     if training == "Training set":
         train_path = os.path.join(job_path, "train")
@@ -267,8 +263,6 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
         command = [
             "python",
             "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
-            "--tuning",
-            "1" if tuning else "0",
             "--imbalance",
             "1" if imbalance else "0",
             "--fselection",
@@ -370,8 +364,8 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 def queue_listener():
     while True:
         if not job_queue.empty():
-            train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection = job_queue.get()
-            submit_job(train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection)
+            train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection = job_queue.get()
+            submit_job(train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection)
             
 def runUI():
     global job_queue
@@ -420,18 +414,24 @@ def runUI():
     with col1:
         training = st.selectbox(":brain: Training", ["Training set", "Load model"],
                                     help="Training set evaluated with 10-fold cross-validation")
-        if training == "Training set":
-            tuning = st.checkbox("Hyperparameter tuning", help="tooptip to add")
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
                                     help="tooptip to add")
-        if training == "Training set":
-            imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
     with col3:
         data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
                                     help="Only sequences without ambiguous nucleotides or amino acids are supported")
-        if training == "Training set":
+    
+    if training == "Training set":
+        _, checkcol1, checkcol2, _ = st.columns([2, 3, 3, 2])
+
+        with checkcol1:
             fselection = st.checkbox("Feature Selection", help="tooptip to add")
+        with checkcol2:
+            imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
+
+    if data_type == "Structured data":
+        classifier = st.selectbox(":wrench: Classifier for structured data", ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
+                                    help="tooptip to add")
 
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
@@ -511,12 +511,15 @@ def runUI():
             os.makedirs(job_path)
 
             if training == "Load model":
-                tuning, imbalance, fselection = False, False, False
+                imbalance, fselection = False, False
 
             if testing == "No test set":
-                job_queue.put((train_files, None, job_path, data_type, training, testing, tuning, imbalance, fselection))
-            else:
-                job_queue.put((train_files, test_files, job_path, data_type, training, testing, tuning, imbalance, fselection))
+                test_files = None
+
+            if data_type != "Structured data":
+                classifier = False
+
+            job_queue.put((train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection))
 
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")

@@ -168,7 +168,6 @@ def objective(trial, train, train_labels):
 			 'kGap_di': trial.suggest_categorical('kGap_di', [0, 1]),
 			 'AAC': trial.suggest_categorical('AAC', [0, 1]),
 			 'DPC': trial.suggest_categorical('DPC', [0, 1]),
-			 'TPC': trial.suggest_categorical('TPC', [0, 1]),
 			 'CKSAAP': trial.suggest_categorical('CKSAAP', [0, 1]),
 			 'DDE': trial.suggest_categorical('DDE', [0, 1]),
 			 'GAAC': trial.suggest_categorical('GAAC', [0, 1]),
@@ -195,22 +194,21 @@ def objective(trial, train, train_labels):
 				   'ComplexNetworks': list(range(20, 98)), 'kGap_di': list(range(98, 498)),
 				   'AAC': list(range(498, 518)),
 				   'DPC': list(range(518, 918)),
-				   'TPC': list(range(918, 8918)),
-				   'CKSAAP': list(range(8918, 11318)), 
-			 	   'DDE': list(range(11318, 11718)),
-			 	   'GAAC': list(range(11718, 11723)),
-			 	   'CKSAAGP': list(range(11723, 11873)),
-			 	   'GDPC': list(range(11873, 11898)),
-			 	   'GTPC': list(range(11898, 12023)),
-			 	   'CTDC': list(range(12023, 12062)),
-			 	   'CTDT': list(range(12062, 12101)),
-			 	   'CTDD': list(range(12101, 12296)),
-			 	   'CTriad': list(range(12296, 12639)),
-			 	   'KSCTriad': list(range(12639, 12982)), 
-				   'Global': list(range(12982, 12992)),
-				   'Peptide': list(range(12992, 13008)),
-				   'Fourier_Integer': list(range(13008, 13027)),
-				   'Fourier_EIIP': list(range(13027, 13046)),}
+				   'CKSAAP': list(range(918, 3318)), 
+			 	   'DDE': list(range(3318, 3718)),
+			 	   'GAAC': list(range(3718, 3723)),
+			 	   'CKSAAGP': list(range(3723, 3873)),
+			 	   'GDPC': list(range(3873, 3898)),
+			 	   'GTPC': list(range(3898, 4023)),
+			 	   'CTDC': list(range(4023, 4062)),
+			 	   'CTDT': list(range(4062, 4101)),
+			 	   'CTDD': list(range(4101, 4296)),
+			 	   'CTriad': list(range(4296, 4639)),
+			 	   'KSCTriad': list(range(4639, 4982)), 
+				   'Global': list(range(4982, 4992)),
+				   'Peptide': list(range(4992, 5008)),
+				   'Fourier_Integer': list(range(5008, 5027)),
+				   'Fourier_EIIP': list(range(5027, 5046)),}
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(train.columns)))} 
  
@@ -271,7 +269,7 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			 'Tsallis_30': [0, 1], 'Tsallis_40': [0, 1],
 			 'ComplexNetworks': [0, 1],
 			 'kGap_di': [0, 1],
-			 'AAC': [0, 1], 'DPC': [0, 1], 'TPC': [0, 1],
+			 'AAC': [0, 1], 'DPC': [0, 1],
 			 'CKSAAP': [0, 1],
 			 'DDE': [0, 1],
 			 'GAAC': [0, 1],
@@ -306,22 +304,21 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 				   'ComplexNetworks': list(range(20, 98)), 'kGap_di': list(range(98, 498)),
 				   'AAC': list(range(498, 518)),
 				   'DPC': list(range(518, 918)),
-				   'TPC': list(range(918, 8918)),
-				   'CKSAAP': list(range(8918, 11318)), 
-			 	   'DDE': list(range(11318, 11718)),
-			 	   'GAAC': list(range(11718, 11723)),
-			 	   'CKSAAGP': list(range(11723, 11873)),
-			 	   'GDPC': list(range(11873, 11898)),
-			 	   'GTPC': list(range(11898, 12023)),
-			 	   'CTDC': list(range(12023, 12062)),
-			 	   'CTDT': list(range(12062, 12101)),
-			 	   'CTDD': list(range(12101, 12296)),
-			 	   'CTriad': list(range(12296, 12639)),
-			 	   'KSCTriad': list(range(12639, 12982)), 
-				   'Global': list(range(12982, 12992)),
-				   'Peptide': list(range(12992, 13008)),
-				   'Fourier_Integer': list(range(13008, 13027)),
-				   'Fourier_EIIP': list(range(13027, 13046)),}
+				   'CKSAAP': list(range(918, 3318)), 
+			 	   'DDE': list(range(3318, 3718)),
+			 	   'GAAC': list(range(3718, 3723)),
+			 	   'CKSAAGP': list(range(3723, 3873)),
+			 	   'GDPC': list(range(3873, 3898)),
+			 	   'GTPC': list(range(3898, 4023)),
+			 	   'CTDC': list(range(4023, 4062)),
+			 	   'CTDT': list(range(4062, 4101)),
+			 	   'CTDD': list(range(4101, 4296)),
+			 	   'CTriad': list(range(4296, 4639)),
+			 	   'KSCTriad': list(range(4639, 4982)), 
+				   'Global': list(range(4982, 4992)),
+				   'Peptide': list(range(4992, 5008)),
+				   'Fourier_Integer': list(range(5008, 5027)),
+				   'Fourier_EIIP': list(range(5027, 5046)),}
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
@@ -418,7 +415,6 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			datasets.append(path + '/kGap_di.csv')
 			datasets.append(path + '/AAC.csv')
 			datasets.append(path + '/DPC.csv')
-			datasets.append(path + '/TPC.csv')
 			datasets.append(path + '/iFeature-features.csv')
 			datasets.append(path + '/Global.csv')
 			datasets.append(path + '/Peptide.csv')
@@ -455,10 +451,6 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 						['python', 'other-methods/ExtractionTechniques-Protein.py', '-i',
 								preprocessed_fasta, '-o', path + '/DPC.csv', '-l', labels[i][j],
 								'-t', 'DPC'],
-
-						['python', 'other-methods/ExtractionTechniques-Protein.py', '-i',
-								preprocessed_fasta, '-o', path + '/TPC.csv', '-l', labels[i][j],
-								'-t', 'TPC'],
       
 						['python', 'other-methods/iFeature-modified/iFeature.py', '--file',
 								preprocessed_fasta, '--type', 'All', '--label', labels[i][j], 
@@ -611,7 +603,6 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
-	parser.add_argument('-tuning', '--tuning', default=0, help='Hyperparameter tuning - 0: False, 1: True - Default: False')
 	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
 	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
 	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 50')
@@ -625,9 +616,8 @@ if __name__ == '__main__':
 	fasta_label_test = args.fasta_label_test
 	algo = int(args.algorithm)
 	estimations = int(args.estimations)
-	tuning = int(args.tuning)
-	imbalance_data = int(args.imbalance)
-	fs = int(args.fselection)
+	imbalance_data = args.imbalance
+	fs = args.fselection
 	n_cpu = int(args.n_cpu)
 	foutput = str(args.output)
 
@@ -680,14 +670,14 @@ if __name__ == '__main__':
 		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test,
 						 '-test_label', ftest_labels, '-test_nameseq',
-						 fnameseqtest, '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+						 fnameseqtest, '-nf', 'True', '-fselection', fs,  
        					 '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
        					 '-classifier', str(classifier), '-output', foutput])
 	else:
 		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
 						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
 						 ftest_labels, '-test_nameseq', fnameseqtest,
-						 '-nf', 'True', '-tuning', tuning, '-fselection', fs,  
+						 '-nf', 'True', '-fselection', fs,  
        					 '-imbalance', imbalance_data, '-classifier', str(classifier),
 						  '-n_cpu', str(n_cpu), '-output', foutput])
 

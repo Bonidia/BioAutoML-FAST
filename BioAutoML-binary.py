@@ -929,7 +929,6 @@ if __name__ == '__main__':
     parser.add_argument('-n_cpu', '--n_cpu', default=1, help='number of cpus - default = 1')
     parser.add_argument('-classifier', '--classifier', default=0,
                         help='Classifier - 0: CatBoost, 1: Random Forest, 2: LightGBM, 3: XGBoost')
-    parser.add_argument('-tuning', '--tuning', default=0, help='Hyperparameter tuning - 0: False, 1: True - Default: False')
     parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
     parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -943,7 +942,7 @@ if __name__ == '__main__':
     norm = args.normalization
     n_cpu = int(args.n_cpu)
     classifier = int(args.classifier)
-    tuning = int(args.tuning)
+    tuning = 0
     imbalance_data = int(args.imbalance)
     fs = int(args.fselection)
     foutput = str(args.output)

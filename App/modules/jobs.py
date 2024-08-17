@@ -386,10 +386,14 @@ def model_information():
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        
         if "RandomForest" in str(model["clf"]):
             st.image("imgs/models/rf.png", use_column_width=True)
-
+        elif "XGB" in str(model["clf"]):
+            st.image("imgs/models/xgboost.png", use_column_width=True)
+        elif "LGBM" in str(model["clf"]):
+            st.image("imgs/models/lightgbm.png", use_column_width=True)
+        elif "CatBoost" in str(model["clf"]):
+            st.image("imgs/models/catboost.png", use_column_width=True)
 
     with col2:
         with st.container(border=True):
@@ -416,6 +420,18 @@ def model_information():
                 # st.markdown(params)
                 st.markdown(f"**Number of estimators:** {params['n_estimators']}")
                 st.markdown(f"**Criterion:** {params['criterion']}")
+            elif "XGB" in str(model["clf"]):
+                st.markdown("**Classifier:** XGBoost")
+                #st.markdown(model)
+                params = model["clf"].get_params()
+            elif "LGBM" in str(model["clf"]):
+                st.markdown("**Classifier:** LightGBM")
+                #st.markdown(model)
+                params = model["clf"].get_params()
+            elif "CatBoost" in str(model["clf"]):
+                st.markdown("**Classifier:** CatBoost")
+                #st.markdown(model)
+                params = model["clf"].get_params()
                 
                 # fig, axes = plt.subplots(nrows = 1,ncols = 1,figsize = (4,4), dpi=800)
                 # tree.plot_tree(model["clf"].estimators_[0],
