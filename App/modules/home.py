@@ -253,66 +253,106 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
         train_path = os.path.join(job_path, "train")
         os.makedirs(train_path)
 
-        for file in train_files:
-            save_path = os.path.join(train_path, file.name)
+        if data_type == "Structured data":
+            save_path = os.path.join(train_path, "train.csv")
             with open(save_path, mode="wb") as f:
-                f.write(file.getvalue())
-        
-        train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
-    
-        command = [
-            "python",
-            "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
-            "--imbalance",
-            "1" if imbalance else "0",
-            "--fselection",
-            "1" if fselection else "0",
-            "--fasta_train",
-        ]
+                f.write(train_files.getvalue())
 
-        command.extend(train_fasta.values())
-        command.append("--fasta_label_train")
-        command.extend(train_fasta.keys())
+            df_train = pd.read_csv(save_path)
+            df_train = df_train.reset_index()
+            df_labels = df_train.pop("label")
+            df_index = df_train.pop("index")
 
-        if test_files:
-            test_path = os.path.join(job_path, "test")
-            os.makedirs(test_path)
+            feat_path = os.path.join(job_path, "feat_extraction")
+            os.makedirs(feat_path)
+            
+            df_train.to_csv(os.path.join(feat_path, "train.csv"), index=False)
+            df_labels.to_csv(os.path.join(feat_path, "train_labels.csv"), index=False)
+            df_index.to_csv(os.path.join(feat_path, "fnameseqtrain.csv"), index=False)
+            
+            if classifier == "CatBoost":
+                classifier_option = 0
+            elif classifier == "Random Forest":
+                classifier_option = 1
+            elif classifier == "LightGBM":
+                classifier_option = 2
+            elif classifier == "XGBoost":
+                classifier_option = 3
 
-            if testing == "Test set":
-                for file in test_files:
-                    save_path = os.path.join(test_path, file.name)
-                    with open(save_path, mode="wb") as f:
-                        f.write(file.getvalue())
+            command = [
+                "python",
+                "BioAutoML-multiclass.py" if df_labels.nunique() > 2 else "BioAutoML-binary.py",
+                "--train", os.path.join(feat_path, "train.csv"),
+                "--train_label", os.path.join(feat_path, "train_labels.csv"),
+                "--classifier", str(classifier_option),
+                "-nf", "True",
+            ]
 
-                test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+            command.extend(["--n_cpu", "-1"])
+            command.extend(["--output", job_path])
 
-                command.append("--fasta_test")
-                command.extend(test_fasta.values())
-                command.append("--fasta_label_test")
-                command.extend(test_fasta.keys())
-            else:
-                save_path = os.path.join(test_path, "predicted.fasta")
+            subprocess.run(command, cwd="..")
+        else:
+            for file in train_files:
+                save_path = os.path.join(train_path, file.name)
                 with open(save_path, mode="wb") as f:
-                    f.write(test_files.getvalue())
-                
-                command.append("--fasta_test")
-                command.append(save_path)
-                command.append("--fasta_label_test")
-                command.append("Predicted")
+                    f.write(file.getvalue())
+            
+            train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
+        
+            command = [
+                "python",
+                "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
+                "--imbalance",
+                "1" if imbalance else "0",
+                "--fselection",
+                "1" if fselection else "0",
+                "--fasta_train",
+            ]
 
-        command.extend(["--n_cpu", "-1"])
-        command.extend(["--output", job_path])
+            command.extend(train_fasta.values())
+            command.append("--fasta_label_train")
+            command.extend(train_fasta.keys())
 
-        subprocess.run(command, cwd="..")
+            if test_files:
+                test_path = os.path.join(job_path, "test")
+                os.makedirs(test_path)
 
-        utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
+                if testing == "Test set":
+                    for file in test_files:
+                        save_path = os.path.join(test_path, file.name)
+                        with open(save_path, mode="wb") as f:
+                            f.write(file.getvalue())
 
-        if test_files:
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
-  
-        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-        model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
-        joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+                    test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                    command.append("--fasta_test")
+                    command.extend(test_fasta.values())
+                    command.append("--fasta_label_test")
+                    command.extend(test_fasta.keys())
+                else:
+                    save_path = os.path.join(test_path, "predicted.fasta")
+                    with open(save_path, mode="wb") as f:
+                        f.write(test_files.getvalue())
+                    
+                    command.append("--fasta_test")
+                    command.append(save_path)
+                    command.append("--fasta_label_test")
+                    command.append("Predicted")
+
+            command.extend(["--n_cpu", "-1"])
+            command.extend(["--output", job_path])
+
+            subprocess.run(command, cwd="..")
+
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
+
+            if test_files:
+                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+    
+            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+            model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
+            joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
 
     elif training == "Load model":
         save_path = os.path.join(job_path, "trained_model.sav")
@@ -354,12 +394,6 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
         # model = joblib.load(os.path.join(job_path, "trained_model.sav"))
         # model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
-
-        # ['python', 'BioAutoML-multiclass.py', 
-        # '-train', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/best_descriptors/best_train.csv', 
-        # '-train_label', '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk/feat_extraction/flabeltrain.csv', 
-        # '-test', '', '-test_label', '', '-test_nameseq', '', '-nf', 'True', '-n_cpu', '-1', '-classifier', '1', '-output', 
-        # '/home/brenoslivio/Documents/🥼 Research/git/BioAutoML-Fast/App/jobs/nXCE6KZC690Gl2kk']
 
 def queue_listener():
     while True:
@@ -495,9 +529,12 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        if training == "Training set" and len(train_files) < 2:
+        if training == "Training set" and data_type != "Structured data" and len(train_files) < 2:
             with queue_info:
                 st.error("Training set requires at least 2 classes.")
+        if training == "Training set" and data_type != "Structured data" and len(train_files) == 1:
+            with queue_info:
+                st.error("Training set requires 1 file with the column for labels.")
         elif testing != "No test set" and not test_files:
             with queue_info:
                 st.error("Please upload the required test or prediction file(s).")
