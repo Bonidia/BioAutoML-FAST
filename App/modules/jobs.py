@@ -37,10 +37,15 @@ def dimensionality_reduction():
                 labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
                 nameseqs = model["nameseq_train"]["nameseq"].tolist()
         else:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
+            if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
+                features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
+                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv"))["label"].tolist()
+            else:
+                features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
+            
             nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
-        
+                
         scaler = StandardScaler()
         scaled_data = pd.DataFrame(scaler.fit_transform(features))
 
@@ -124,7 +129,10 @@ def feature_correlation():
                 model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
                 features = model["train"]
         else:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+            if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
+                features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
+            else:
+                features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
     with col2:
         correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
 
@@ -190,8 +198,12 @@ def feature_distribution():
             labels = pd.DataFrame(model["train_labels"], columns=["label"])
             nameseqs = model["nameseq_train"]
     else:
-        features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-        labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
+        if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv"))
+        else:
+            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
         nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))
     
     col1, col2 = st.columns(2)
@@ -246,6 +258,7 @@ def feature_distribution():
 def performance_metrics():
     test_path = os.path.join(st.session_state["job_path"], "test")
     if os.path.exists(os.path.join(test_path, "predict.fasta")) or \
+        os.path.exists(os.path.join(test_path, "predicted.csv")) or \
         not os.path.exists(test_path):
         evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
                         help="Training set evaluated with 10-fold cross-validation")

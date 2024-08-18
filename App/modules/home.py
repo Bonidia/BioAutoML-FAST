@@ -431,31 +431,81 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
         ]
 
         if test_files:
-            test_path = os.path.join(job_path, "test")
-            os.makedirs(test_path)
+            if data_type == "Structured data":
+                test_path = os.path.join(job_path, "test")
+                os.makedirs(test_path)
 
-            for file in test_files:
-                save_path = os.path.join(test_path, file.name)
-                with open(save_path, mode="wb") as f:
-                    f.write(file.getvalue())
+                feat_path = os.path.join(job_path, "feat_extraction")
+                os.makedirs(feat_path)
 
-            test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+                if testing == "Test set":
+                    save_path = os.path.join(test_path, "test.csv")
+                    with open(save_path, mode="wb") as f:
+                        f.write(test_files.getvalue())
+                    
+                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                    df_test = df_test.rename({"index": "nameseq"})
+                    df_labels = df_test.select(["label"])
+                    df_index = df_test.select(["nameseq"])
+                    df_test = df_test.drop(["nameseq", "label"])
 
-            test_extraction(job_path, test_fasta, model, data_type)
+                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+                    
+                    command.append("--test")
+                    command.append(os.path.join(feat_path, "test.csv"))
+                    command.append("--test_label")
+                    command.append(os.path.join(feat_path, "test_labels.csv"))
+                    command.append("--test_nameseq")
+                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                else:
+                    save_path = os.path.join(test_path, "predicted.csv")
+                    with open(save_path, mode="wb") as f:
+                        f.write(test_files.getvalue())
+                    
+                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                    df_test = df_test.rename({"index": "nameseq"})
+                    df_test = df_test.with_columns(pl.lit("Predicted").alias("label"))
+                    df_index = df_test.select(["nameseq"])
+                    df_labels = df_test.select(["label"])
+                    df_test = df_test.drop(["nameseq", "label"])
 
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
 
-            command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-            command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-            command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                    command.append("--test")
+                    command.append(os.path.join(feat_path, "test.csv"))
+                    command.append("--test_label")
+                    command.append(os.path.join(feat_path, "test_labels.csv"))
+                    command.append("--test_nameseq")
+                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+
+                utils.summary_stats(os.path.join(job_path, "test"), job_path, True)
+            else:
+                test_path = os.path.join(job_path, "test")
+                os.makedirs(test_path)
+
+                for file in test_files:
+                    save_path = os.path.join(test_path, file.name)
+                    with open(save_path, mode="wb") as f:
+                        f.write(file.getvalue())
+
+                test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                test_extraction(job_path, test_fasta, model, data_type)
+
+                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+
+                command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+                command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+                command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
 
         command.extend(["--n_cpu", "-1"])
         command.extend(["--output", job_path])
 
         subprocess.run(command, cwd="..")
-
-        # model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-        # model["train_stats"].to_csv(os.path.join(job_path, "train_stats.csv"), index=False)
 
 def queue_listener():
     while True:
@@ -525,7 +575,7 @@ def runUI():
         with checkcol2:
             imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
 
-    if data_type == "Structured data":
+    if training == "Training set" and data_type == "Structured data":
         classifier = st.selectbox(":wrench: Classifier for structured data", ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
                                     help="tooptip to add")
 
@@ -613,13 +663,10 @@ def runUI():
             os.makedirs(job_path)
 
             if training == "Load model":
-                imbalance, fselection = False, False
+                classifier, imbalance, fselection = False, False, False
 
             if testing == "No test set":
                 test_files = None
-
-            if data_type != "Structured data":
-                classifier = False
 
             job_queue.put((train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection))
 
