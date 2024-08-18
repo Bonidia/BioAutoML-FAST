@@ -822,7 +822,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         else:
             print("Explanation plots and report generated successfully!")
 
-        if os.path.exists(ftest_labels) is True:
+        if os.path.exists(ftest_labels) is True and len(np.unique(test_labels)) > 1:
             print('Generating Metrics - Test set...')
             
             try:

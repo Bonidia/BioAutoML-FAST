@@ -469,7 +469,7 @@ def runUI():
                 test_set = True if os.path.exists(test_fold) else False
 
                 if test_set:
-                    predictions = os.path.join(job_path, "test_confusion_matrix.csv")
+                    predictions = os.path.join(job_path, "test_predictions.csv")
                 else:
                     predictions = os.path.join(job_path, "trained_model.sav")
                 

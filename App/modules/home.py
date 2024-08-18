@@ -258,17 +258,18 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
             with open(save_path, mode="wb") as f:
                 f.write(train_files.getvalue())
 
-            df_train = pd.read_csv(save_path)
-            df_train = df_train.reset_index()
-            df_labels = df_train.pop("label")
-            df_index = df_train.pop("index")
+            df_train = pl.from_pandas(pd.read_csv(save_path).reset_index())
+            df_train = df_train.rename({"index": "nameseq"})
+            df_labels = df_train.select(["label"])
+            df_index = df_train.select(["nameseq"])
+            df_train = df_train.drop(["nameseq", "label"])
 
             feat_path = os.path.join(job_path, "feat_extraction")
             os.makedirs(feat_path)
             
-            df_train.to_csv(os.path.join(feat_path, "train.csv"), index=False)
-            df_labels.to_csv(os.path.join(feat_path, "train_labels.csv"), index=False)
-            df_index.to_csv(os.path.join(feat_path, "fnameseqtrain.csv"), index=False)
+            df_train.write_csv(os.path.join(feat_path, "train.csv"))
+            df_labels.write_csv(os.path.join(feat_path, "train_labels.csv"))
+            df_index.write_csv(os.path.join(feat_path, "fnameseqtrain.csv"))
             
             if classifier == "CatBoost":
                 classifier_option = 0
@@ -281,17 +282,78 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
             command = [
                 "python",
-                "BioAutoML-multiclass.py" if df_labels.nunique() > 2 else "BioAutoML-binary.py",
+                "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
+                "--imbalance",
+                "1" if imbalance else "0",
+                "--fselection",
+                "1" if fselection else "0",
                 "--train", os.path.join(feat_path, "train.csv"),
                 "--train_label", os.path.join(feat_path, "train_labels.csv"),
                 "--classifier", str(classifier_option),
                 "-nf", "True",
             ]
 
+            if test_files:
+                test_path = os.path.join(job_path, "test")
+                os.makedirs(test_path)
+
+                if testing == "Test set":
+                    save_path = os.path.join(test_path, "test.csv")
+                    with open(save_path, mode="wb") as f:
+                        f.write(test_files.getvalue())
+                    
+                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                    df_test = df_test.rename({"index": "nameseq"})
+                    df_labels = df_test.select(["label"])
+                    df_index = df_test.select(["nameseq"])
+                    df_test = df_test.drop(["nameseq", "label"])
+
+                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+                    
+                    command.append("--test")
+                    command.append(os.path.join(feat_path, "test.csv"))
+                    command.append("--test_label")
+                    command.append(os.path.join(feat_path, "test_labels.csv"))
+                    command.append("--test_nameseq")
+                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                else:
+                    save_path = os.path.join(test_path, "predicted.csv")
+                    with open(save_path, mode="wb") as f:
+                        f.write(test_files.getvalue())
+                    
+                    df_test = pd.read_csv(save_path).reset_index()
+                    df_test["label"] = "Predicted"
+                    df_test = pl.from_pandas(df_test)
+                    df_index = df_test.select(["index"])
+                    df_labels = df_test.select(["label"])
+                    df_test = df_test.drop(["index", "label"])
+
+                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                    command.append("--test")
+                    command.append(os.path.join(feat_path, "test.csv"))
+                    command.append("--test_label")
+                    command.append(os.path.join(feat_path, "test_labels.csv"))
+                    command.append("--test_nameseq")
+                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
 
             subprocess.run(command, cwd="..")
+
+            utils.summary_stats(os.path.join(job_path, "train"), job_path, True)
+
+            if test_files:
+                utils.summary_stats(os.path.join(job_path, "test"), job_path, True)
+    
+            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+            model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
+            joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
         else:
             for file in train_files:
                 save_path = os.path.join(train_path, file.name)
@@ -345,10 +407,10 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
             subprocess.run(command, cwd="..")
 
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path)
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path, False)
 
             if test_files:
-                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
     
             model = joblib.load(os.path.join(job_path, "trained_model.sav"))
             model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
@@ -381,7 +443,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
             test_extraction(job_path, test_fasta, model, data_type)
 
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path)
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
 
             command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
             command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
@@ -471,7 +533,7 @@ def runUI():
         if training == "Training set":
             if testing == "No test set":
                 if data_type == "Structured data":
-                    train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                    train_files = st.file_uploader("Training set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
                 else:
                     train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
             elif testing == "Test set":
@@ -479,12 +541,12 @@ def runUI():
 
                 with set1:
                     if data_type == "Structured data":
-                        train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                        train_files = st.file_uploader("Training set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
                     else:
                         train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
                 with set2:
                     if data_type == "Structured data":
-                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                        test_files = st.file_uploader("Test set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
                     else:
                         test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
             elif testing == "Prediction set":
@@ -492,12 +554,12 @@ def runUI():
 
                 with set1:
                     if data_type == "Structured data":
-                        train_files = st.file_uploader("Training set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                        train_files = st.file_uploader("Training set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
                     else:
                         train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
                 with set2:
                     if data_type == "Structured data":
-                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
+                        test_files = st.file_uploader("CSV file for prediction", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
                     else:
                         test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
         else:
@@ -510,7 +572,7 @@ def runUI():
                     train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
                 with set2:
                     if data_type == "Structured data":
-                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
+                        test_files = st.file_uploader("Test set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
                     else:
                         test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, help="Separated by class (e.g. sRNA.fasta, tRNA.fasta)")
             elif testing == "Prediction set":
@@ -520,7 +582,7 @@ def runUI():
                     train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
                 with set2:
                     if data_type == "Structured data":
-                        test_files = st.file_uploader("Test set file", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
+                        test_files = st.file_uploader("CSV file for prediction", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
                     else:
                         test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
 
@@ -532,15 +594,18 @@ def runUI():
         if training == "Training set" and data_type != "Structured data" and len(train_files) < 2:
             with queue_info:
                 st.error("Training set requires at least 2 classes.")
-        if training == "Training set" and data_type != "Structured data" and len(train_files) == 1:
+        if training == "Training set" and data_type == "Structured data" and train_files == None:
             with queue_info:
                 st.error("Training set requires 1 file with the column for labels.")
         elif testing != "No test set" and not test_files:
             with queue_info:
                 st.error("Please upload the required test or prediction file(s).")
-        elif testing == "Test set" and len(test_files) < 2:
+        elif testing == "Test set" and data_type != "Structured data" and len(test_files) < 2:
             with queue_info:
                 st.error("Test set requires at least 2 classes.")
+        elif testing == "Test set" and data_type == "Structured data" and test_files == None:
+            with queue_info:
+                st.error("Test set requires 1 file with the column for labels.")
         else:
             job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
             job_path = os.path.join(predict_path, job_id)

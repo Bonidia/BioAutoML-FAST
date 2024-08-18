@@ -865,7 +865,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
         pred_output = os.path.join(output, "test_predictions.csv")
         print('Saving prediction in ' + pred_output + '...')
         save_prediction(probs, test_nameseq, pred_output)
-        if os.path.exists(ftest_labels) is True:
+        if os.path.exists(ftest_labels) is True and len(np.unique(test_labels)) > 1:
             print('Generating Metrics - Test set...')
             labels = np.unique(test_labels)
             accu = accuracy_score(test_labels, preds)
