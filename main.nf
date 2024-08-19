@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+// nextflow -log /dev/null run main.nf -with-conda  
+
 process setupEnvironmentAndRunApp {
     conda params.envFile
 
