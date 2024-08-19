@@ -1,4 +1,4 @@
-name: bioautoml
+name: bioautoml-fast
 channels:
   - defaults
 dependencies:
@@ -101,7 +101,6 @@ dependencies:
       - pynndescent==0.5.12
       - pyparsing==3.1.2
       - python-dateutil==2.9.0.post0
-      - python-graphviz==0.20.3
       - pytz==2024.1
       - pyyaml==6.0.1
       - pyzmq==25.1.2
@@ -140,4 +139,3 @@ dependencies:
       - watchdog==4.0.0
       - wcwidth==0.2.13
       - xgboost==2.0.3
-prefix: /home/brenoslivio/miniconda3/envs/bioautoml
