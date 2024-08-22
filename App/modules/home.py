@@ -662,7 +662,7 @@ def runUI():
 
             os.makedirs(job_path)
 
-            if training == "Load model":
+            if training == "Load model" or data_type != "Structured data":
                 classifier, imbalance, fselection = False, False, False
 
             if testing == "No test set":
