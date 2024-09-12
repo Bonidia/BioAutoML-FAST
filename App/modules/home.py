@@ -484,23 +484,41 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
                 utils.summary_stats(os.path.join(job_path, "test"), job_path, True)
             else:
+                # test_path = os.path.join(job_path, "test")
+                # os.makedirs(test_path)
+
                 test_path = os.path.join(job_path, "test")
                 os.makedirs(test_path)
 
-                for file in test_files:
-                    save_path = os.path.join(test_path, file.name)
+                if testing == "Test set":
+                    for file in test_files:
+                        save_path = os.path.join(test_path, file.name)
+                        with open(save_path, mode="wb") as f:
+                            f.write(file.getvalue())
+
+                    test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                    test_extraction(job_path, test_fasta, model, data_type)
+
+                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+
+                    command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+                    command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+                    command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                else:
+                    save_path = os.path.join(test_path, "predicted.fasta")
                     with open(save_path, mode="wb") as f:
-                        f.write(file.getvalue())
+                        f.write(test_files.getvalue())
+                    
+                    test_fasta = {"Predicted" : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-                test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+                    test_extraction(job_path, test_fasta, model, data_type)
 
-                test_extraction(job_path, test_fasta, model, data_type)
+                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
 
-                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
-
-                command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                    command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+                    command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+                    command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
 
         command.extend(["--n_cpu", "-1"])
         command.extend(["--output", job_path])

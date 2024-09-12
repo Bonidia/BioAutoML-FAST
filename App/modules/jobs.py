@@ -257,7 +257,7 @@ def feature_distribution():
 
 def performance_metrics():
     test_path = os.path.join(st.session_state["job_path"], "test")
-    if os.path.exists(os.path.join(test_path, "predict.fasta")) or \
+    if os.path.exists(os.path.join(test_path, "predicted.fasta")) or \
         os.path.exists(os.path.join(test_path, "predicted.csv")) or \
         not os.path.exists(test_path):
         evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
