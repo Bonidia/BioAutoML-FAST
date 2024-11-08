@@ -370,8 +370,8 @@ def feature_importance():
     else:
         df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["feature_importance"]
 
-    features = df["Feature"][::-1]
-    score_importances = df["Importance"][::-1]
+    features = df["Feature"]#[::-1]
+    score_importances = df["Importance"]#[::-1]
 
     fig = go.Figure(data=go.Bar(
         x=features,
@@ -428,23 +428,35 @@ def model_information():
 
             if "RandomForest" in str(model["clf"]):
                 st.markdown("**Classifier:** Random Forest")
-                #st.markdown(model)
                 params = model["clf"].get_params()
-                # st.markdown(params)
                 st.markdown(f"**Number of estimators:** {params['n_estimators']}")
                 st.markdown(f"**Criterion:** {params['criterion']}")
+                st.markdown(f"**Max depth:** {params['max_depth']}")
+                st.markdown(f"**Max features:** {params['max_features']}")
             elif "XGB" in str(model["clf"]):
                 st.markdown("**Classifier:** XGBoost")
-                #st.markdown(model)
                 params = model["clf"].get_params()
+                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                st.markdown(f"**Learning rate:** {params['learning_rate']}")
+                st.markdown(f"**Max depth:** {params['max_depth']}")
+                st.markdown(f"**Gamma:** {params['gamma']}")
+                st.markdown(f"**Subsample:** {params['subsample']}")
             elif "LGBM" in str(model["clf"]):
                 st.markdown("**Classifier:** LightGBM")
-                #st.markdown(model)
                 params = model["clf"].get_params()
+                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                st.markdown(f"**Learning rate:** {params['learning_rate']}")
+                st.markdown(f"**Max depth:** {params['max_depth']}")
+                st.markdown(f"**Boosting type:** {params['boosting_type']}")
+                st.markdown(f"**Subsample:** {params['subsample']}")
             elif "CatBoost" in str(model["clf"]):
                 st.markdown("**Classifier:** CatBoost")
-                #st.markdown(model)
                 params = model["clf"].get_params()
+                st.markdown(f"**Number of estimators:** {params['iterations']}")
+                st.markdown(f"**Learning rate:** {params['learning_rate']}")
+                st.markdown(f"**Depth:** {params['depth']}")
+                st.markdown(f"**L2 leaf regularization:** {params['l2_leaf_reg']}")
+                st.markdown(f"**Bagging temperature:** {params['bagging_temperature']}")
                 
                 # fig, axes = plt.subplots(nrows = 1,ncols = 1,figsize = (4,4), dpi=800)
                 # tree.plot_tree(model["clf"].estimators_[0],
@@ -458,7 +470,7 @@ def runUI():
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "V2B4LkGYfa7gEJtd"
+        st.session_state["job_input"] = "kMIR5A6oyh1IYGnk"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -501,6 +513,29 @@ def runUI():
         st.success("Job was completed with the following results")
 
         with st.expander("Summary Statistics"):
+            str_type = {"DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
+                        "Protein": ["", "Amino acid"]}
+            
+            st.markdown(f"""<div style="display: flex; justify-content: flex-end"><div class="tooltip"> 
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
+                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span class="tooltiptext">
+                    <strong>num_seqs</strong>: Number of sequences;<br>
+                    <strong>min_len</strong>: Minimum length of sequences;<br>
+                    <strong>max_len</strong>: Maximum length of sequences;<br>
+                    <strong>avg_len</strong>: Average length of sequences;<br>
+                    <strong>std_len</strong>: Standard deviation for length of sequences;<br>
+                    <strong>sum_len</strong>: Sum of length of all sequences;<br>
+                    <strong>Q1</strong>: 25th percentile for length of sequences;<br>
+                    <strong>Q2</strong>: 50th percentile for length of sequences;<br>
+                    <strong>Q3</strong>: 75th percentile for length of sequences;<br>
+                    <strong>N50</strong>: Length of the shortest read in the group of 
+                    longest sequences that together represent (at least) 50% of the 
+                    characters in the set of sequences;
+                    {str_type["DNA/RNA"][0]}</span>
+                    </div></div> 
+            """, unsafe_allow_html=True)
+                
             st.markdown("**Training set**")
 
             path_stats = os.path.join(st.session_state["job_path"], "train_stats.csv")

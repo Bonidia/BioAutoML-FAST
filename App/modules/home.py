@@ -542,30 +542,49 @@ def runUI():
         queue_thread.start()
         st.session_state["queue"] = True
     
-    with open("imgs/logo.png", "rb") as file_:
+    with open("imgs/logo_og.png", "rb") as file_:
         contents = file_.read()
         data_url = base64.b64encode(contents).decode("utf-8")
 
     st.markdown(f"""
         <div style='text-align: center;'>
-            <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
-            <h5 style="color:gray">Empowering researchers with machine learning</h5>
+            <img src="data:image/png;base64,{data_url}" alt="logo" width="300">
+            <h5 style="color:gray">Democratizing Machine Learning in Life Sciences</h5>
         </div>
     """, unsafe_allow_html=True)
 
-    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
-     BioAutoML, optimized for speed and enhanced functionality. It allows
-     users to input their sequences or structured data for classification, 
-     generating models that can be saved for future use. The application 
-     features a repository of around 50 trained models for various problems,
-     such as cancer, COVID-19, and other diseases. By automating feature extraction, 
-     selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
-     learning tools accessible to researchers, biologists, and physicians, 
-     even those with limited ML expertise. This user-friendly interface 
-     supports innovative solutions to critical health challenges, advancing 
-     the field of bioinformatics and enabling the scientific community to 
-     develop new treatments and interventions, ultimately improving health 
-     outcomes and benefiting society.""")
+    # st.markdown(f"""
+    #     <div style='text-align: center;'>
+    #         <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
+    #         <h5 style="color:gray">Empowering Researchers with Machine Learning</h5>
+    #     </div>
+    # """, unsafe_allow_html=True)
+
+    st.info("""**BioAutoML** is a software package that automates the machine learning (ML) 
+            pipeline for analyzing biological sequence data. It addresses the challenge 
+            of feature engineering, ML algorithm selection, and hyperparameter tuning, 
+            which are typically manual and time-consuming processes requiring 
+            comprehensive domain knowledge. BioAutoML was experimentally evaluated in 
+            two scenarios: predicting the three principal classes of noncoding RNAs 
+            (ncRNAs) and the eight categories of ncRNAs in bacteria, including 
+            housekeeping and regulatory types. The package's predictive performance 
+            was compared to two other AutoML tools, RECIPE and TPOT. The results 
+            showed that BioAutoML can accelerate new studies, reduce the cost of feature 
+            engineering processing, and maintain or improve predictive performance.""")
+
+    # st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
+    #  BioAutoML, optimized for speed and enhanced functionality. It allows
+    #  users to input their sequences or structured data for classification, 
+    #  generating models that can be saved for future use. The application 
+    #  features a repository of around 50 trained models for various problems,
+    #  such as cancer, COVID-19, and other diseases. By automating feature extraction, 
+    #  selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
+    #  learning tools accessible to researchers, biologists, and physicians, 
+    #  even those with limited ML expertise. This user-friendly interface 
+    #  supports innovative solutions to critical health challenges, advancing 
+    #  the field of bioinformatics and enabling the scientific community to 
+    #  develop new treatments and interventions, ultimately improving health 
+    #  outcomes and benefiting society.""")
 
     st.divider()
 
@@ -577,25 +596,25 @@ def runUI():
 
     with col1:
         training = st.selectbox(":brain: Training", ["Training set", "Load model"],
-                                    help="Training set evaluated with 10-fold cross-validation")
+                                    help="Training set evaluated with 10-fold cross-validation.")
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
-                                    help="tooptip to add")
+                                    help="Whether to use a labeled testing set to evaluate the model, or alternatively, an unlabeled prediction set.")
     with col3:
         data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
-                                    help="Only sequences without ambiguous nucleotides or amino acids are supported")
+                                    help="Only sequences without ambiguous nucleotides or amino acids are supported, as well as structured data with categorical variables.")
     
     if training == "Training set":
         _, checkcol1, checkcol2, _ = st.columns([2, 3, 3, 2])
 
         with checkcol1:
-            fselection = st.checkbox("Feature Selection", help="tooptip to add")
+            fselection = st.checkbox("Feature Selection", help="Whether to use feature selection methods.")
         with checkcol2:
-            imbalance = st.checkbox("Oversampling/Undersampling", help="Test")
+            imbalance = st.checkbox("Oversampling/Undersampling", help="Whether to use imbalanced techniques for the data sets.")
 
     if training == "Training set" and data_type == "Structured data":
-        classifier = st.selectbox(":wrench: Classifier for structured data", ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
-                                    help="tooptip to add")
+        classifier = st.selectbox(":wrench: Algorithm for structured data", ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
+                                    help="Algorithm to be used for prediction.")
 
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
@@ -685,6 +704,18 @@ def runUI():
 
             if testing == "No test set":
                 test_files = None
+
+            job_data = {
+                "data_type": [data_type],
+                "testing_set": [testing != "No test set"],
+                "classifier_selected": [classifier], 
+                "imbalance_methods": [imbalance],  
+                "feature_selection": [fselection],  
+            }
+
+            df_job_data = pl.DataFrame(job_data)
+            tsv_path = os.path.join(job_path, "job_info.tsv")
+            df_job_data.write_csv(tsv_path, separator='\t')
 
             job_queue.put((train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection))
 
