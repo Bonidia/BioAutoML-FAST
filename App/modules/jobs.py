@@ -470,7 +470,7 @@ def runUI():
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "kMIR5A6oyh1IYGnk"
+        st.session_state["job_input"] = "U2PJgJrNTsRWBcWT"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -512,6 +512,8 @@ def runUI():
     if "job_path" in st.session_state:
         st.success("Job was completed with the following results")
 
+        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+
         with st.expander("Summary Statistics"):
             str_type = {"DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
                         "Protein": ["", "Amino acid"]}
@@ -532,7 +534,7 @@ def runUI():
                     <strong>N50</strong>: Length of the shortest read in the group of 
                     longest sequences that together represent (at least) 50% of the 
                     characters in the set of sequences;
-                    {str_type["DNA/RNA"][0]}</span>
+                    {str_type[df_job_info["data_type"].item()][0]}</span>
                     </div></div> 
             """, unsafe_allow_html=True)
                 
@@ -546,15 +548,12 @@ def runUI():
 
             st.dataframe(train_stats, hide_index=True, use_container_width=True)
 
-            test_fold = os.path.join(st.session_state["job_path"], "test")
-            test_set = True if os.path.exists(test_fold) else False
-
-            if test_set:
+            if df_job_info["testing_set"].item() != "No test set":
                 st.markdown("**Test set**")
                 test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
                 st.dataframe(test_stats, hide_index=True, use_container_width=True)
 
-        if test_set:
+        if df_job_info["testing_set"].item() != "No test set":
             tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
         else:
             tab1, tab2, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
@@ -565,7 +564,7 @@ def runUI():
         with tab2:
             performance_metrics()
 
-        if test_set:
+        if df_job_info["testing_set"].item() != "No test set":
             with tab3:
                 show_predictions()
         

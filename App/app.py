@@ -23,10 +23,17 @@ def runUI():
 
     if page == "Home":
         modules.home.runUI()
+        if "job_path" in st.session_state:
+            del st.session_state["job_path"]
     elif page == "Jobs":
         modules.jobs.runUI()
     elif page == "Model Repository":
         modules.repo.runUI()
+        if "job_path" in st.session_state:
+            del st.session_state["job_path"]
+    elif page == "Model Repository":
+        if "job_path" in st.session_state:
+            del st.session_state["job_path"]
 
 if __name__ == "__main__":
     runUI()

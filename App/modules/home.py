@@ -588,7 +588,7 @@ def runUI():
 
     st.divider()
 
-    st.markdown("""##### Classification""", unsafe_allow_html=True)
+    st.markdown("""##### Prediction""", unsafe_allow_html=True)
 
     queue_info = st.container()
 
@@ -699,15 +699,18 @@ def runUI():
 
             os.makedirs(job_path)
 
-            if training == "Load model" or data_type != "Structured data":
+            if training == "Load model":
                 classifier, imbalance, fselection = False, False, False
+            elif training == "Training set" and data_type != "Structured data":
+                classifier = False
 
             if testing == "No test set":
                 test_files = None
 
             job_data = {
                 "data_type": [data_type],
-                "testing_set": [testing != "No test set"],
+                "training_set": [training == "Training set"],
+                "testing_set": [testing],
                 "classifier_selected": [classifier], 
                 "imbalance_methods": [imbalance],  
                 "feature_selection": [fselection],  
