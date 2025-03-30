@@ -222,7 +222,7 @@ def objective_lightgbm(space):
                                num_leaves=int(space['num_leaves']),
                                learning_rate=space['learning_rate'],
                                subsample=space['subsample'],
-                               n_jobs=n_cpu, random_state=63)
+                               n_jobs=n_cpu, verbosity=-1, random_state=63)
 
     kfold = StratifiedKFold(n_splits=5, shuffle=True)
     metric = cross_val_score(model,
@@ -257,7 +257,7 @@ def tuning_lightgbm_bayesian():
                                  num_leaves=int(best_tuning['num_leaves']),
                                  learning_rate=best_tuning['learning_rate'],
                                  subsample=best_tuning['subsample'],
-                                 n_jobs=n_cpu, random_state=63)
+                                 n_jobs=n_cpu, verbosity=-1, random_state=63)
 
     return best_tuning, best_cb
 
@@ -687,7 +687,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         elif classifier == 2:
             print('Tuning: ' + str(bool(tuning)))
             print('Classifier: LightGBM')
-            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, random_state=63)
+            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, verbosity=-1, random_state=63)
             if imbalance_data:
                 train, train_labels = imbalanced_function(clf, train, train_labels)
                 model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels

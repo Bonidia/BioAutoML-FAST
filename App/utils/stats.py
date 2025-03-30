@@ -8,7 +8,7 @@ import polars as pl
 import pandas as pd
 import numpy as np
 
-def summary_stats(path_folder, job_path, structured):
+def summary_stats(path_folder, data_type, job_path, structured):
 
     if structured:
         structured_file = os.path.join(path_folder, os.listdir(path_folder)[0])
@@ -32,7 +32,10 @@ def summary_stats(path_folder, job_path, structured):
 
         seq_stats = {"class": [], "num_seqs": [], "min_length": [], "max_length": [], 
                     "avg_length": [], "std_length": [], "sum_length": [], 
-                    "Q1": [], "Q2": [], "Q3": [], "N50": [], "gc_content": []}
+                    "Q1": [], "Q2": [], "Q3": [], "N50": []}
+
+        if data_type == "DNA/RNA":
+            seq_stats["gc_content"] = []
 
         for seq_class in fasta_files:
             seq_stats["class"].append(seq_class)
@@ -62,7 +65,8 @@ def summary_stats(path_folder, job_path, structured):
                 if cumulative_length >= total_length / 2:
                     seq_stats["N50"].append(length)
                     break
-                
-            seq_stats["gc_content"].append((sum(gcs) / num_seqs) * 100)
+            
+            if data_type == "DNA/RNA":
+                seq_stats["gc_content"].append((sum(gcs) / num_seqs) * 100)
         
         pl.DataFrame(seq_stats).write_csv(os.path.join(job_path, "train_stats.csv" if "train" in path_folder else "test_stats.csv"))

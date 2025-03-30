@@ -407,10 +407,10 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
             subprocess.run(command, cwd="..")
 
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), job_path, False)
+            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), data_type, job_path, False)
 
             if test_files:
-                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
     
             model = joblib.load(os.path.join(job_path, "trained_model.sav"))
             model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
@@ -542,49 +542,49 @@ def runUI():
         queue_thread.start()
         st.session_state["queue"] = True
     
-    with open("imgs/logo_og.png", "rb") as file_:
+    with open("imgs/logo.png", "rb") as file_:
         contents = file_.read()
         data_url = base64.b64encode(contents).decode("utf-8")
 
-    st.markdown(f"""
-        <div style='text-align: center;'>
-            <img src="data:image/png;base64,{data_url}" alt="logo" width="300">
-            <h5 style="color:gray">Democratizing Machine Learning in Life Sciences</h5>
-        </div>
-    """, unsafe_allow_html=True)
-
     # st.markdown(f"""
     #     <div style='text-align: center;'>
-    #         <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
-    #         <h5 style="color:gray">Empowering Researchers with Machine Learning</h5>
+    #         <img src="data:image/png;base64,{data_url}" alt="logo" width="300">
+    #         <h5 style="color:gray">Democratizing Machine Learning in Life Sciences</h5>
     #     </div>
     # """, unsafe_allow_html=True)
 
-    st.info("""**BioAutoML** is a software package that automates the machine learning (ML) 
-            pipeline for analyzing biological sequence data. It addresses the challenge 
-            of feature engineering, ML algorithm selection, and hyperparameter tuning, 
-            which are typically manual and time-consuming processes requiring 
-            comprehensive domain knowledge. BioAutoML was experimentally evaluated in 
-            two scenarios: predicting the three principal classes of noncoding RNAs 
-            (ncRNAs) and the eight categories of ncRNAs in bacteria, including 
-            housekeeping and regulatory types. The package's predictive performance 
-            was compared to two other AutoML tools, RECIPE and TPOT. The results 
-            showed that BioAutoML can accelerate new studies, reduce the cost of feature 
-            engineering processing, and maintain or improve predictive performance.""")
+    st.markdown(f"""
+        <div style='text-align: center;'>
+            <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
+            <h5 style="color:gray">Empowering Researchers with Machine Learning</h5>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
-    #  BioAutoML, optimized for speed and enhanced functionality. It allows
-    #  users to input their sequences or structured data for classification, 
-    #  generating models that can be saved for future use. The application 
-    #  features a repository of around 50 trained models for various problems,
-    #  such as cancer, COVID-19, and other diseases. By automating feature extraction, 
-    #  selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
-    #  learning tools accessible to researchers, biologists, and physicians, 
-    #  even those with limited ML expertise. This user-friendly interface 
-    #  supports innovative solutions to critical health challenges, advancing 
-    #  the field of bioinformatics and enabling the scientific community to 
-    #  develop new treatments and interventions, ultimately improving health 
-    #  outcomes and benefiting society.""")
+    # st.info("""**BioAutoML** is a software package that automates the machine learning (ML) 
+    #         pipeline for analyzing biological sequence data. It addresses the challenge 
+    #         of feature engineering, ML algorithm selection, and hyperparameter tuning, 
+    #         which are typically manual and time-consuming processes requiring 
+    #         comprehensive domain knowledge. BioAutoML was experimentally evaluated in 
+    #         two scenarios: predicting the three principal classes of noncoding RNAs 
+    #         (ncRNAs) and the eight categories of ncRNAs in bacteria, including 
+    #         housekeeping and regulatory types. The package's predictive performance 
+    #         was compared to two other AutoML tools, RECIPE and TPOT. The results 
+    #         showed that BioAutoML can accelerate new studies, reduce the cost of feature 
+    #         engineering processing, and maintain or improve predictive performance.""")
+
+    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
+     BioAutoML, optimized for speed and enhanced functionality. It allows
+     users to input their sequences or structured data for classification, 
+     generating models that can be saved for future use. The application 
+     features a repository of around 50 trained models for various problems,
+     such as cancer, COVID-19, and other diseases. By automating feature extraction, 
+     selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
+     learning tools accessible to researchers, biologists, and physicians, 
+     even those with limited ML expertise. This user-friendly interface 
+     supports innovative solutions to critical health challenges, advancing 
+     the field of bioinformatics and enabling the scientific community to 
+     develop new treatments and interventions, ultimately improving health 
+     outcomes and benefiting society.""")
 
     st.divider()
 

@@ -17,6 +17,12 @@ from sklearn import tree
 import matplotlib.pyplot as plt
 
 def dimensionality_reduction():
+    path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+    
+    # if os.path.exists(path_best_train):
+    #     imputer = SimpleImputer(strategy='mean')
+    #     imputed_data = imputer.fit_transform(features)
+
     dim_col1, dim_col2 = st.columns(2)
 
     with dim_col1:
@@ -26,7 +32,7 @@ def dimensionality_reduction():
             evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"], key="reduction")
 
         if evaluation == "Training set":
-            path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+            
             if os.path.exists(path_best_train):
                 features = pd.read_csv(path_best_train)
                 labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))["label"].tolist()
@@ -45,7 +51,7 @@ def dimensionality_reduction():
                 labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
             
             nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
-                
+        
         scaler = StandardScaler()
         scaled_data = pd.DataFrame(scaler.fit_transform(features))
 
@@ -516,7 +522,8 @@ def runUI():
 
         with st.expander("Summary Statistics"):
             str_type = {"DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
-                        "Protein": ["", "Amino acid"]}
+                        "Protein": ["", "Amino acid"],
+                        "Structured data": ["", "Structured data"]}
             
             st.markdown(f"""<div style="display: flex; justify-content: flex-end"><div class="tooltip"> 
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
