@@ -29,7 +29,7 @@ from sklearn_genetic import GAFeatureSelectionCV
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials, SparkTrials, early_stop
 from subprocess import Popen
 from multiprocessing import Manager
-
+from Bio import SeqIO
 
 def objective_rf(space):
 
@@ -610,148 +610,172 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 
 	return classifier, path_btrain, path_btest, btrain, btest
 
-
 def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
+    """Extracts the features from the sequences in the fasta files."""
 
-	"""Extracts the features from the sequences in the fasta files."""
+    # Setup directories
+    path = os.path.join(foutput, 'feat_extraction')
+    path_results = foutput
 
-	path = foutput + '/feat_extraction'
-	path_results = foutput
+    # Clear and create directories
+    for dir_path in [path_results, path]:
+        os.makedirs(dir_path, exist_ok=True)
 
-	try:
-		shutil.rmtree(path)
-		shutil.rmtree(path_results)
-	except OSError as e:
-		print("Error: %s - %s." % (e.filename, e.strerror))
-		print('Creating Directory...')
+    # Create train/test subdirectories
+    for subdir in ['train', 'test']:
+        os.makedirs(os.path.join(path, subdir), exist_ok=True)
 
-	if not os.path.exists(path_results):
-		os.mkdir(path_results)
+    # Organize input files
+    input_groups = [
+        (ftrain, ftrain_labels, 'train'),
+        (ftest, ftest_labels, 'test') if ftest else (None, None, None)
+    ]
+    input_groups = [x for x in input_groups if x[0] is not None]
 
-	if not os.path.exists(path):
-		os.mkdir(path)
-		os.mkdir(path + '/train')
-		os.mkdir(path + '/test')
+    sequence_train = set()
+    fasta_list = []
+    datasets = [
+        'NAC.csv',
+        'DNC.csv',
+        'TNC.csv',
+        'kGap_di.csv',
+        'kGap_tri.csv',
+        'ORF.csv',
+        'Fickett.csv',
+        'Shannon.csv',
+        'FourierBinary.csv',
+        'FourierComplex.csv',
+        'Tsallis.csv',
+        'repDNA.csv'
+    ]
 
-	labels = [ftrain_labels]
-	fasta = [ftrain]
-	train_size = 0
+    datasets = [os.path.join(path, fname) for fname in datasets]
 
-	if fasta_test:
-		labels.append(ftest_labels)
-		fasta.append(ftest)
+    print('Extracting features with MathFeature...')
 
-	datasets = []
-	fasta_list = []
+    for fasta_files, label_files, split_type in input_groups:
+        for fasta_file, label_file in zip(fasta_files, label_files):
+            # Preprocess file
+            file_name = os.path.basename(fasta_file)
+            preprocessed_fasta = os.path.join(path, split_type, f'pre_{file_name}')
+            
+            subprocess.run([
+                'python', 'MathFeature/preprocessing/preprocessing.py',
+                '-i', fasta_file,
+                '-o', preprocessed_fasta
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            
+            if split_type == 'train':
+                with open(preprocessed_fasta) as handle:
+                    sequence_train.update(str(record.id) for record in SeqIO.parse(handle, "fasta"))
+            
+            fasta_list.append(preprocessed_fasta)
+            
+            # Define all feature extraction commands
+            commands = [
+                ['python', 'MathFeature/methods/ExtractionTechniques.py',
+                 '-i', preprocessed_fasta, '-o', os.path.join(path, 'NAC.csv'), '-l', label_file,
+                 '-t', 'NAC', '-seq', '1'],
 
-	print('Extracting features with MathFeature...')
- 
-	for i in range(len(labels)):
-		for j in range(len(labels[i])):
-			file = fasta[i][j].split('/')[-1]
-			if i == 0:  # Train
-				preprocessed_fasta = path + '/train/pre_' + file
-				subprocess.run(['python', 'MathFeature/preprocessing/preprocessing.py',
-								'-i', fasta[i][j], '-o', preprocessed_fasta],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-				train_size += len([1 for line in open(preprocessed_fasta) if line.startswith(">")])
-			else:  # Test
-				preprocessed_fasta = path + '/test/pre_' + file
-				subprocess.run(['python', 'MathFeature/preprocessing/preprocessing.py',
-								'-i', fasta[i][j], '-o', preprocessed_fasta],
-								stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                ['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'DNC.csv'), '-l', label_file,
+                 '-t', 'DNC', '-seq', '1'],
 
-			fasta_list.append(preprocessed_fasta)
-			datasets.append(path + '/NAC.csv')
-			datasets.append(path + '/DNC.csv')
-			datasets.append(path + '/TNC.csv')
-			datasets.append(path + '/kGap_di.csv')
-			datasets.append(path + '/kGap_tri.csv')
-			datasets.append(path + '/ORF.csv')
-			datasets.append(path + '/Fickett.csv')
-			datasets.append(path + '/Shannon.csv')
-			datasets.append(path + '/FourierBinary.csv')
-			datasets.append(path + '/FourierComplex.csv')
-			datasets.append(path + '/Tsallis.csv')
-			datasets.append(path + '/repDNA.csv')
-   
-			commands = [['python', 'MathFeature/methods/ExtractionTechniques.py',
-								'-i', preprocessed_fasta, '-o', path + '/NAC.csv', '-l', labels[i][j],
-								'-t', 'NAC', '-seq', '1'],
+                ['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'TNC.csv'), '-l', label_file,
+                 '-t', 'TNC', '-seq', '1'],
 
-						['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
-								preprocessed_fasta, '-o', path + '/DNC.csv', '-l', labels[i][j],
-								'-t', 'DNC', '-seq', '1'],
-      
-						['python', 'MathFeature/methods/ExtractionTechniques.py', '-i',
-								preprocessed_fasta, '-o', path + '/TNC.csv', '-l', labels[i][j],
-								'-t', 'TNC', '-seq', '1'],
-						['python', 'MathFeature/methods/Kgap.py', '-i',
-								preprocessed_fasta, '-o', path + '/kGap_di.csv', '-l',
-								labels[i][j], '-k', '1', '-bef', '1',
-								'-aft', '2', '-seq', '1'],
-						['python', 'MathFeature/methods/Kgap.py', '-i',
-								preprocessed_fasta, '-o', path + '/kGap_tri.csv', '-l',
-								labels[i][j], '-k', '1', '-bef', '1',
-								'-aft', '3', '-seq', '1'],
-						['python', 'MathFeature/methods/CodingClass.py', '-i',
-								preprocessed_fasta, '-o', path + '/ORF.csv', '-l', labels[i][j]],
-						['python', 'MathFeature/methods/FickettScore.py', '-i',
-								preprocessed_fasta, '-o', path + '/Fickett.csv', '-l', labels[i][j],
-								'-seq', '1'],
-						['python', 'MathFeature/methods/EntropyClass.py', '-i',
-								preprocessed_fasta, '-o', path + '/Shannon.csv', '-l', labels[i][j],
-								'-k', '5', '-e', 'Shannon'],
-						['python', 'MathFeature/methods/FourierClass.py', '-i',
-								preprocessed_fasta, '-o', path + '/FourierBinary.csv', '-l', labels[i][j],
-								'-r', '1'],
-						['python', 'other-methods/FourierClass.py', '-i',
-								preprocessed_fasta, '-o', path + '/FourierComplex.csv', '-l', labels[i][j],
-								'-r', '6'],
-						['python', 'other-methods/TsallisEntropy.py', '-i',
-								preprocessed_fasta, '-o', path + '/Tsallis.csv', '-l', labels[i][j],
-								'-k', '5', '-q', '2.3'],
-						['python', 'other-methods/repDNA/repDNA-feat.py', '--file',
-								preprocessed_fasta, '--output', path + '/repDNA.csv', '--label', labels[i][j]]
-			]
+                ['python', 'MathFeature/methods/Kgap.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'kGap_di.csv'), '-l',
+                 label_file, '-k', '1', '-bef', '1', '-aft', '2', '-seq', '1'],
 
-			processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
-			for p in processes: p.wait()
+                ['python', 'MathFeature/methods/Kgap.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'kGap_tri.csv'), '-l',
+                 label_file, '-k', '1', '-bef', '1', '-aft', '3', '-seq', '1'],
 
-	"""Concatenating all the extracted features"""
+                ['python', 'MathFeature/methods/CodingClass.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'ORF.csv'), '-l', label_file],
 
-	if datasets:
-		datasets = list(dict.fromkeys(datasets))
-		dataframes = pd.concat([pd.read_csv(f) for f in datasets], axis=1)
-		dataframes = dataframes.loc[:, ~dataframes.columns.duplicated()]
-		dataframes = dataframes[~dataframes.nameseq.str.contains("nameseq")]
+                ['python', 'MathFeature/methods/FickettScore.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'Fickett.csv'), '-l', label_file,
+                 '-seq', '1'],
 
-	X_train = dataframes.iloc[:train_size, :]
-	nameseq_train = X_train.pop('nameseq')
-	fnameseqtrain = path + '/fnameseqtrain.csv'
-	nameseq_train.to_csv(fnameseqtrain, index=False, header=True)
-	y_train = X_train.pop('label')
-	ftrain = path + '/ftrain.csv'
-	X_train.to_csv(ftrain, index=False)
-	flabeltrain = path + '/flabeltrain.csv'
-	y_train.to_csv(flabeltrain, index=False, header=True)
-	
-	fnameseqtest, ftest, flabeltest = '', '', ''
+                ['python', 'MathFeature/methods/EntropyClass.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'Shannon.csv'), '-l', label_file,
+                 '-k', '5', '-e', 'Shannon'],
 
-	if fasta_test:
-		X_test = dataframes.iloc[train_size:, :]
-		y_test = X_test.pop('label')
-		nameseq_test = X_test.pop('nameseq')
-		fnameseqtest = path + '/fnameseqtest.csv'
-		nameseq_test.to_csv(fnameseqtest, index=False, header=True)
-		ftest = path + '/ftest.csv'
-		X_test.to_csv(ftest, index=False)
-		flabeltest = path + '/flabeltest.csv'
-		y_test.to_csv(flabeltest, index=False, header=True)
-		del X_test
+                ['python', 'MathFeature/methods/FourierClass.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'FourierBinary.csv'), '-l', label_file,
+                 '-r', '1'],
 
-	del X_train
-	return fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
+                ['python', 'other-methods/FourierClass.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'FourierComplex.csv'), '-l', label_file,
+                 '-r', '6'],
+
+                ['python', 'other-methods/TsallisEntropy.py', '-i',
+                 preprocessed_fasta, '-o', os.path.join(path, 'Tsallis.csv'), '-l', label_file,
+                 '-k', '5', '-q', '2.3'],
+
+                ['python', 'other-methods/repDNA/repDNA-feat.py', '--file',
+                 preprocessed_fasta, '--output', os.path.join(path, 'repDNA.csv'), '--label', label_file]
+            ]
+            
+            # Run all commands in parallel
+            processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+            for p in processes:
+                p.wait()
+
+    """Concatenating all the extracted features"""
+    
+    if datasets:
+        dfs_list = [
+            pl.read_csv(f, ignore_errors=True)
+            .select(pl.all().exclude("nameseq"), pl.col("nameseq"))
+            .unique(subset=["nameseq"], keep='first')
+            .filter(~pl.col("nameseq").str.contains("nameseq")) 
+            .set_sorted("nameseq")
+            for f in datasets
+        ]
+
+        dataframes = pl.concat(dfs_list, how="align")
+        
+        dataframes = dataframes.with_columns(
+            pl.when(pl.col("nameseq").is_in(sequence_train))
+            .then(pl.lit("train"))
+            .otherwise(pl.lit("test"))
+            .alias("split_type")
+        )
+
+    X_train = dataframes.filter(pl.col("split_type") == "train")
+
+    nameseq_train = X_train.select("nameseq")
+    fnameseqtrain = os.path.join(path, "fnameseqtrain.csv")
+    nameseq_train.write_csv(fnameseqtrain)
+
+    y_train = X_train.select("label")
+    flabeltrain = os.path.join(path, "flabeltrain.csv")
+    y_train.write_csv(flabeltrain)
+
+    ftrain = os.path.join(path, "ftrain.csv")
+    X_train.select(pl.all().exclude(["category", "nameseq", "label"])).write_csv(ftrain)
+    
+    fnameseqtest, ftest, flabeltest = '', '', ''
+
+    if fasta_test:
+        X_test = dataframes.filter(pl.col("split_type") == "test")
+
+        nameseq_test = X_test.select("nameseq")
+        fnameseqtest = os.path.join(path, "fnameseqtest.csv")
+        nameseq_test.write_csv(fnameseqtest)
+
+        y_test = X_test.select("label")
+        flabeltest = os.path.join(path, "flabeltest.csv")
+        y_test.write_csv(flabeltest)
+
+        ftest = os.path.join(path, "ftest.csv")
+        X_test.select(pl.all().exclude(["category", "nameseq", "label"])).write_csv(ftest)
+
+    return fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
 ##########################################################################
 ##########################################################################

@@ -476,7 +476,7 @@ def runUI():
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "U2PJgJrNTsRWBcWT"
+        st.session_state["job_input"] = "mnWrnh0RUJhcvO0X"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -521,28 +521,45 @@ def runUI():
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
         with st.expander("Summary Statistics"):
-            str_type = {"DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
-                        "Protein": ["", "Amino acid"],
-                        "Structured data": ["", "Structured data"]}
-            
-            st.markdown(f"""<div style="display: flex; justify-content: flex-end"><div class="tooltip"> 
+            str_type = {
+                "DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
+                "Protein": ["", "Amino acid"],
+                "Structured data": ["<br><strong>num_samples</strong>: Number of samples", "Structured data"]
+            }
+
+            tooltip_text = """
+            <strong>num_seqs</strong>: Number of sequences;<br>
+            <strong>min_len</strong>: Minimum length of sequences;<br>
+            <strong>max_len</strong>: Maximum length of sequences;<br>
+            <strong>avg_len</strong>: Average length of sequences;<br>
+            <strong>std_len</strong>: Standard deviation for length of sequences;<br>
+            <strong>sum_len</strong>: Sum of length of all sequences;<br>
+            <strong>Q1</strong>: 25th percentile for length of sequences;<br>
+            <strong>Q2</strong>: 50th percentile for length of sequences;<br>
+            <strong>Q3</strong>: 75th percentile for length of sequences;<br>
+            <strong>N50</strong>: Length of the shortest read in the group of 
+            longest sequences that together represent (at least) 50% of the 
+            characters in the set of sequences;
+            """
+
+            if df_job_info["data_type"].item() == "Structured data":
+                tooltip_text = "<strong>num_samples</strong>: Number of samples;"
+            else:
+                tooltip_text += str_type[df_job_info["data_type"].item()][0]
+
+            st.markdown(f"""
+            <div style="display: flex; justify-content: flex-end">
+                <div class="tooltip"> 
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
-                    <circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
                     <span class="tooltiptext">
-                    <strong>num_seqs</strong>: Number of sequences;<br>
-                    <strong>min_len</strong>: Minimum length of sequences;<br>
-                    <strong>max_len</strong>: Maximum length of sequences;<br>
-                    <strong>avg_len</strong>: Average length of sequences;<br>
-                    <strong>std_len</strong>: Standard deviation for length of sequences;<br>
-                    <strong>sum_len</strong>: Sum of length of all sequences;<br>
-                    <strong>Q1</strong>: 25th percentile for length of sequences;<br>
-                    <strong>Q2</strong>: 50th percentile for length of sequences;<br>
-                    <strong>Q3</strong>: 75th percentile for length of sequences;<br>
-                    <strong>N50</strong>: Length of the shortest read in the group of 
-                    longest sequences that together represent (at least) 50% of the 
-                    characters in the set of sequences;
-                    {str_type[df_job_info["data_type"].item()][0]}</span>
-                    </div></div> 
+                        {tooltip_text}
+                    </span>
+                </div>
+            </div> 
             """, unsafe_allow_html=True)
                 
             st.markdown("**Training set**")

@@ -346,10 +346,10 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
             subprocess.run(command, cwd="..")
 
-            utils.summary_stats(os.path.join(job_path, "train"), job_path, True)
+            utils.summary_stats(os.path.join(job_path, "train"), data_type, job_path, True)
 
             if test_files:
-                utils.summary_stats(os.path.join(job_path, "test"), job_path, True)
+                utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
     
             model = joblib.load(os.path.join(job_path, "trained_model.sav"))
             model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
@@ -482,7 +482,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
                     command.append("--test_nameseq")
                     command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
-                utils.summary_stats(os.path.join(job_path, "test"), job_path, True)
+                utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
             else:
                 # test_path = os.path.join(job_path, "test")
                 # os.makedirs(test_path)
@@ -500,7 +500,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
                     test_extraction(job_path, test_fasta, model, data_type)
 
-                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 
                     command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
                     command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
@@ -514,7 +514,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
 
                     test_extraction(job_path, test_fasta, model, data_type)
 
-                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), job_path, False)
+                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 
                     command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
                     command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])

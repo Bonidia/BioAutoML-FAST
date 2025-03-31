@@ -405,8 +405,6 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
  
 	for fasta_files, label_files, split_type in input_groups:
 		for fasta_file, label_file in zip(fasta_files, label_files):
-			print(fasta_file, label_file)
-
 			# Preprocess file
 			file_name = os.path.basename(fasta_file)
 			preprocessed_fasta = os.path.join(path, split_type, f'pre_{file_name}')
@@ -415,7 +413,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 				'python', 'other-methods/preprocessing.py',
 				'-i', fasta_file,
 				'-o', preprocessed_fasta
-			], )
+			], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 			
 			if split_type == 'train':
 				with open(preprocessed_fasta) as handle:
