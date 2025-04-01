@@ -406,13 +406,13 @@ def model_information():
 
     with col1:
         if "RandomForest" in str(model["clf"]):
-            st.image("imgs/models/rf.png", use_column_width=True)
+            st.image("imgs/models/rf.png", use_container_width=True)
         elif "XGB" in str(model["clf"]):
-            st.image("imgs/models/xgboost.png", use_column_width=True)
+            st.image("imgs/models/xgboost.png", use_container_width=True)
         elif "LGBM" in str(model["clf"]):
-            st.image("imgs/models/lightgbm.png", use_column_width=True)
+            st.image("imgs/models/lightgbm.png", use_container_width=True)
         elif "CatBoost" in str(model["clf"]):
-            st.image("imgs/models/catboost.png", use_column_width=True)
+            st.image("imgs/models/catboost.png", use_container_width=True)
 
     with col2:
         with st.container(border=True):
@@ -476,7 +476,7 @@ def runUI():
         st.session_state["queue"] = True
 
     def get_job_example():
-        st.session_state["job_input"] = "mnWrnh0RUJhcvO0X"
+        st.session_state["job_input"] = "SuKEVriL0frtqHPU"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
