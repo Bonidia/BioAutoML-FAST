@@ -29,7 +29,7 @@ def summary_stats(path_folder, data_type, job_path, structured):
         df_count.write_csv(os.path.join(job_path, "train_stats.csv" if "train" in path_folder else "test_stats.csv"))
     else:
         fasta_files = {os.path.splitext(f.split("_")[1])[0]: os.path.join(path_folder, f) for f in os.listdir(path_folder)}
-
+        
         seq_stats = {"class": [], "num_seqs": [], "min_length": [], "max_length": [], 
                     "avg_length": [], "std_length": [], "sum_length": [], 
                     "Q1": [], "Q2": [], "Q3": [], "N50": []}

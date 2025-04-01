@@ -489,12 +489,17 @@ def runUI():
 
             submitted = st.form_submit_button("Submit", use_container_width=True,  type="primary")
 
-    predict_path = "jobs"
+    predict_path, dataset_path = "jobs", "datasets"
 
     if submitted:
         if job_id:
-            job_path = os.path.join(predict_path, job_id)
-            if os.path.exists(job_path):
+            job_path = ""
+            if os.path.exists(os.path.join(predict_path, job_id)):
+                job_path = os.path.join(predict_path, job_id)
+            elif os.path.exists(os.path.join(dataset_path, job_id)):
+                job_path = os.path.join(dataset_path, job_id)
+
+            if job_path:
                 test_fold = os.path.join(job_path, "test")
 
                 test_set = True if os.path.exists(test_fold) else False
