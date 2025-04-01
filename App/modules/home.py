@@ -324,12 +324,12 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
                         with open(save_path, mode="wb") as f:
                             f.write(test_files.getvalue())
                         
-                        df_test = pd.read_csv(save_path).reset_index()
+                        df_test = pd.read_csv(save_path).reset_index().rename(columns={"index": "nameseq"})
                         df_test["label"] = "Predicted"
                         df_test = pl.from_pandas(df_test)
-                        df_index = df_test.select(["index"])
+                        df_index = df_test.select(["nameseq"])
                         df_labels = df_test.select(["label"])
-                        df_test = df_test.drop(["index", "label"])
+                        df_test = df_test.drop(["nameseq", "label"])
 
                         df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))

@@ -16,207 +16,323 @@ from sklearn.preprocessing import StandardScaler
 from sklearn import tree
 import matplotlib.pyplot as plt
 
-def dimensionality_reduction():
-    path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
+@st.cache_data
+def load_reduction_data(job_path, evaluation):
+    """Load and cache data for dimensionality reduction"""
+    if evaluation == "Training set":
+        path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
+        if os.path.exists(path_best_train):
+            features = pd.read_csv(path_best_train)
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))["label"].tolist()
+            nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
+        else:
+            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+            features = model["train"]
+            labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
+            nameseqs = model["nameseq_train"]["nameseq"].tolist()
+    else:
+        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
+            features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))["label"].tolist()
+        else:
+            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))["label"].tolist()
+        
+        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
     
-    # if os.path.exists(path_best_train):
-    #     imputer = SimpleImputer(strategy='mean')
-    #     imputed_data = imputer.fit_transform(features)
+    return features, labels, nameseqs
 
+@st.cache_data
+def scale_features(features):
+    """Scale features with caching"""
+    scaler = StandardScaler()
+    return pd.DataFrame(scaler.fit_transform(features))
+
+@st.cache_data(show_spinner=False)
+def compute_reduction(_reducer, scaled_data, reduction_method, reduction_params):
+    """Compute dimensionality reduction with caching"""
+    return pd.DataFrame(_reducer.fit_transform(scaled_data))
+
+@st.cache_data(show_spinner=False)
+def create_reduction_plot(reduced_data, labels, names, reduction_method):
+    """Create and cache 3D reduction plot"""
+    fig = go.Figure()
+    unique_labels = np.unique(labels)
+    colors = utils.get_colors(len(unique_labels))
+    
+    for i, label in enumerate(unique_labels):
+        mask = [True if l == label else False for l in labels]
+        hover_text = names[names["label"] == label]["nameseq"].tolist()
+        
+        fig.add_trace(go.Scatter3d(
+            x=reduced_data[mask][0],
+            y=reduced_data[mask][1],
+            z=reduced_data[mask][2],
+            mode='markers',
+            name=f'{label}',
+            marker=dict(color=colors[i], size=2),
+            hovertemplate=hover_text,
+            hoverlabel=dict(
+                font=dict(
+                    family="Open Sans, History Sans Pro Light",
+                    color="white",
+                    size=12
+                ),
+                bgcolor="black"
+            ),
+            textposition='top center',
+            hoverinfo='text'
+        ))
+    
+    fig.update_layout(
+        height=500,
+        scene=dict(
+            xaxis_title='Component 1',
+            yaxis_title='Component 2',
+            zaxis_title='Component 3'
+        ),
+        title=reduction_method,
+        margin=dict(t=30, b=50)
+    )
+    
+    return fig
+
+def dimensionality_reduction():
     dim_col1, dim_col2 = st.columns(2)
 
     with dim_col1:
-        if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
-            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="reduction")
-        else:
-            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"], key="reduction")
+        # Evaluation set selection
+        test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+        evaluation = st.selectbox(
+            ":mag_right: Evaluation set",
+            ["Training set", "Test set"] if test_exists else ["Training set"],
+            key="reduction"
+        )
 
-        if evaluation == "Training set":
-            
-            if os.path.exists(path_best_train):
-                features = pd.read_csv(path_best_train)
-                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))["label"].tolist()
-                nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
-            else:
-                model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-                features = model["train"]
-                labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
-                nameseqs = model["nameseq_train"]["nameseq"].tolist()
-        else:
-            if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
-                features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
-                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv"))["label"].tolist()
-            else:
-                features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-                labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))["label"].tolist()
-            
-            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
+        # Load data with caching
+        features, labels, nameseqs = load_reduction_data(st.session_state["job_path"], evaluation)
+        names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
         
-        scaler = StandardScaler()
-        scaled_data = pd.DataFrame(scaler.fit_transform(features))
+        # Scale features with caching
+        scaled_data = scale_features(features)
 
-        reduction = st.selectbox("Select dimensionality reduction technique", 
-                                ["Principal Component Analysis (PCA)",
-                                "t-Distributed Stochastic Neighbor Embedding (t-SNE)",
-                                "Uniform Manifold Approximation and Projection (UMAP)"])
+        # Reduction method selection
+        reduction = st.selectbox(
+            "Select dimensionality reduction technique", 
+            ["Principal Component Analysis (PCA)",
+             "t-Distributed Stochastic Neighbor Embedding (t-SNE)",
+             "Uniform Manifold Approximation and Projection (UMAP)"]
+        )
+
+        # Reduction parameters
+        reducer = None
+        reduction_params = {}
         
         if reduction == "t-Distributed Stochastic Neighbor Embedding (t-SNE)":
             perplexity = st.slider("Perplexity", min_value=5, max_value=50, value=30)
             learning_rate = st.slider("Learning rate", min_value=10, max_value=1000, value=200)
-            n_iter = st.slider("Number of iterations", min_value=100, max_value=10000, value=1000)
-            reducer = TSNE(n_components=3, perplexity=perplexity, learning_rate=learning_rate, n_iter=n_iter, random_state=0)
+            max_iter = st.slider("Number of iterations", min_value=100, max_value=10000, value=1000)
+            reducer = TSNE(n_components=3, perplexity=perplexity, 
+                          learning_rate=learning_rate, max_iter=max_iter, n_jobs=-1)
+            reduction_params = {"perplexity": perplexity, "learning_rate": learning_rate, "max_iter": max_iter}
+            
         elif reduction == "Uniform Manifold Approximation and Projection (UMAP)":
             n_neighbors = st.slider("Number of neighbors", min_value=2, max_value=100, value=15)
             min_dist = st.slider("Minimum distance", min_value=0.0, max_value=1.0, value=0.1)
-            reducer = UMAP(n_components=3, n_neighbors=n_neighbors, min_dist=min_dist, random_state=0)
+            reducer = UMAP(n_components=3, n_neighbors=n_neighbors, 
+                         min_dist=min_dist, n_jobs=-1)
+            reduction_params = {"n_neighbors": n_neighbors, "min_dist": min_dist}
+            
         else:
             reducer = PCA(n_components=3)
 
-    names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
-
-    if reduction:
-        with dim_col2:
-            with st.spinner('Loading...'):
-                reduced_data = pd.DataFrame(reducer.fit_transform(scaled_data))
-                
-                fig = go.Figure()
-
-                for i, label in enumerate(np.unique(labels)):
-                    mask = [True if l == label else False for l in labels]
-
-                    fig.add_trace(go.Scatter3d(
-                        x=reduced_data[mask][0],
-                        y=reduced_data[mask][1],
-                        z=reduced_data[mask][2],
-                        mode='markers',
-                        name=f'{label}',
-                        marker=dict(
-                            color=utils.get_colors(len(np.unique(labels)))[i], size=2,
-                        ),
-                        hovertemplate=names[names["label"] == label]["nameseq"].tolist(),
-                        hoverlabel = dict(
-                                        font=dict(
-                                        family="Open Sans, History Sans Pro Light",
-                                        color="white",
-                                        size=12),
-                                        bgcolor="black"
-                                        ),
-                        textposition='top center',
-                        hoverinfo='text'
-                    ))
-
-                fig.update_layout(
-                    height=500,
-                    scene=dict(
-                        xaxis_title='Component 1',
-                        yaxis_title='Component 2',
-                        zaxis_title='Component 3'
-                    ),
-                    title=reduction,
-                    margin=dict(t=30, b=50)
+    with dim_col2:
+        if reducer:
+            with st.spinner(f'Computing {reduction}...'):
+                # Compute reduction with caching
+                reduced_data = compute_reduction(
+                    reducer, 
+                    scaled_data, 
+                    reduction, 
+                    tuple(reduction_params.items())  # Convert dict to tuple for hashability
                 )
 
+                # Create plot with caching
+                fig = create_reduction_plot(reduced_data, labels, names, reduction)
                 st.plotly_chart(fig, use_container_width=True)
+
+@st.cache_data
+def load_features(job_path, evaluation):
+    """Load and cache features based on evaluation set"""
+    if evaluation == "Training set":
+        path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
+        if os.path.exists(path_best_train):
+            return pd.read_csv(path_best_train)
+        else:
+            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+            return model["train"]
+    else:
+        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
+            return pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
+        else:
+            return pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
+
+@st.cache_data
+def compute_correlation_matrix(features, method):
+    """Compute and cache correlation matrix"""
+    return features.corr(method=method.lower())
+
+@st.cache_data
+def get_top_correlations(corr_matrix, top_n=1000):
+    """Get top correlated feature pairs"""
+    corr_pairs = corr_matrix.abs().unstack()
+    corr_pairs = corr_pairs[corr_pairs.index.get_level_values(0) != corr_pairs.index.get_level_values(1)]
+    sorted_pairs = corr_pairs.sort_values(ascending=False).head(top_n)
+    
+    top_features = np.unique(
+        sorted_pairs.index.get_level_values(0).tolist() + 
+        sorted_pairs.index.get_level_values(1).tolist()
+    )[:top_n]
+    
+    return corr_matrix.loc[top_features, top_features]
+
+@st.cache_data
+def create_correlation_df(corr_matrix):
+    """Create formatted correlation dataframe"""
+    corr_df = pd.DataFrame(corr_matrix.stack(), columns=['Correlation coefficient'])
+    corr_df.reset_index(inplace=True)
+    corr_df.columns = ['Feature 1', 'Feature 2', 'Correlation coefficient']
+    return corr_df[corr_df['Feature 1'] != corr_df['Feature 2']]\
+           .sort_values('Correlation coefficient', ascending=False)\
+           .reset_index(drop=True)
+
+@st.cache_data
+def create_correlation_heatmap(corr_matrix):
+    """Create and cache correlation heatmap"""
+    fig = px.imshow(
+        corr_matrix,
+        x=corr_matrix.columns,
+        y=corr_matrix.columns,
+        color_continuous_scale='RdBu',
+        title='Correlation heatmap'
+    )
+    fig.update_traces(
+        hovertemplate='Feature 1 (x-axis): %{x}<br>Feature 2 (y-axis): %{y}<br>Correlation: %{z}<extra></extra>'
+    )
+    fig.update_layout(height=500, margin=dict(t=30, b=50))
+    return fig
 
 def feature_correlation():
     col1, col2 = st.columns(2)
 
     with col1:
-        if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
-            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"], key="correlation")
-        else:
-            evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"], key="correlation")
+        # Evaluation set selection
+        test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+        evaluation = st.selectbox(
+            ":mag_right: Evaluation set",
+            ["Training set", "Test set"] if test_exists else ["Training set"],
+            key="correlation"
+        )
 
-        if evaluation == "Training set":
-            path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
-            if os.path.exists(path_best_train):
-                features = pd.read_csv(path_best_train)
-            else:
-                model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-                features = model["train"]
-        else:
-            if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
-                features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
-            else:
-                features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
     with col2:
-        correlation_method = st.selectbox('Select correlation method:', ['Pearson', 'Spearman'])
+        # Correlation method selection
+        correlation_method = st.selectbox(
+            'Select correlation method:', 
+            ['Pearson', 'Spearman']
+        )
 
-        if correlation_method == 'Pearson':
-            correlation_matrix = features.corr(method='pearson')
-        else:
-            correlation_matrix = features.corr(method='spearman')
-        
-        corr_pairs = correlation_matrix.abs().unstack()
-        corr_pairs = corr_pairs[corr_pairs.index.get_level_values(0) != corr_pairs.index.get_level_values(1)]  # Remove self-correlations
+    # Load features with caching
+    features = load_features(st.session_state["job_path"], evaluation)
 
-        sorted_pairs = corr_pairs.sort_values(ascending=False)
+    # Compute correlation matrix with caching
+    with st.spinner('Computing correlations...'):
+        corr_matrix = compute_correlation_matrix(features, correlation_method)
+        top_corr_matrix = get_top_correlations(corr_matrix)
 
-        top_1000_pairs = sorted_pairs.head(1000)
-
-        top_features = np.unique(top_1000_pairs.index.get_level_values(0).tolist() + top_1000_pairs.index.get_level_values(1).tolist())
-
-        top_features = top_features[:1000]
-
-        top_1000_corr_matrix = correlation_matrix.loc[top_features, top_features]
+    # Display results
     with col1:
         st.markdown("**Correlation between features sorted by the correlation coefficient**")
-        correlation_df = pd.DataFrame(top_1000_corr_matrix.stack(), columns=['Correlation coefficient'])
-
-        # Reset the index to get the feature pairs as separate columns
-        correlation_df.reset_index(inplace=True)
-
-        correlation_df.columns = ['Feature 1', 'Feature 2', 'Correlation coefficient']
-
-        correlation_df = correlation_df.drop(correlation_df[correlation_df['Feature 1'] == correlation_df['Feature 2']].index)
-
-        # Sort the DataFrame by correlation coefficient in descending order
-        correlation_df = correlation_df.sort_values('Correlation coefficient', ascending=False).reset_index(drop=True)
-
-        # Display the sorted dataframe
+        correlation_df = create_correlation_df(top_corr_matrix)
         st.dataframe(correlation_df, hide_index=True, use_container_width=True)
-    with col2:
-        fig = px.imshow(top_1000_corr_matrix, x=top_1000_corr_matrix.columns, y=top_1000_corr_matrix.columns,
-                        color_continuous_scale='RdBu', title='Correlation heatmap')
-        
-        fig.update_traces(hovertemplate='Feature 1 (x-axis): %{x}<br>Feature 2 (y-axis): %{y}<br>Correlation: %{z}<extra></extra>')
 
-        fig.update_layout(height=500, margin=dict(t=30, b=50))
-        st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        with st.spinner('Generating heatmap...'):
+            fig = create_correlation_heatmap(top_corr_matrix)
+            st.plotly_chart(fig, use_container_width=True)
+
+@st.cache_data
+def load_training_data(job_path):
+    """Load and cache training data"""
+    path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
+    if os.path.exists(path_best_train):
+        features = pd.read_csv(path_best_train)
+        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))
+        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
+    else:
+        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        features = model["train"]
+        labels = pd.DataFrame(model["train_labels"], columns=["label"])
+        nameseqs = model["nameseq_train"]
+    return features, labels, nameseqs
+
+@st.cache_data
+def load_test_data(job_path):
+    """Load and cache test data"""
+    if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
+        features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
+        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))
+    else:
+        features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
+        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))
+    nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
+    return features, labels, nameseqs
+
+@st.cache_data(show_spinner=False)
+def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
+    """Create and cache the distribution plot"""
+    fig = ff.create_distplot(
+        fig_data,
+        unique_labels,
+        bin_size=bin_edges,
+        colors=color_map,
+        rug_text=fig_rug_text if fig_rug_text is not None else False,
+        histnorm="probability density",
+        show_rug=fig_rug_text is not None  # Only show rug if text is provided
+    )
+    
+    fig.update_layout(
+        title=f"Feature distribution for {selected_feature}",
+        xaxis_title=selected_feature,
+        yaxis_title="Density",
+        height=800,
+        margin=dict(t=30, b=50)
+    )
+
+    return fig
 
 def feature_distribution():
-    if os.path.exists(os.path.join(st.session_state["job_path"], "test")):
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
-                                help="Training set evaluated with 10-fold cross-validation", key="distribution")
-    else:
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
-                                help="Training set evaluated with 10-fold cross-validation", key="distribution")
+    # Determine evaluation set options
+    test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+    evaluation = st.selectbox(
+        ":mag_right: Evaluation set",
+        ["Training set", "Test set"] if test_exists else ["Training set"],
+        help="Training set evaluated with 10-fold cross-validation",
+        key="distribution"
+    )
 
+    # Load appropriate dataset with caching
     if evaluation == "Training set":
-        path_best_train = os.path.join(st.session_state["job_path"], "best_descriptors/best_train.csv")
-        if os.path.exists(path_best_train):
-            features = pd.read_csv(path_best_train)
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltrain.csv"))
-            nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtrain.csv"))
-        else:
-            model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-            features = model["train"]
-            labels = pd.DataFrame(model["train_labels"], columns=["label"])
-            nameseqs = model["nameseq_train"]
+        features, labels, nameseqs = load_training_data(st.session_state["job_path"])
     else:
-        if os.path.exists(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv")):
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/test_labels.csv"))
-        else:
-            features = pd.read_csv(os.path.join(st.session_state["job_path"], "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/flabeltest.csv"))
-        nameseqs = pd.read_csv(os.path.join(st.session_state["job_path"], "feat_extraction/fnameseqtest.csv"))
-    
+        features, labels, nameseqs = load_test_data(st.session_state["job_path"])
+
     col1, col2 = st.columns(2)
 
     # Select feature to plot
     with col1:
         selected_feature = st.selectbox("Select a feature", features.columns)
+        show_rug = st.checkbox("Show rug plot", value=False, 
+                             help="Toggle to show/hide individual data points along the axis")
 
     # Get unique labels and assign colors
     unique_labels = labels["label"].unique()
@@ -225,52 +341,98 @@ def feature_distribution():
     with col2:
         num_bins = st.slider("Number of bins", min_value=5, max_value=50, value=30)
 
-    with st.spinner('Loading...'):
+    # Prepare plot data
+    with st.spinner('Preparing data...'):
         fig_data = []
         fig_rug_text = []
-
         feature_data = features[selected_feature].values.astype(float)
 
         for label in unique_labels:
-            
             group_indices = list(chain(*(labels == label).values))
             group_data = feature_data[group_indices]
             fig_data.append(group_data)
-
-            group_names = nameseqs[group_indices]["nameseq"]
-            fig_rug_text.append(group_names.tolist())
+            if show_rug:  # Only prepare rug text if needed
+                group_names = nameseqs[group_indices]["nameseq"]
+                fig_rug_text.append(group_names.tolist())
+            else:
+                fig_rug_text.append(None)
 
         bin_edges = np.histogram(fig_data[0], bins=num_bins)[1]
 
-        fig = ff.create_distplot(
+    # Create and display plot
+    with st.spinner('Generating visualization...'):
+        fig = create_distplot(
             fig_data,
             unique_labels,
-            bin_size=bin_edges,
-            colors=color_map,
-            rug_text=fig_rug_text,
-            histnorm="probability density"
+            bin_edges,
+            color_map,
+            fig_rug_text if show_rug else None,  # Pass None if rug is disabled
+            selected_feature
         )
-
-        fig.update_layout(
-            title=f"Feature distribution for {selected_feature}",
-            xaxis_title=selected_feature,
-            yaxis_title="Density",
-            height=800,
-            margin=dict(t=30, b=50)
-        )
-
         st.plotly_chart(fig, use_container_width=True)
+
+@st.cache_data
+def load_data(path):
+    if path.endswith('.csv'):
+        return pd.read_csv(path)
+    elif path.endswith('.sav'):
+        return joblib.load(path)
+    return None
+
+@st.cache_data
+def create_confusion_matrix_figure(df):
+    labels = df.columns[1:-1].tolist()
+    values = df.iloc[0:-1, 1:-1].values.tolist()
+
+    # Create annotations for each cell
+    annotations = []
+    for i, row in enumerate(values):
+        for j, value in enumerate(row):
+            annotations.append(
+                dict(
+                    x=j,
+                    y=i,
+                    text=str(value),
+                    font=dict(size=16, color='black' if value < max(map(max, values))/2 else 'white'),
+                    showarrow=False
+                )
+            )
+
+    fig = go.Figure(data=go.Heatmap(
+        z=values,
+        x=labels,
+        y=labels,
+        colorscale='Blues',
+        text=values,
+        hoverinfo='text',
+        hovertext=[ [f"{value} {'correctly classified' if i==j else 'misclassified'}" 
+                for j, value in enumerate(row)] for i, row in enumerate(values) ],
+        hovertemplate='Predicted: %{x}<br>Actual: %{y}<br>%{hovertext}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title='Confusion Matrix',
+        xaxis_title='Predicted label',
+        yaxis_title='True label',
+        template='plotly_white',
+        margin=dict(t=30, b=50),
+        annotations=annotations
+    )
+    
+    return fig
 
 def performance_metrics():
     test_path = os.path.join(st.session_state["job_path"], "test")
-    if os.path.exists(os.path.join(test_path, "predicted.fasta")) or \
-        os.path.exists(os.path.join(test_path, "predicted.csv")) or \
-        not os.path.exists(test_path):
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set"],
-                        help="Training set evaluated with 10-fold cross-validation")
-    else:
-        evaluation = st.selectbox(":mag_right: Evaluation set", ["Training set", "Test set"],
-                                help="Training set evaluated with 10-fold cross-validation")
+    has_test_set = os.path.exists(os.path.join(test_path, "predicted.fasta")) or \
+                  (os.path.exists(os.path.join(test_path, "predicted.csv"))) or \
+                  (not os.path.exists(test_path))
+    
+    evaluation_options = ["Training set"] if has_test_set else ["Training set", "Test set"]
+    evaluation = st.selectbox(
+        ":mag_right: Evaluation set", 
+        evaluation_options,
+        help="Training set evaluated with 10-fold cross-validation"
+    )
 
     col1, col2 = st.columns(2)
 
@@ -278,122 +440,128 @@ def performance_metrics():
         if evaluation == "Training set":
             path_kfold = os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv")
             if os.path.exists(path_kfold):
-                df_cv = pd.read_csv(path_kfold)
+                df_cv = load_data(path_kfold)
             else:
-                df_cv = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["cross_validation"]
+                model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+                df_cv = model_data["cross_validation"]
 
+            metrics = []
             if "F1_micro" not in df_cv.columns:
-                st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
-                st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
-                st.markdown(f"""**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}""")
-                st.markdown(f"""**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}""")
-                st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
-                st.markdown(f"""**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}""")
+                metrics.extend([
+                    f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
+                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                    f"**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}",
+                    f"**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}",
+                    f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}",
+                    f"**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}"
+                ])
             else: 
-                st.markdown(f"""**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}""")
-                st.markdown(f"""**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}""")
-                st.markdown(f"""**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}""")
-                st.markdown(f"""**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}""")
-                st.markdown(f"""**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}""")
-                st.markdown(f"""**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}""")
+                metrics.extend([
+                    f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
+                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                    f"**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}",
+                    f"**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}",
+                    f"**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}",
+                    f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}"
+                ])
+            
+            for metric in metrics:
+                st.markdown(metric)
         else:
-            df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+            df_report = load_data(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+            df_report = df_report.rename(columns={"Unnamed: 0": ""})
+
             st.dataframe(df_report, hide_index=True, use_container_width=True)
+    
     with col2:
         if evaluation == "Training set":
             path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
             if os.path.exists(path_matrix):
-                df = pd.read_csv(path_matrix)
+                df = load_data(path_matrix)
             else:
-                df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["confusion_matrix"]
-
-            # Extract labels and confusion matrix values
-            labels = df.columns[1:-1].tolist()
-            
-            values = df.iloc[0:-1, 1:-1].values.tolist()
-
-            fig = go.Figure(data=go.Heatmap(
-                z=values,
-                x=labels,
-                y=labels,
-                colorscale='Blues'
-            ))
-
-            fig.update_layout(
-                title='Confusion Matrix',
-                xaxis_title='Predicted label',
-                yaxis_title='True label',
-                margin=dict(t=30, b=50)
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
+                model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+                df = model_data["confusion_matrix"]
         else:
-            df = pd.read_csv(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+            df = load_data(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+        
+        fig = create_confusion_matrix_figure(df)
 
-            # Extract labels and confusion matrix values
-            labels = df.columns[1:-1].tolist()
-            
-            values = df.iloc[0:-1, 1:-1].values.tolist()
-
-            fig = go.Figure(data=go.Heatmap(
-                z=values,
-                x=labels,
-                y=labels,
-                colorscale='Blues'
-            ))
-
-            fig.update_layout(
-                title='Confusion Matrix',
-                xaxis_title='Predicted label',
-                yaxis_title='True label',
-                margin=dict(t=30, b=50)
-            )
-
+        with st.spinner('Loading visualization...'):
             st.plotly_chart(fig, use_container_width=True)
+
+@st.cache_data
+def load_predictions(job_path):
+    """Load and preprocess predictions data with caching"""
+    predictions = pd.read_csv(os.path.join(job_path, "test_predictions.csv"))
+    predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1] * 100
+    return predictions
 
 def show_predictions():
-    predictions = pd.read_csv(os.path.join(st.session_state["job_path"], "test_predictions.csv"))
-    predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1]*100
+    # Load data with caching
+    predictions = load_predictions(st.session_state["job_path"])
     labels = predictions.columns[1:-1]
+    
+    # Create column config once
+    column_config = {
+        label: st.column_config.ProgressColumn(
+            help="Label probability",
+            format="%.2f%%",
+            min_value=0,
+            max_value=100
+        ) for label in labels
+    }
+    
+    # Display with loading indicator
+    with st.spinner('Displaying predictions...'):
+        st.dataframe(
+            predictions.rename(columns={"nameseq": "Sample name"}),
+            hide_index=True,
+            height=500,
+            column_config=column_config,
+            use_container_width=True
+        )
 
-    st.dataframe(
-        predictions,
-        hide_index=True,
-        height=500,
-        column_config = {label: st.column_config.ProgressColumn(
-                            help="Label probability",
-                            format="%.2f%%",
-                            min_value=0,
-                            max_value=100
-                        ) for label in labels},
-        use_container_width=True
-    )
-
-def feature_importance():
-    path_feat = os.path.join(st.session_state["job_path"], "feature_importance.csv")
+@st.cache_data
+def load_feature_importance(job_path):
+    """Load and cache feature importance data"""
+    path_feat = os.path.join(job_path, "feature_importance.csv")
     if os.path.exists(path_feat):
-        df = pd.read_csv(path_feat, sep='\t')
+        return pd.read_csv(path_feat, sep='\t')
     else:
-        df = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["feature_importance"]
+        model_data = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        return model_data["feature_importance"]
 
-    features = df["Feature"]#[::-1]
-    score_importances = df["Importance"]#[::-1]
-
+@st.cache_data
+def create_feature_importance_figure(df):
+    """Create and cache the feature importance plot"""
     fig = go.Figure(data=go.Bar(
-        x=features,
-        y=score_importances,
-        marker=dict(color=score_importances, colorscale='blues'),
+        x=df["Feature"],
+        y=df["Importance"],
+        marker=dict(color=df["Importance"], colorscale='blues'),
         hovertemplate='Feature: %{x}<br>Importance: %{y}<extra></extra>'
     ))
-
+    
     fig.update_layout(
         xaxis_title="Features",
         yaxis_title="Importance",
         margin=dict(t=0, b=50)
     )
+    
+    return fig
 
-    st.markdown("**Importance of features regarding model training**", help="It is possible to zoom in to visualize features properly.")
-    st.plotly_chart(fig, use_container_width=True)
+def feature_importance():
+    # Load data with caching
+    df = load_feature_importance(st.session_state["job_path"])
+    
+    # Create plot with caching
+    fig = create_feature_importance_figure(df)
+    
+    # Display with loading indicator
+    st.markdown("**Importance of features regarding model training**", 
+               help="It is possible to zoom in to visualize features properly.")
+    
+    with st.spinner('Rendering feature importance...'):
+        st.plotly_chart(fig, use_container_width=True)
 
 def model_information():
 
