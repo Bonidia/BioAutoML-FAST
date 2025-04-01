@@ -10,12 +10,18 @@ import os
 from secrets import choice
 import string
 from queue import Queue
-from threading import Thread
-from streamlit.runtime.scriptrunner import add_script_run_ctx
+from threading import Thread, Lock
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 import utils
 import base64
 import joblib
 import shutil
+import time
+
+# Global variables for thread management
+job_queue = Queue()
+queue_lock = Lock()
+queue_thread = None
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -189,40 +195,6 @@ def test_extraction(job_path, test_data, model, data_type):
         df.to_csv(dataset, index=False)
         datasets.append(dataset)
 
-        # dataset = feat_path + '/EIIP.csv'
-
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '7'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-        # colnames = ['EIIP_' + str(i) for i in range(0, max(col_count))]
-
-        # df = pd.read_csv(dataset, names=colnames, header=None)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
-
-        # dataset = feat_path + '/AAAF.csv'
-
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '1'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-        # colnames = ['AccumulatedFrequency_' + str(i) for i in range(0, max(col_count))]
-
-        # df = pd.read_csv(dataset, names=colnames, header=None)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
-
     if datasets:
         datasets = list(dict.fromkeys(datasets))
         dataframes = pd.concat([pd.read_csv(f) for f in datasets], axis=1)
@@ -247,311 +219,330 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
+def worker():
+    """Worker thread that processes jobs from the queue."""
+    ctx = get_script_run_ctx()
+    if ctx is None:
+        return
+    
+    while True:
+        with queue_lock:
+            if not job_queue.empty():
+                job_data = job_queue.get()
+                
+                try:
+                    # Unpack job data
+                    (train_files, test_files, job_path, data_type, 
+                     training, testing, classifier, imbalance, fselection) = job_data
+                    
+                    # Process the job
+                    submit_job(train_files, test_files, job_path, data_type, 
+                              training, testing, classifier, imbalance, fselection)
+                
+                except Exception as e:
+                    print(f"Error processing job: {e}")
+                
+                finally:
+                    job_queue.task_done()
+        
+        time.sleep(1)  # Prevent busy waiting
+
 def submit_job(train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection):
+    """Process a single job - modified to be thread-safe."""
+    try:
+        if training == "Training set":
+            train_path = os.path.join(job_path, "train")
+            os.makedirs(train_path)
 
-    if training == "Training set":
-        train_path = os.path.join(job_path, "train")
-        os.makedirs(train_path)
+            if data_type == "Structured data":
+                save_path = os.path.join(train_path, "train.csv")
+                with open(save_path, mode="wb") as f:
+                    f.write(train_files.getvalue())
 
-        if data_type == "Structured data":
-            save_path = os.path.join(train_path, "train.csv")
+                df_train = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                df_train = df_train.rename({"index": "nameseq"})
+                df_labels = df_train.select(["label"])
+                df_index = df_train.select(["nameseq"])
+                df_train = df_train.drop(["nameseq", "label"])
+
+                feat_path = os.path.join(job_path, "feat_extraction")
+                os.makedirs(feat_path)
+                
+                df_train.write_csv(os.path.join(feat_path, "train.csv"))
+                df_labels.write_csv(os.path.join(feat_path, "train_labels.csv"))
+                df_index.write_csv(os.path.join(feat_path, "fnameseqtrain.csv"))
+                
+                if classifier == "CatBoost":
+                    classifier_option = 0
+                elif classifier == "Random Forest":
+                    classifier_option = 1
+                elif classifier == "LightGBM":
+                    classifier_option = 2
+                elif classifier == "XGBoost":
+                    classifier_option = 3
+
+                command = [
+                    "python",
+                    "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
+                    "--imbalance",
+                    "1" if imbalance else "0",
+                    "--fselection",
+                    "1" if fselection else "0",
+                    "--train", os.path.join(feat_path, "train.csv"),
+                    "--train_label", os.path.join(feat_path, "train_labels.csv"),
+                    "--classifier", str(classifier_option),
+                    "-nf", "True",
+                ]
+
+                if test_files:
+                    test_path = os.path.join(job_path, "test")
+                    os.makedirs(test_path)
+
+                    if testing == "Test set":
+                        save_path = os.path.join(test_path, "test.csv")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                        df_test = df_test.rename({"index": "nameseq"})
+                        df_labels = df_test.select(["label"])
+                        df_index = df_test.select(["nameseq"])
+                        df_test = df_test.drop(["nameseq", "label"])
+
+                        df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                        df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                        df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+                        
+                        command.append("--test")
+                        command.append(os.path.join(feat_path, "test.csv"))
+                        command.append("--test_label")
+                        command.append(os.path.join(feat_path, "test_labels.csv"))
+                        command.append("--test_nameseq")
+                        command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                    else:
+                        save_path = os.path.join(test_path, "predicted.csv")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        df_test = pd.read_csv(save_path).reset_index()
+                        df_test["label"] = "Predicted"
+                        df_test = pl.from_pandas(df_test)
+                        df_index = df_test.select(["index"])
+                        df_labels = df_test.select(["label"])
+                        df_test = df_test.drop(["index", "label"])
+
+                        df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                        df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                        df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                        command.append("--test")
+                        command.append(os.path.join(feat_path, "test.csv"))
+                        command.append("--test_label")
+                        command.append(os.path.join(feat_path, "test_labels.csv"))
+                        command.append("--test_nameseq")
+                        command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+
+                command.extend(["--n_cpu", "-1"])
+                command.extend(["--output", job_path])
+
+                subprocess.run(command, cwd="..")
+
+                utils.summary_stats(os.path.join(job_path, "train"), data_type, job_path, True)
+
+                if test_files:
+                    utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
+            
+                model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+                model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
+                joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+            else:
+                for file in train_files:
+                    save_path = os.path.join(train_path, file.name)
+                    with open(save_path, mode="wb") as f:
+                        f.write(file.getvalue())
+                
+                train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
+            
+                command = [
+                    "python",
+                    "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
+                    "--imbalance",
+                    "1" if imbalance else "0",
+                    "--fselection",
+                    "1" if fselection else "0",
+                    "--fasta_train",
+                ]
+
+                command.extend(train_fasta.values())
+                command.append("--fasta_label_train")
+                command.extend(train_fasta.keys())
+
+                if test_files:
+                    test_path = os.path.join(job_path, "test")
+                    os.makedirs(test_path)
+
+                    if testing == "Test set":
+                        for file in test_files:
+                            save_path = os.path.join(test_path, file.name)
+                            with open(save_path, mode="wb") as f:
+                                f.write(file.getvalue())
+
+                        test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                        command.append("--fasta_test")
+                        command.extend(test_fasta.values())
+                        command.append("--fasta_label_test")
+                        command.extend(test_fasta.keys())
+                    else:
+                        save_path = os.path.join(test_path, "predicted.fasta")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        command.append("--fasta_test")
+                        command.append(save_path)
+                        command.append("--fasta_label_test")
+                        command.append("Predicted")
+
+                command.extend(["--n_cpu", "-1"])
+                command.extend(["--output", job_path])
+
+                subprocess.run(command, cwd="..")
+
+                utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), data_type, job_path, False)
+
+                if test_files:
+                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+            
+                model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+                model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
+                joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+
+        elif training == "Load model":
+            save_path = os.path.join(job_path, "trained_model.sav")
             with open(save_path, mode="wb") as f:
                 f.write(train_files.getvalue())
 
-            df_train = pl.from_pandas(pd.read_csv(save_path).reset_index())
-            df_train = df_train.rename({"index": "nameseq"})
-            df_labels = df_train.select(["label"])
-            df_index = df_train.select(["nameseq"])
-            df_train = df_train.drop(["nameseq", "label"])
-
-            feat_path = os.path.join(job_path, "feat_extraction")
-            os.makedirs(feat_path)
-            
-            df_train.write_csv(os.path.join(feat_path, "train.csv"))
-            df_labels.write_csv(os.path.join(feat_path, "train_labels.csv"))
-            df_index.write_csv(os.path.join(feat_path, "fnameseqtrain.csv"))
-            
-            if classifier == "CatBoost":
-                classifier_option = 0
-            elif classifier == "Random Forest":
-                classifier_option = 1
-            elif classifier == "LightGBM":
-                classifier_option = 2
-            elif classifier == "XGBoost":
-                classifier_option = 3
+            model = joblib.load(save_path)
 
             command = [
                 "python",
-                "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
-                "--imbalance",
-                "1" if imbalance else "0",
-                "--fselection",
-                "1" if fselection else "0",
-                "--train", os.path.join(feat_path, "train.csv"),
-                "--train_label", os.path.join(feat_path, "train_labels.csv"),
-                "--classifier", str(classifier_option),
+                "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
+                "-path_model", save_path,
                 "-nf", "True",
             ]
 
             if test_files:
-                test_path = os.path.join(job_path, "test")
-                os.makedirs(test_path)
+                if data_type == "Structured data":
+                    test_path = os.path.join(job_path, "test")
+                    os.makedirs(test_path)
 
-                if testing == "Test set":
-                    save_path = os.path.join(test_path, "test.csv")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
-                    df_test = df_test.rename({"index": "nameseq"})
-                    df_labels = df_test.select(["label"])
-                    df_index = df_test.select(["nameseq"])
-                    df_test = df_test.drop(["nameseq", "label"])
+                    feat_path = os.path.join(job_path, "feat_extraction")
+                    os.makedirs(feat_path)
 
-                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
-                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
-                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
-                    
-                    command.append("--test")
-                    command.append(os.path.join(feat_path, "test.csv"))
-                    command.append("--test_label")
-                    command.append(os.path.join(feat_path, "test_labels.csv"))
-                    command.append("--test_nameseq")
-                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                    if testing == "Test set":
+                        save_path = os.path.join(test_path, "test.csv")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                        df_test = df_test.rename({"index": "nameseq"})
+                        df_labels = df_test.select(["label"])
+                        df_index = df_test.select(["nameseq"])
+                        df_test = df_test.drop(["nameseq", "label"])
+
+                        df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                        df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                        df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+                        
+                        command.append("--test")
+                        command.append(os.path.join(feat_path, "test.csv"))
+                        command.append("--test_label")
+                        command.append(os.path.join(feat_path, "test_labels.csv"))
+                        command.append("--test_nameseq")
+                        command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                    else:
+                        save_path = os.path.join(test_path, "predicted.csv")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
+                        df_test = df_test.rename({"index": "nameseq"})
+                        df_test = df_test.with_columns(pl.lit("Predicted").alias("label"))
+                        df_index = df_test.select(["nameseq"])
+                        df_labels = df_test.select(["label"])
+                        df_test = df_test.drop(["nameseq", "label"])
+
+                        df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
+                        df_test.write_csv(os.path.join(feat_path, "test.csv"))
+                        df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                        command.append("--test")
+                        command.append(os.path.join(feat_path, "test.csv"))
+                        command.append("--test_label")
+                        command.append(os.path.join(feat_path, "test_labels.csv"))
+                        command.append("--test_nameseq")
+                        command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+
+                    utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
                 else:
-                    save_path = os.path.join(test_path, "predicted.csv")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    df_test = pd.read_csv(save_path).reset_index()
-                    df_test["label"] = "Predicted"
-                    df_test = pl.from_pandas(df_test)
-                    df_index = df_test.select(["index"])
-                    df_labels = df_test.select(["label"])
-                    df_test = df_test.drop(["index", "label"])
+                    test_path = os.path.join(job_path, "test")
+                    os.makedirs(test_path)
 
-                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
-                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
-                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+                    if testing == "Test set":
+                        for file in test_files:
+                            save_path = os.path.join(test_path, file.name)
+                            with open(save_path, mode="wb") as f:
+                                f.write(file.getvalue())
 
-                    command.append("--test")
-                    command.append(os.path.join(feat_path, "test.csv"))
-                    command.append("--test_label")
-                    command.append(os.path.join(feat_path, "test_labels.csv"))
-                    command.append("--test_nameseq")
-                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
+                        test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                        test_extraction(job_path, test_fasta, model, data_type)
+
+                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+
+                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                    else:
+                        save_path = os.path.join(test_path, "predicted.fasta")
+                        with open(save_path, mode="wb") as f:
+                            f.write(test_files.getvalue())
+                        
+                        test_fasta = {"Predicted" : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
+
+                        test_extraction(job_path, test_fasta, model, data_type)
+
+                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+
+                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
 
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
 
             subprocess.run(command, cwd="..")
 
-            utils.summary_stats(os.path.join(job_path, "train"), data_type, job_path, True)
+    except Exception as e:
+        print(f"Error in job processing: {e}")
 
-            if test_files:
-                utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
-    
-            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-            model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
-            joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
-        else:
-            for file in train_files:
-                save_path = os.path.join(train_path, file.name)
-                with open(save_path, mode="wb") as f:
-                    f.write(file.getvalue())
-            
-            train_fasta = {os.path.splitext(f)[0] : os.path.join(train_path, f) for f in os.listdir(train_path) if os.path.isfile(os.path.join(train_path, f))}
-        
-            command = [
-                "python",
-                "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
-                "--imbalance",
-                "1" if imbalance else "0",
-                "--fselection",
-                "1" if fselection else "0",
-                "--fasta_train",
-            ]
-
-            command.extend(train_fasta.values())
-            command.append("--fasta_label_train")
-            command.extend(train_fasta.keys())
-
-            if test_files:
-                test_path = os.path.join(job_path, "test")
-                os.makedirs(test_path)
-
-                if testing == "Test set":
-                    for file in test_files:
-                        save_path = os.path.join(test_path, file.name)
-                        with open(save_path, mode="wb") as f:
-                            f.write(file.getvalue())
-
-                    test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
-
-                    command.append("--fasta_test")
-                    command.extend(test_fasta.values())
-                    command.append("--fasta_label_test")
-                    command.extend(test_fasta.keys())
-                else:
-                    save_path = os.path.join(test_path, "predicted.fasta")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    command.append("--fasta_test")
-                    command.append(save_path)
-                    command.append("--fasta_label_test")
-                    command.append("Predicted")
-
-            command.extend(["--n_cpu", "-1"])
-            command.extend(["--output", job_path])
-
-            subprocess.run(command, cwd="..")
-
-            utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), data_type, job_path, False)
-
-            if test_files:
-                utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
-    
-            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-            model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
-            joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
-
-    elif training == "Load model":
-        save_path = os.path.join(job_path, "trained_model.sav")
-        with open(save_path, mode="wb") as f:
-            f.write(train_files.getvalue())
-
-        model = joblib.load(save_path)
-
-        command = [
-            "python",
-            "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-            "-path_model", save_path,
-            "-nf", "True",
-        ]
-
-        if test_files:
-            if data_type == "Structured data":
-                test_path = os.path.join(job_path, "test")
-                os.makedirs(test_path)
-
-                feat_path = os.path.join(job_path, "feat_extraction")
-                os.makedirs(feat_path)
-
-                if testing == "Test set":
-                    save_path = os.path.join(test_path, "test.csv")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
-                    df_test = df_test.rename({"index": "nameseq"})
-                    df_labels = df_test.select(["label"])
-                    df_index = df_test.select(["nameseq"])
-                    df_test = df_test.drop(["nameseq", "label"])
-
-                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
-                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
-                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
-                    
-                    command.append("--test")
-                    command.append(os.path.join(feat_path, "test.csv"))
-                    command.append("--test_label")
-                    command.append(os.path.join(feat_path, "test_labels.csv"))
-                    command.append("--test_nameseq")
-                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
-                else:
-                    save_path = os.path.join(test_path, "predicted.csv")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
-                    df_test = df_test.rename({"index": "nameseq"})
-                    df_test = df_test.with_columns(pl.lit("Predicted").alias("label"))
-                    df_index = df_test.select(["nameseq"])
-                    df_labels = df_test.select(["label"])
-                    df_test = df_test.drop(["nameseq", "label"])
-
-                    df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
-                    df_test.write_csv(os.path.join(feat_path, "test.csv"))
-                    df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
-
-                    command.append("--test")
-                    command.append(os.path.join(feat_path, "test.csv"))
-                    command.append("--test_label")
-                    command.append(os.path.join(feat_path, "test_labels.csv"))
-                    command.append("--test_nameseq")
-                    command.append(os.path.join(feat_path, "fnameseqtest.csv"))
-
-                utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
-            else:
-                # test_path = os.path.join(job_path, "test")
-                # os.makedirs(test_path)
-
-                test_path = os.path.join(job_path, "test")
-                os.makedirs(test_path)
-
-                if testing == "Test set":
-                    for file in test_files:
-                        save_path = os.path.join(test_path, file.name)
-                        with open(save_path, mode="wb") as f:
-                            f.write(file.getvalue())
-
-                    test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
-
-                    test_extraction(job_path, test_fasta, model, data_type)
-
-                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
-
-                    command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                    command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                    command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
-                else:
-                    save_path = os.path.join(test_path, "predicted.fasta")
-                    with open(save_path, mode="wb") as f:
-                        f.write(test_files.getvalue())
-                    
-                    test_fasta = {"Predicted" : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
-
-                    test_extraction(job_path, test_fasta, model, data_type)
-
-                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
-
-                    command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                    command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                    command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
-
-        command.extend(["--n_cpu", "-1"])
-        command.extend(["--output", job_path])
-
-        subprocess.run(command, cwd="..")
-
-def queue_listener():
-    while True:
-        if not job_queue.empty():
-            train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection = job_queue.get()
-            submit_job(train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection)
-            
 def runUI():
-    global job_queue
-
-    job_queue = Queue()
-
-    if not st.session_state["queue"]:
-        queue_thread = Thread(target=queue_listener)
+    """Main Streamlit UI function with thread management."""
+    global job_queue, queue_thread
+    
+    if "queue_started" in st.session_state:
+        st.session_state.queue_started = False
+        
+    # Start the worker thread if not already running
+    if not st.session_state.queue_started:
+        queue_thread = Thread(target=worker, daemon=True)
         add_script_run_ctx(queue_thread)
         queue_thread.start()
-        st.session_state["queue"] = True
+        st.session_state.queue_started = True
     
     with open("imgs/logo.png", "rb") as file_:
         contents = file_.read()
         data_url = base64.b64encode(contents).decode("utf-8")
-
-    # st.markdown(f"""
-    #     <div style='text-align: center;'>
-    #         <img src="data:image/png;base64,{data_url}" alt="logo" width="300">
-    #         <h5 style="color:gray">Democratizing Machine Learning in Life Sciences</h5>
-    #     </div>
-    # """, unsafe_allow_html=True)
 
     st.markdown(f"""
         <div style='text-align: center;'>
@@ -559,18 +550,6 @@ def runUI():
             <h5 style="color:gray">Empowering Researchers with Machine Learning</h5>
         </div>
     """, unsafe_allow_html=True)
-
-    # st.info("""**BioAutoML** is a software package that automates the machine learning (ML) 
-    #         pipeline for analyzing biological sequence data. It addresses the challenge 
-    #         of feature engineering, ML algorithm selection, and hyperparameter tuning, 
-    #         which are typically manual and time-consuming processes requiring 
-    #         comprehensive domain knowledge. BioAutoML was experimentally evaluated in 
-    #         two scenarios: predicting the three principal classes of noncoding RNAs 
-    #         (ncRNAs) and the eight categories of ncRNAs in bacteria, including 
-    #         housekeeping and regulatory types. The package's predictive performance 
-    #         was compared to two other AutoML tools, RECIPE and TPOT. The results 
-    #         showed that BioAutoML can accelerate new studies, reduce the cost of feature 
-    #         engineering processing, and maintain or improve predictive performance.""")
 
     st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
      BioAutoML, optimized for speed and enhanced functionality. It allows
@@ -720,7 +699,13 @@ def runUI():
             tsv_path = os.path.join(job_path, "job_info.tsv")
             df_job_data.write_csv(tsv_path, separator='\t')
 
-            job_queue.put((train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection))
-
+            # Add job to the queue with thread safety
+            with queue_lock:
+                job_queue.put((train_files, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection))
+            
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
+
+# Run the Streamlit app
+if __name__ == "__main__":
+    runUI()

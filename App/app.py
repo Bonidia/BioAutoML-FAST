@@ -18,8 +18,9 @@ def runUI():
     icons=["house", "gear-wide", "diagram-2", "info-circle"], 
     menu_icon="cast", default_index=0, orientation="horizontal")
 
-    if "queue" not in st.session_state:
-        st.session_state["queue"] = False
+    # Initialize session state for thread management
+    if "queue_started" not in st.session_state:
+        st.session_state.queue_started = False
 
     if page == "Home":
         modules.home.runUI()

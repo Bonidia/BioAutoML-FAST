@@ -395,7 +395,7 @@ def runUI():
     global job_queue, queue_thread
     
     # Initialize session state for thread management
-    if "queue_started" not in st.session_state:
+    if "queue_started" in st.session_state:
         st.session_state.queue_started = False
     
     # Start the worker thread if not already running

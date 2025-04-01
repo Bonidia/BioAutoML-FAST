@@ -472,9 +472,6 @@ def model_information():
                 # fig.savefig('rf_individualtree.png')
 
 def runUI():
-    if not st.session_state["queue"]:
-        st.session_state["queue"] = True
-
     def get_job_example():
         st.session_state["job_input"] = "SuKEVriL0frtqHPU"
 
