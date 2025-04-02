@@ -406,7 +406,8 @@ def runUI():
         st.session_state.queue_started = True
     
     model = st.selectbox("Select trained model", [
-                "Non-classical secreted proteins"])
+                "Non-classical secreted proteins",
+                "Phage virion proteins"])
     job_id = ""
     
     if model == "Non-classical secreted proteins":
@@ -420,9 +421,19 @@ def runUI():
 
                 You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    else:
-        st.info("test")
+    elif model == "Phage virion proteins":
+        dataset_id = "dataset2_phasit_protein"
+        st.info(f"""
+                **Data set from the following paper:** Charoenkwan, P., 
+                Nantasenamat, C., Hasan, M. M., & Shoombuatong, W. (2020). 
+                Meta-iPVP: a sequence-based meta-predictor for improving 
+                the prediction of phage virion proteins using effective 
+                feature representation. Journal of Computer-Aided Molecular 
+                Design, 34(10), 1105-1116.
 
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+        
     queue_info = st.container()
 
     with st.form("repo_submit", clear_on_submit=True):

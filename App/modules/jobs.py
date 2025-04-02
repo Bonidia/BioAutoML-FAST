@@ -102,10 +102,13 @@ def dimensionality_reduction():
 
     with dim_col1:
         # Evaluation set selection
-        test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+    
+        has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
+    
         evaluation = st.selectbox(
             ":mag_right: Evaluation set",
-            ["Training set", "Test set"] if test_exists else ["Training set"],
+            ["Training set", "Test set"] if has_test_set else ["Training set"],
             key="reduction"
         )
 
@@ -227,10 +230,13 @@ def feature_correlation():
 
     with col1:
         # Evaluation set selection
-        test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+    
+        has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
+    
         evaluation = st.selectbox(
             ":mag_right: Evaluation set",
-            ["Training set", "Test set"] if test_exists else ["Training set"],
+            ["Training set", "Test set"] if has_test_set else ["Training set"],
             key="correlation"
         )
 
@@ -312,10 +318,13 @@ def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text,
 
 def feature_distribution():
     # Determine evaluation set options
-    test_exists = os.path.exists(os.path.join(st.session_state["job_path"], "test"))
+    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+    
+    has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
+    
     evaluation = st.selectbox(
         ":mag_right: Evaluation set",
-        ["Training set", "Test set"] if test_exists else ["Training set"],
+        ["Training set", "Test set"] if has_test_set else ["Training set"],
         help="Training set evaluated with 10-fold cross-validation",
         key="distribution"
     )
@@ -422,12 +431,11 @@ def create_confusion_matrix_figure(df):
     return fig
 
 def performance_metrics():
-    test_path = os.path.join(st.session_state["job_path"], "test")
-    has_test_set = os.path.exists(os.path.join(test_path, "predicted.fasta")) or \
-                  (os.path.exists(os.path.join(test_path, "predicted.csv"))) or \
-                  (not os.path.exists(test_path))
+    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
     
-    evaluation_options = ["Training set"] if has_test_set else ["Training set", "Test set"]
+    has_test_set = True if df_job_info["testing_set"].item() == "Test set" else False
+    
+    evaluation_options = ["Training set", "Test set"] if has_test_set else ["Training set"]
     evaluation = st.selectbox(
         ":mag_right: Evaluation set", 
         evaluation_options,
@@ -662,7 +670,7 @@ def runUI():
             if os.path.exists(os.path.join(predict_path, job_id)):
                 job_path = os.path.join(predict_path, job_id)
             elif os.path.exists(os.path.join(dataset_path, job_id)):
-                job_path = os.path.join(dataset_path, job_id)
+                job_path = os.path.join(dataset_path, job_id, "runs", "run_1")
 
             if job_path:
                 test_fold = os.path.join(job_path, "test")

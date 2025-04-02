@@ -610,7 +610,7 @@ if __name__ == '__main__':
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
 	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
 	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
-	parser.add_argument('-estimations', '--estimations', default=10, help='number of estimations - BioAutoML - default = 100')
+	parser.add_argument('-estimations', '--estimations', default=50, help='number of estimations - BioAutoML - default = 50')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 

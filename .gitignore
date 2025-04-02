@@ -1,8 +1,8 @@
 *__pycache__/
 experiments/
 .idea/
-feat_extraction
 catboost_info
 test.ipynb
 work
 .nextflow
+runs
