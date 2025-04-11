@@ -1,0 +1,34 @@
+[project]
+name = "BioAutoML-FAST"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "biopython>=1.85",
+    "catboost>=1.2.7",
+    "hyperopt>=0.2.7",
+    "igraph>=0.11.8",
+    "imbalanced-learn>=0.13.0",
+    "ipykernel>=6.29.5",
+    "lightgbm>=4.6.0",
+    "networkx>=3.4.2",
+    "optuna>=4.2.1",
+    "pandas>=2.2.3",
+    "plotly>=6.0.1",
+    "polars>=1.27.0",
+    "pygad>=3.4.0",
+    "reportlab>=4.3.1",
+    "requests>=2.32.3",
+    "scikit-learn>=1.6.1",
+    "setuptools>=78.1.0",
+    "shap>=0.47.1",
+    "sklearn-genetic>=0.6.0",
+    "sklearn-genetic-opt>=0.11.1",
+    "streamlit>=1.44.1",
+    "streamlit-option-menu>=0.4.0",
+    "tpot>=0.12.2",
+    "tqdm>=4.67.1",
+    "umap-learn>=0.5.7",
+    "xgboost>=3.0.0",
+]

@@ -793,12 +793,12 @@ if __name__ == '__main__':
 	print('\n')
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-fasta_train', '--fasta_train', nargs='+',
-						help='fasta format file, e.g., fasta/ncRNA.fasta'
-							 'fasta/lncRNA.fasta fasta/circRNA.fasta')
+						help='fasta format file, e.g., training/ncRNA.fasta'
+							 'training/lncRNA.fasta training/circRNA.fasta')
 	parser.add_argument('-fasta_label_train', '--fasta_label_train', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-fasta_test', '--fasta_test', nargs='+',
-						help='fasta format file, e.g., fasta/ncRNA fasta/lncRNA fasta/circRNA')
+						help='fasta format file, e.g., testing/ncRNA.fasta testing/lncRNA.fasta testing/circRNA.fasta')
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')

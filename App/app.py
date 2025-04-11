@@ -8,9 +8,11 @@ def runUI():
     
     curr_dir = os.getcwd()
 
-    root_dir = curr_dir.split("BioAutoML-Fast")[0] + "BioAutoML-Fast"
+    # print(curr_dir)
 
-    os.chdir(os.path.join(root_dir, "App"))
+    # root_dir = curr_dir.split("BioAutoML-Fast")[0] + "BioAutoML-Fast"
+
+    # os.chdir(os.path.join(curr_dir, "App"))
 
     utils.inject_css()
 
