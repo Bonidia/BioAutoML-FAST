@@ -259,13 +259,13 @@ def feature_engineering_ga(train, train_labels, test, foutput):
     # btrain = selection.transform(df_x)
     btrain = df_x[:, index]
     path_btrain = path_bio + '/best_train.csv'
-    btrain.write_csv(path_btrain, index=False, header=True)
+    btrain.write_csv(path_btrain, index=False)
     
     if test != '':
         # btest = selection.transform(df_test)
         btest = df_test[:, index]
         path_btest = path_bio + '/best_test.csv'
-        btest.write_csv(path_btest, index=False, header=True)
+        btest.write_csv(path_btest, index=False)
     else:
         btest, path_btest = '', ''
 
@@ -383,94 +383,86 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 	
 	return metric
 
-
 def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
-
-	"""Automated Feature Engineering - Genetic Algorithm"""
-
-	print('Automated Feature Engineering - Genetic Algorithm')
+    """Automated Feature Engineering - Genetic Algorithm"""
+    print('Automated Feature Engineering - Genetic Algorithm')
  
-	global df_x, y, model
+    global df_x, y, model
 
-	le = LabelEncoder()
-	df_x = pl.read_csv(train)
-	y = le.fit_transform(pl.read_csv(train_labels))
-	
-	path_bio = foutput + '/best_descriptors'
-	if not os.path.exists(path_bio):
-		os.mkdir(path_bio)
+    le = LabelEncoder()
+    df_x = pd.read_csv(train)
+    y = le.fit_transform(pd.read_csv(train_labels).values.ravel())
+    
+    path_bio = foutput + '/best_descriptors'
+    if not os.path.exists(path_bio):
+        os.mkdir(path_bio)
 
+    classifier = best_algorithms(df_x, y)
+    if classifier == 0:
+        model = CatBoostClassifier(thread_count=1, nan_mode='Max',
+                                 logging_level='Silent', random_state=63)
+    elif classifier == 1:
+        model = RandomForestClassifier(n_jobs=1, random_state=63)
+    elif classifier == 2:
+        model = lgb.LGBMClassifier(n_jobs=1, random_state=63)
+    else:
+        model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, 
+                                 n_jobs=1, random_state=63)
+
+    print('Checking the best descriptors...')
+    ga_instance = pygad.GA(num_generations=estimations,
+                         num_parents_mating=4,
+                         fitness_func=objective_ga_pygad,
+                         sol_per_pop=20,
+                         num_genes=12,
+                         gene_type=int,
+                         init_range_low=0,
+                         init_range_high=2,
+                         parent_selection_type="tournament",
+                         keep_parents=8,
+                         K_tournament=4,
+                         crossover_type="two_points",
+                         mutation_type="random",
+                         suppress_warnings=True,
+                         stop_criteria=["saturate_10"],
+                         parallel_processing=n_cpu)
+    ga_instance.run()
+    best = ga_instance.best_solution()[0]
+    print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=best))
+    print("Best fitness value reached after {best_solution_generation} generations.".format(
+        best_solution_generation=ga_instance.best_solution_generation))
  
-	classifier = best_algorithms(df_x, y)
-	if classifier == 0:
-		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
-                                   logging_level='Silent', random_state=63)
-	elif classifier == 1:
-		model = RandomForestClassifier(n_jobs=1, random_state=63)
-        
-	elif classifier == 2:
-		model = lgb.LGBMClassifier(n_jobs=1, random_state=63)
-	else:
-		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=1, random_state=63)
+    index = list()
+    descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
+                   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+                   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
+                   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
+                   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
+                   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
 
-	print('Checking the best descriptors...')
-	ga_instance = pygad.GA(num_generations=estimations,
-                       num_parents_mating=4,
-                       fitness_func=objective_ga_pygad,
-                       sol_per_pop=20,
-                       num_genes=12,
-                       gene_type=int,
-                       init_range_low=0,
-                       init_range_high=2,
-                       parent_selection_type="tournament",
-                       keep_parents=8,
-                       K_tournament=4,
-                       crossover_type="two_points",
-                       mutation_type="random",
-                       suppress_warnings=True,
-                       stop_criteria=["saturate_10"],
-                       parallel_processing=n_cpu)
-	ga_instance.run()
-	best = ga_instance.best_solution()[0]
-	print("Fitness value of the best solution = {solution_fitness}".format(solution_fitness=best))
-	print("Best fitness value reached after {best_solution_generation} generations.".format(best_solution_generation=ga_instance.best_solution_generation))
+    desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
+            'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
  
-	
-	index = list()
-	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
-				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
-				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
-				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
-				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
-				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
+    for gene in range(0, len(best)-1):
+        if int(gene) == 1:
+            ind = descriptors[desc[int(gene)]]
+            index = index + ind
 
+    if test != '':
+        df_test = pd.read_csv(test)
 
-	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
-         	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
- 
-	for gene in range(0, len(best)-1):
-		if int(gene) == 1:
-			ind = descriptors[desc[int(gene)]]
-			index = index + ind
+    btrain = df_x.iloc[:, index]
+    path_btrain = path_bio + '/best_train.csv'
+    btrain.to_csv(path_btrain, index=False)
 
+    if test != '':
+        btest = df_test.iloc[:, index]
+        path_btest = path_bio + '/best_test.csv'
+        btest.to_csv(path_btest, index=False)
+    else:
+        btest, path_btest = '', ''
 
-	if test != '':
-		df_test = pl.read_csv(test)
-
-	btrain = df_x[:, index]
-	path_btrain = path_bio + '/best_train.csv'
-	btrain.write_csv(path_btrain)
-
-	if test != '':
-		btest = df_test[:, index]
-		path_btest = path_bio + '/best_test.csv'
-		btest.write_csv(path_btest)
-	else:
-		btest, path_btest = '', ''
-
-
-	return classifier, path_btrain, path_btest, btrain, btest
-
+    return classifier, path_btrain, path_btest, btrain, btest
 
 def objective(trial, train, train_labels):
 
@@ -536,79 +528,65 @@ def objective(trial, train, train_labels):
 	
 	return metric
 
-
 def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
+    """Automated Feature Engineering - Bayesian Optimization"""
+    print('Automated Feature Engineering - Bayesian Optimization')
 
-	"""Automated Feature Engineering - Bayesian Optimization"""
+    df_x = pd.read_csv(train)
+    mgr = Manager()
+    ns = mgr.Namespace()
+    ns.df = df_x
+    
+    path_bio = foutput + '/best_descriptors'
+    if not os.path.exists(path_bio):
+        os.mkdir(path_bio)
 
-	print('Automated Feature Engineering - Bayesian Optimization')
+    param = {'NAC': [0, 1], 'DNC': [0, 1],
+             'TNC': [0, 1], 'kGap_di': [0, 1], 'kGap_tri': [0, 1],
+             'ORF': [0, 1], 'Fickett': [0, 1],
+             'Shannon': [0, 1], 'FourierBinary': [0, 1],
+             'FourierComplex': [0, 1], 'Tsallis': [0, 1],
+             'repDNA': [0, 1],
+             'Classifier': [1, 2, 3]}
 
-	df_x = pl.read_csv(train)
-	mgr = Manager()
-	ns = mgr.Namespace()
-	ns.df = df_x
-	
-	path_bio = foutput + '/best_descriptors'
-	if not os.path.exists(path_bio):
-		os.mkdir(path_bio)
+    func = lambda trial: objective(trial, ns.df, train_labels)
+    
+    results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    results.optimize(func, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
 
+    best_tuning = results.best_params
+    print(best_tuning)
+    
+    index = list()
+    descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
+                   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+                   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
+                   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
+                   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
+                   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
 
-	param = {'NAC': [0, 1], 'DNC': [0, 1],
-			 'TNC': [0, 1], 'kGap_di': [0, 1], 'kGap_tri': [0, 1],
-			 'ORF': [0, 1], 'Fickett': [0, 1],
-			 'Shannon': [0, 1], 'FourierBinary': [0, 1],
-			 'FourierComplex': [0, 1], 'Tsallis': [0, 1],
-			 'repDNA': [0, 1],
-			 'Classifier': [1, 2, 3]}
+    for descriptor, ind in descriptors.items():
+        result = param[descriptor][best_tuning[descriptor]]
+        if result == 1:
+            index = index + ind
 
-	func = lambda trial: objective(trial, ns.df, train_labels)
-	
-	results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
-	results.optimize(func, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
- 
-	best_tuning = results.best_params
- 
-	print(best_tuning)
-	
-	index = list()
-	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
-				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
-				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
-				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
-				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
-				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
+    classifier = best_tuning['Classifier']
+    
+    if test != '':
+        df_test = pd.read_csv(test)
 
-	for descriptor, ind in descriptors.items():
-		result = param[descriptor][best_tuning[descriptor]]
-		if result == 1:
-			index = index + ind
+    btrain = ns.df.iloc[:, index]
+    path_btrain = path_bio + '/best_train.csv'
+    btrain.to_csv(path_btrain, index=False)
 
-	classifier = best_tuning['Classifier']
-	# print(classifier)
-	
- 	# mem = sys.getsizeof(df_x)
-	# print(mem)
-	# max = 1073741824
-	# if mem > max:
-	# 	df_x = pl.read_csv(train).sample(n=(int(df_x.shape[0]*0.70)), seed=42)
-	# else:
-	# 	pass
+    if test != '':
+        btest = df_test.iloc[:, index]
+        path_btest = path_bio + '/best_test.csv'
+        btest.to_csv(path_btest, index=False)
+    else:
+        btest, path_btest = '', ''
 
-	if test != '':
-		df_test = pl.read_csv(test)
-
-	btrain = ns.df[:, index]
-	path_btrain = path_bio + '/best_train.csv'
-	btrain.write_csv(path_btrain)
-
-	if test != '':
-		btest = df_test[:, index]
-		path_btest = path_bio + '/best_test.csv'
-		btest.write_csv(path_btest)
-	else:
-		btest, path_btest = '', ''
-
-	return classifier, path_btrain, path_btest, btrain, btest
+    return classifier, path_btrain, path_btest, btrain, btest
 
 def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
     """Extracts the features from the sequences in the fasta files."""
@@ -782,103 +760,111 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 
 
 if __name__ == '__main__':
-	print('\n')
-	print('###################################################################################')
-	print('###################################################################################')
-	print('##########         BioAutoML-Fast: Automated Feature Engineering        ###########')
-	print('##########              Author: Robson Parmezan Bonidia                 ###########')
-	print('##########         WebPage: https://bonidia.github.io/website/          ###########')
-	print('###################################################################################')
-	print('###################################################################################')
-	print('\n')
-	parser = argparse.ArgumentParser()
-	parser.add_argument('-fasta_train', '--fasta_train', nargs='+',
-						help='fasta format file, e.g., training/ncRNA.fasta'
-							 'training/lncRNA.fasta training/circRNA.fasta')
-	parser.add_argument('-fasta_label_train', '--fasta_label_train', nargs='+',
-						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
-	parser.add_argument('-fasta_test', '--fasta_test', nargs='+',
-						help='fasta format file, e.g., testing/ncRNA.fasta testing/lncRNA.fasta testing/circRNA.fasta')
-	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
-						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
-	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
-	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
-	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
-	parser.add_argument('-estimations', '--estimations', default=50, help='number of estimations - BioAutoML - default = 50')
-	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
-	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
+    print(r'''
+####################################################################################################
+####################################################################################################
+##  ____   _                        _          __  __  _           ______         _____  _______  ##
+## |  _ \ (_)          /\          | |        |  \/  || |         |  ____|/\     / ____||__   __| ##
+## | |_) | _   ___    /  \   _   _ | |_  ___  | \  / || |  ______ | |__  /  \   | (___     | |    ##
+## |  _ < | | / _ \  / /\ \ | | | || __|/ _ \ | |\/| || | |______||  __|/ /\ \   \___ \    | |    ##
+## | |_) || || (_) |/ ____ \| |_| || |_| (_) || |  | || |____     | |  / ____ \  ____) |   | |    ##
+## |____/ |_| \___//_/    \_\\__,_| \__|\___/ |_|  |_||______|    |_| /_/    \_\|_____/    |_|    ##
+##                                                                                                ##
+##                         Empowering Researchers with Machine Learning                           ##
+##                                                                                                ##
+##                                      DNA/RNA module                                            ##
+##                                                                                                ##
+####################################################################################################
+####################################################################################################
+    ''')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-fasta_train', '--fasta_train', nargs='+',
+                        help='fasta format file, e.g., training/ncRNA.fasta'
+                                'training/lncRNA.fasta training/circRNA.fasta')
+    parser.add_argument('-fasta_label_train', '--fasta_label_train', nargs='+',
+                        help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
+    parser.add_argument('-fasta_test', '--fasta_test', nargs='+',
+                        help='fasta format file, e.g., testing/ncRNA.fasta testing/lncRNA.fasta testing/circRNA.fasta')
+    parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
+                        help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
+    parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
+    parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
+    parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
+    parser.add_argument('-estimations', '--estimations', default=50, help='number of estimations - BioAutoML - default = 50')
+    parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
+    parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 
-	args = parser.parse_args()
-	fasta_train = args.fasta_train
-	fasta_label_train = args.fasta_label_train
-	fasta_test = args.fasta_test
-	fasta_label_test = args.fasta_label_test
-	algo = int(args.algorithm)
-	estimations = int(args.estimations)
-	imbalance_data = args.imbalance
-	fs = args.fselection
-	n_cpu = int(args.n_cpu)
-	foutput = str(args.output)
+    args = parser.parse_args()
+    fasta_train = args.fasta_train
+    fasta_label_train = args.fasta_label_train
+    fasta_test = args.fasta_test
+    fasta_label_test = args.fasta_label_test
+    algo = int(args.algorithm)
+    estimations = int(args.estimations)
+    imbalance_data = args.imbalance
+    fs = args.fselection
+    n_cpu = int(args.n_cpu)
+    foutput = str(args.output)
 
-	for fasta in fasta_train:
-		if os.path.exists(fasta) is True:
-			print('Train - %s: Found File' % fasta)
-		else:
-			print('Train - %s: File not exists' % fasta)
-			sys.exit()
+    for fasta in fasta_train:
+        if os.path.exists(fasta) is True:
+            print('Train - %s: Found File' % fasta)
+        else:
+            print('Train - %s: File not exists' % fasta)
+            sys.exit()
 
-	if fasta_test:
-		for fasta in fasta_test:
-			if os.path.exists(fasta) is True:
-				print('Test - %s: Found File' % fasta)
-			else:
-				print('Test - %s: File not exists' % fasta)
-				sys.exit()
+    if fasta_test:
+        for fasta in fasta_test:
+            if os.path.exists(fasta) is True:
+                print('Test - %s: Found File' % fasta)
+            else:
+                print('Test - %s: File not exists' % fasta)
+                sys.exit()
 
-	start_time = time.time()
+    start_time = time.time()
 
-	# features = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    # features = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
-	# process = multiprocessing.Process(target=feature_extraction, args=(fasta_train, 
+    # process = multiprocessing.Process(target=feature_extraction, args=(fasta_train, 
     #                                                                   fasta_label_train,
     #                                                                   fasta_test, 
     #                                                                   fasta_label_test, 
     #                                                                   features, foutput))
-	# print(process)
-	# process.start()
-	# process.join()
+    # print(process)
+    # process.start()
+    # process.join()
 
-	fnameseqtest, ftrain, ftrain_labels, \
-		ftest, ftest_labels = feature_extraction(fasta_train, fasta_label_train,
-												 fasta_test, fasta_label_test, foutput)
+    fnameseqtest, ftrain, ftrain_labels, \
+        ftest, ftest_labels = feature_extraction(fasta_train, fasta_label_train,
+                                                    fasta_test, fasta_label_test, foutput)
 
-	if algo == 0:
-		classifier, path_train, path_test, train_best, test_best = \
-          feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
-	else:
-		classifier, path_train, path_test, train_best, test_best = \
-          feature_engineering_pygad(estimations, ftrain, ftrain_labels, ftest, foutput)
-    
-	# classifier, path_train, path_test, train_best, test_best = \
+    if algo == 0:
+        classifier, path_train, path_test, train_best, test_best = \
+            feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
+    else:
+        classifier, path_train, path_test, train_best, test_best = \
+            feature_engineering_pygad(estimations, ftrain, ftrain_labels, ftest, foutput)
+
+    # classifier, path_train, path_test, train_best, test_best = \
     #  	feature_engineering_ga_sklearn(ftrain, ftrain_labels, ftest, foutput)
-       
-	cost = (time.time() - start_time) / 60
-	print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
+        
+    cost = (time.time() - start_time) / 60
+    print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
-	if len(fasta_label_train) > 2:
-		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
-						 '-train_label', ftrain_labels, '-test', path_test,
-						 '-test_label', ftest_labels, '-test_nameseq',
-						 fnameseqtest, '-nf', 'True', '-fselection', fs,  
-       					 '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
-						 '-classifier', str(classifier), '-output', foutput])
-	else:
-		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
-						 '-train_label', ftrain_labels, '-test', path_test, '-test_label',
-						 ftest_labels, '-test_nameseq', fnameseqtest,
-						 '-nf', 'True', '-fselection', fs,  
-       					 '-imbalance', imbalance_data, '-classifier', str(classifier), 
-						 '-n_cpu', str(n_cpu), '-output', foutput])
+    if len(fasta_label_train) > 2:
+        subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
+                            '-train_label', ftrain_labels, '-test', path_test,
+                            '-test_label', ftest_labels, '-test_nameseq',
+                            fnameseqtest, '-nf', 'True', '-fselection', fs,  
+                            '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
+                            '-classifier', str(classifier), '-output', foutput])
+    else:
+        subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
+                            '-train_label', ftrain_labels, '-test', path_test, '-test_label',
+                            ftest_labels, '-test_nameseq', fnameseqtest,
+                            '-nf', 'True', '-fselection', fs,  
+                            '-imbalance', imbalance_data, '-classifier', str(classifier), 
+                            '-n_cpu', str(n_cpu), '-output', foutput])
 
-##########################################################################
-##########################################################################
+    ##########################################################################
+    ##########################################################################

@@ -909,15 +909,23 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
 ##########################################################################
 ##########################################################################
 if __name__ == '__main__':
-    print('\n')
-    print('###################################################################################')
-    print('###################################################################################')
-    print('#####################        BioAutoML - Binary             #######################')
-    print('##########              Author: Robson Parmezan Bonidia                 ###########')
-    print('##########         WebPage: https://bonidia.github.io/website/          ###########')
-    print('###################################################################################')
-    print('###################################################################################')
-    print('\n')
+    print(r'''
+####################################################################################################
+####################################################################################################
+##  ____   _                        _          __  __  _           ______         _____  _______  ##
+## |  _ \ (_)          /\          | |        |  \/  || |         |  ____|/\     / ____||__   __| ##
+## | |_) | _   ___    /  \   _   _ | |_  ___  | \  / || |  ______ | |__  /  \   | (___     | |    ##
+## |  _ < | | / _ \  / /\ \ | | | || __|/ _ \ | |\/| || | |______||  __|/ /\ \   \___ \    | |    ##
+## | |_) || || (_) |/ ____ \| |_| || |_| (_) || |  | || |____     | |  / ____ \  ____) |   | |    ##
+## |____/ |_| \___//_/    \_\\__,_| \__|\___/ |_|  |_||______|    |_| /_/    \_\|_____/    |_|    ##
+##                                                                                                ##
+##                         Empowering Researchers with Machine Learning                           ##
+##                                                                                                ##
+##                                      Binary module                                             ##
+##                                                                                                ##
+####################################################################################################
+####################################################################################################
+    ''')
     parser = argparse.ArgumentParser()
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
@@ -926,7 +934,7 @@ if __name__ == '__main__':
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-nf', '--normalization', type=bool, default=False, help='Normalization - Features (default = False)')
-    parser.add_argument('-n_cpu', '--n_cpu', default=1, help='number of cpus - default = 1')
+    parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = 1')
     parser.add_argument('-classifier', '--classifier', default=0,
                         help='Classifier - 0: CatBoost, 1: Random Forest, 2: LightGBM, 3: XGBoost')
     parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')

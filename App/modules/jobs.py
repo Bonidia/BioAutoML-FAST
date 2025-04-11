@@ -747,13 +747,15 @@ def runUI():
                 train_stats = pl.read_csv(path_stats)
             else:
                 train_stats = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["train_stats"]
-
-            st.dataframe(train_stats, hide_index=True, use_container_width=True)
+            
+            train_stats_formatted = train_stats.to_pandas().style.format(thousands=",")
+            st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
             if df_job_info["testing_set"].item() != "No test set":
                 st.markdown("**Test set**")
                 test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
-                st.dataframe(test_stats, hide_index=True, use_container_width=True)
+                test_stats_formatted = test_stats.to_pandas().style.format(thousands=",")
+                st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
         if df_job_info["testing_set"].item() != "No test set":
             tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])

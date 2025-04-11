@@ -77,14 +77,13 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 	global df_x, y, model
 
 	le = LabelEncoder()
-	df_x = pl.read_csv(train)
-	y = le.fit_transform(pl.read_csv(train_labels))
-	
+	df_x = pd.read_csv(train)
+	y = le.fit_transform(pd.read_csv(train_labels).values.ravel())
+
 	path_bio = foutput + '/best_descriptors'
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
 
- 
 	classifier = best_algorithms(df_x, y)
 	if classifier == 0:
 		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
@@ -137,21 +136,19 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 			ind = descriptors[desc[int(gene)]]
 			index = index + ind
 
-
 	if test != '':
-		df_test = pl.read_csv(test)
+		df_test = pd.read_csv(test)
 
-	btrain = df_x[:, index]
+	btrain = df_x.iloc[:, index]
 	path_btrain = path_bio + '/best_train.csv'
-	btrain.write_csv(path_btrain)
+	btrain.to_csv(path_btrain, index=False)
 
 	if test != '':
-		btest = df_test[:, index]
+		btest = df_test.iloc[:, index]
 		path_btest = path_bio + '/best_test.csv'
-		btest.write_csv(path_btest)
+		btest.to_csv(path_btest, index=False)
 	else:
 		btest, path_btest = '', ''
-
 
 	return classifier, path_btrain, path_btest, btrain, btest
 
@@ -256,11 +253,11 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 
 	print('Automated Feature Engineering - Bayesian Optimization')
 
-	df_x = pl.read_csv(train)
+	df_x = pd.read_csv(train)
 	mgr = Manager()
 	ns = mgr.Namespace()
 	ns.df = df_x
-	
+
 	path_bio = foutput + '/best_descriptors'
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
@@ -322,34 +319,24 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
- 
 	for descriptor, ind in descriptors.items():
 		result = param[descriptor][best_tuning[descriptor]]
 		if result == 1:
 			index = index + ind
 
 	classifier = best_tuning['Classifier']
-	# print(classifier)
-	
- 	# mem = sys.getsizeof(df_x)
-	# print(mem)
-	# max = 1073741824
-	# if mem > max:
-	# 	df_x = pl.read_csv(train).sample(n=(int(df_x.shape[0]*0.70)), seed=42)
-	# else:
-	# 	pass
 
 	if test != '':
-		df_test = pl.read_csv(test)
+		df_test = pd.read_csv(test)
 
-	btrain = ns.df[:, index]
+	btrain = ns.df.iloc[:, index]
 	path_btrain = path_bio + '/best_train.csv'
-	btrain.write_csv(path_btrain)
+	btrain.to_csv(path_btrain, index=False)
 
 	if test != '':
-		btest = df_test[:, index]
+		btest = df_test.iloc[:, index]
 		path_btest = path_bio + '/best_test.csv'
-		btest.write_csv(path_btest)
+		btest.to_csv(path_btest, index=False)
 	else:
 		btest, path_btest = '', ''
 
@@ -588,15 +575,23 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 ##########################################################################
 
 if __name__ == '__main__':
-	print('\n')
-	print('###################################################################################')
-	print('###################################################################################')
-	print('##########         BioAutoML-Fast: Automated Feature Engineering        ###########')
-	print('##########              Author: Robson Parmezan Bonidia                 ###########')
-	print('##########         WebPage: https://bonidia.github.io/website/          ###########')
-	print('###################################################################################')
-	print('###################################################################################')
-	print('\n')
+	print(r'''
+####################################################################################################
+####################################################################################################
+##  ____   _                        _          __  __  _           ______         _____  _______  ##
+## |  _ \ (_)          /\          | |        |  \/  || |         |  ____|/\     / ____||__   __| ##
+## | |_) | _   ___    /  \   _   _ | |_  ___  | \  / || |  ______ | |__  /  \   | (___     | |    ##
+## |  _ < | | / _ \  / /\ \ | | | || __|/ _ \ | |\/| || | |______||  __|/ /\ \   \___ \    | |    ##
+## | |_) || || (_) |/ ____ \| |_| || |_| (_) || |  | || |____     | |  / ____ \  ____) |   | |    ##
+## |____/ |_| \___//_/    \_\\__,_| \__|\___/ |_|  |_||______|    |_| /_/    \_\|_____/    |_|    ##
+##                                                                                                ##
+##                         Empowering Researchers with Machine Learning                           ##
+##                                                                                                ##
+##                                      Protein module                                            ##
+##                                                                                                ##
+####################################################################################################
+####################################################################################################
+	''')
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-fasta_train', '--fasta_train', nargs='+',
 						help='fasta format file, e.g., fasta/ncRNA.fasta'
