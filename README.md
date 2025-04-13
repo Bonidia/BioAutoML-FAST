@@ -1,3 +1,7 @@
+```sh
+docker run --rm -it -p 8501:8501 -v $(pwd):/home/user/BioAutoML-FAST brenoslivio/bioautomlfast
+```
+
 ![Python](https://img.shields.io/badge/python-v3.11-blue)
 ![Dependencies](https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen.svg)
 ![Contributions welcome](https://img.shields.io/badge/contributions-welcome-orange.svg)

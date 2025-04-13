@@ -34,4 +34,4 @@ USER user
 EXPOSE 8501
 
 # Default command
-CMD ["bash", "-c", "uv sync && bash"]
+CMD ["bash", "-c", "uv sync && cd App && streamlit run app.py"]
