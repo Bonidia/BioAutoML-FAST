@@ -801,8 +801,8 @@ if __name__ == '__main__':
     fasta_label_test = args.fasta_label_test
     algo = int(args.algorithm)
     estimations = int(args.estimations)
-    imbalance_data = args.imbalance
-    fs = args.fselection
+    imbalance_data = str(args.imbalance)
+    fs = str(args.fselection)
     n_cpu = int(args.n_cpu)
     foutput = str(args.output)
 
