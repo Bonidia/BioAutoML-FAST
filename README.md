@@ -1,5 +1,6 @@
 ```sh
-docker run --rm -it -p 8501:8501 -v $(pwd):/home/user/BioAutoML-FAST brenoslivio/bioautomlfast
+docker run --rm -it -p 8501:8501 -v $(pwd):/home/user/BioAutoML-FAST --user 0 brenoslivio/bioautomlfast
+podman run --rm -it -p 8501:8501 -v $(pwd):/home/user/BioAutoML-FAST --user 0 brenoslivio/bioautomlfast
 ```
 
 ![Python](https://img.shields.io/badge/python-v3.11-blue)

@@ -525,7 +525,6 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		dfs_list = [
 			pl.read_csv(f, ignore_errors=True)
 			.select(pl.all().exclude("nameseq"), pl.col("nameseq"))
-			.unique(subset=["nameseq"], keep='first')
 			.filter(~pl.col("nameseq").str.contains("nameseq")) 
 			.set_sorted("nameseq")
 			for f in datasets

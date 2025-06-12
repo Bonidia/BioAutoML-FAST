@@ -735,9 +735,6 @@ def runUI():
                     </svg>
                     <span class="tooltiptext">
                         {tooltip_text}
-                    </span>
-                </div>
-            </div> 
             """, unsafe_allow_html=True)
                 
             st.markdown("**Training set**")

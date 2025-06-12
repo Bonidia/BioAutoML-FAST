@@ -2,7 +2,6 @@
 experiments/
 .idea/
 catboost_info
-test.ipynb
 work
 .nextflow
 runs

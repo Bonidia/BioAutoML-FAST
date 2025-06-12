@@ -20,7 +20,7 @@ def preprocessing(finput,foutput):
         else:
             file.write(">%s" % (str(name_seq)))
             file.write("\n")
-            file.write(str(seq))
+            file.write(str(seq).replace("-", "")) # remove hyphen from alignment
             file.write("\n")
             print(name_seq)
             print("Included Sequence")

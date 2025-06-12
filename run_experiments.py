@@ -11,7 +11,7 @@ def main():
 
     datasets_list = os.listdir(full_datasets_path)
 
-    for dataset in datasets_list:
+    for dataset in ["dataset5_zhao_protein"]:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         dtype_str = dataset.split('_')[-1]
@@ -26,8 +26,10 @@ def main():
         train_labels = [os.path.splitext(os.path.basename(file))[0] for file in train_files]
 
         test_path = os.path.join(dataset_path, "test")
-        test_files = [os.path.join(test_path, file) for file in os.listdir(test_path)]
-        test_labels = [os.path.splitext(os.path.basename(file))[0] for file in test_files]
+
+        if os.path.exists(test_path):
+            test_files = [os.path.join(test_path, file) for file in os.listdir(test_path)]
+            test_labels = [os.path.splitext(os.path.basename(file))[0] for file in test_files]
 
         # Create a runs folder for this dataset
         runs_folder = os.path.join(dataset_path, "runs")
@@ -53,11 +55,12 @@ def main():
             command.append("--fasta_label_train")
             command.extend(train_labels)
 
-            command.append("--fasta_test")
-            command.extend(test_files)
+            if os.path.exists(test_path):
+                command.append("--fasta_test")
+                command.extend(test_files)
 
-            command.append("--fasta_label_test")
-            command.extend(test_labels)
+                command.append("--fasta_label_test")
+                command.extend(test_labels)
 
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", run_folder])  # Output to the run-specific folder
