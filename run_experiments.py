@@ -9,8 +9,9 @@ def main():
     full_datasets_path = "App/datasets"
     num_runs = 1  # Number of times to run each dataset
 
-    datasets_list = os.listdir(full_datasets_path)
-
+    datasets_list = [item for item in os.listdir(full_datasets_path) 
+                    if os.path.isdir(os.path.join(full_datasets_path, item))]
+    
     for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
