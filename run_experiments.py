@@ -11,8 +11,13 @@ def main():
 
     datasets_list = os.listdir(full_datasets_path)
 
-    for dataset in ["dataset5_zhao_protein"]:
+    for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
+
+        # Skip this dataset if it already has a "runs" folder
+        runs_folder = os.path.join(dataset_path, "runs")
+        if os.path.exists(runs_folder):
+            continue
 
         dtype_str = dataset.split('_')[-1]
 
@@ -32,7 +37,6 @@ def main():
             test_labels = [os.path.splitext(os.path.basename(file))[0] for file in test_files]
 
         # Create a runs folder for this dataset
-        runs_folder = os.path.join(dataset_path, "runs")
         os.makedirs(runs_folder, exist_ok=True)
 
         for run_num in range(1, num_runs + 1):

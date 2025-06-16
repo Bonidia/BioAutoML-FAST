@@ -399,7 +399,9 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			subprocess.run([
 				'python', 'other-methods/preprocessing.py',
 				'-i', fasta_file,
-				'-o', preprocessed_fasta
+				'-o', preprocessed_fasta,
+				'-s', split_type,
+                '-d', "Protein",
 			], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 			
 			if split_type == 'train':
@@ -531,7 +533,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		]
 
 		dataframes = pl.concat(dfs_list, how="align")
-		
+
 		dataframes = dataframes.with_columns(
 			pl.when(pl.col("nameseq").is_in(sequence_train))
 			.then(pl.lit("train"))

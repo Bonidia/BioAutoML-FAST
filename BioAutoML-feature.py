@@ -638,9 +638,11 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
             preprocessed_fasta = os.path.join(path, split_type, f'pre_{file_name}')
             
             subprocess.run([
-                'python', 'MathFeature/preprocessing/preprocessing.py',
+                'python', 'other-methods/preprocessing.py',
                 '-i', fasta_file,
-                '-o', preprocessed_fasta
+                '-o', preprocessed_fasta,
+                '-s', split_type,
+                '-d', "DNA",
             ], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             
             if split_type == 'train':
