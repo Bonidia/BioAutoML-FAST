@@ -67,7 +67,7 @@ def main():
                 command.append("--fasta_label_test")
                 command.extend(test_labels)
 
-            command.extend(["--n_cpu", "-1"])
+            command.extend(["--n_cpu", "32"])
             command.extend(["--output", run_folder])  # Output to the run-specific folder
 
             print(f"Running dataset {dataset}, iteration {run_num}")

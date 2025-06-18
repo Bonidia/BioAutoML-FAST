@@ -70,12 +70,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "biopython" },
     { name = "catboost" },
+    { name = "fastexcel" },
     { name = "hyperopt" },
     { name = "igraph" },
     { name = "imbalanced-learn" },
     { name = "ipykernel" },
     { name = "lightgbm" },
     { name = "networkx" },
+    { name = "openpyxl" },
     { name = "optuna" },
     { name = "pandas" },
     { name = "plotly" },
@@ -100,12 +102,14 @@ dependencies = [
 requires-dist = [
     { name = "biopython", specifier = ">=1.85" },
     { name = "catboost", specifier = ">=1.2.7" },
+    { name = "fastexcel", specifier = ">=0.14.0" },
     { name = "hyperopt", specifier = ">=0.2.7" },
     { name = "igraph", specifier = ">=0.11.8" },
     { name = "imbalanced-learn", specifier = ">=0.13.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "networkx", specifier = ">=3.4.2" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "optuna", specifier = ">=4.2.1" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "plotly", specifier = ">=6.0.1" },
@@ -487,12 +491,37 @@ wheels = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059 },
+]
+
+[[package]]
 name = "executing"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/91/50/a9d80c47ff289c611ff12e63f7c5d13942c65d68125160cefd768c73e6e4/executing-2.2.0.tar.gz", hash = "sha256:5d108c028108fe2551d1a7b2e8b713341e2cb4fc0aa7dcf966fa4327a5226755", size = 978693 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/8f/c4d9bafc34ad7ad5d8dc16dd1347ee0e507a52c3adb6bfa8887e1c6a26ba/executing-2.2.0-py2.py3-none-any.whl", hash = "sha256:11387150cad388d62750327a53d3339fad4888b39a6fe233c3afbb54ecffd3aa", size = 26702 },
+]
+
+[[package]]
+name = "fastexcel"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyarrow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/55/376bc213921232d18dc9287c7e4eddd892d29e6a988c3ab022ee96f3a7ae/fastexcel-0.14.0.tar.gz", hash = "sha256:c73460c2ce2a07cf1a21a27aae67af3bc6a855fb4aa191c20c6ddae3f0573215", size = 40892 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/5a/e5612bb03f113e283cdd4e137a24e60d312230e55870a2879cc62ee256cd/fastexcel-0.14.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:8cf9fdff9df918cc2dfad66932cd238b6e1e5e1b7b0a079df713a35d2af1586e", size = 1281472 },
+    { url = "https://files.pythonhosted.org/packages/12/97/204b0da0b1d94af752e5a7a515d4b68e8d957bc48a04d27a3087ea80e0c2/fastexcel-0.14.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:0764cb1232e5feb4a7953ee53e60a46f330fa32ef012d813fa491173c7578d3b", size = 1235392 },
+    { url = "https://files.pythonhosted.org/packages/38/41/7a0b8c0421cbda0f6185bfeaf55d06cd12073f68abb31cc70f385350f1bc/fastexcel-0.14.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:fecc5927ef18eba36f360aec0994e2cef106f8d83f197734d460ae198e5c0b87", size = 1359282 },
+    { url = "https://files.pythonhosted.org/packages/8d/86/f00dae040b315505008c4e94ae59c5de0b5fdaefdb27c046bb11917628da/fastexcel-0.14.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c70f463b88d72205eb5069754b07edb9a877bab9991ca71f8db1cc4e1bb8d8a4", size = 1383225 },
+    { url = "https://files.pythonhosted.org/packages/f2/5f/fdb54eab1fae9057fbcaca3b4b283cde717686c9e67e3cff2796a308b1e2/fastexcel-0.14.0-cp39-abi3-win_amd64.whl", hash = "sha256:856d061b254268302ee968d10fd446b83f4a1a932588149539be4fb9d34224d4", size = 1094572 },
 ]
 
 [[package]]
@@ -1149,6 +1178,18 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/c6/b39fd44485cfad53a569ab62ce0c8f583ecf81aa7ca87bacbc8371ec5989/nvidia_nccl_cu12-2.26.2.post1-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:65640d57dd2a20de11048f0a163dd6b6ba8ae97eb3bfc11d80d3c409566bfce7", size = 291669092 },
     { url = "https://files.pythonhosted.org/packages/9f/30/aa24e8e02cd860d80a31ee32cc3a0db9ffb93efb2556705db3ce6c924926/nvidia_nccl_cu12-2.26.2.post1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5ffda04fd1296a90aae76a7e9999d9d3d69ffcec6573109a286fdd2158599114", size = 291662170 },
+]
+
+[[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910 },
 ]
 
 [[package]]
