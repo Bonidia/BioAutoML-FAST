@@ -2,10 +2,9 @@
 
 # Check if input file is provided
 
-
-input_file="dataset11_lv_dnarna/train/S.cerevisiae.fasta"
-p_file="positive.fasta"
-n_file="negative.fasta"
+input_file="Dataset_final.txt"
+p_file="hot.fasta"
+n_file="cold.fasta"
 
 # Create or clear output files
 > "$p_file"
@@ -13,13 +12,13 @@ n_file="negative.fasta"
 
 # Read the input file line by line
 while IFS= read -r line; do
-    if [[ "$line" == ">+"* ]]; then
+    if [[ "$line" == *"Hot"* ]]; then
         # Write to P file
         echo "$line" >> "$p_file"
         # Read the next line (sequence) and write it
         IFS= read -r seq
         echo "$seq" >> "$p_file"
-    elif [[ "$line" == ">-"* ]]; then
+    elif [[ "$line" == *"Cold"* ]]; then
         # Write to N file
         echo "$line" >> "$n_file"
         # Read the next line (sequence) and write it
