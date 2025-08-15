@@ -16,8 +16,8 @@ def main():
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         # Skip this dataset if it already has a "runs" folder
-        runs_folder = os.path.join(dataset_path, "runs")
-        if os.path.exists(runs_folder):
+        experiments_folder = os.path.join(dataset_path, "runs")
+        if os.path.exists(experiments_folder):
             continue
 
         dtype_str = dataset.split('_')[-1]
@@ -38,11 +38,11 @@ def main():
             test_labels = [os.path.splitext(os.path.basename(file))[0] for file in test_files]
 
         # Create a runs folder for this dataset
-        os.makedirs(runs_folder, exist_ok=True)
+        os.makedirs(experiments_folder, exist_ok=True)
 
         for run_num in range(1, num_runs + 1):
             # Create a folder for this run inside the runs folder
-            run_folder = os.path.join(runs_folder, f"run_{run_num}")
+            run_folder = os.path.join(experiments_folder, f"run_{run_num}")
             os.makedirs(run_folder, exist_ok=True)
 
             command = [
@@ -67,7 +67,7 @@ def main():
                 command.append("--fasta_label_test")
                 command.extend(test_labels)
 
-            command.extend(["--n_cpu", "32"])
+            command.extend(["--n_cpu", "20"])
             command.extend(["--output", run_folder])  # Output to the run-specific folder
 
             print(f"Running dataset {dataset}, iteration {run_num}")

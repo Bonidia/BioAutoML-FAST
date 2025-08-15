@@ -92,7 +92,7 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 		model = RandomForestClassifier(n_jobs=1, random_state=63)
         
 	elif classifier == 2:
-		model = lgb.LGBMClassifier(n_jobs=1, random_state=63)
+		model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
 	else:
 		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=1, random_state=63)
 
@@ -220,7 +220,7 @@ def objective(trial, train, train_labels):
 	elif int(space['Classifier']) == 1:
 		model = RandomForestClassifier(n_jobs=1, random_state=63)
 	elif int(space['Classifier']) == 2:
-		model = lgb.LGBMClassifier(n_jobs=1, random_state=63)
+		model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
 	elif int(space['Classifier']) == 3:
 		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, 
                             			n_jobs=1, random_state=63)
@@ -236,13 +236,13 @@ def objective(trial, train, train_labels):
 
 	try:
 		metric = cross_val_score(model,
-								train[:, index],
-								le.fit_transform(pl.read_csv(train_labels)),
+								train.iloc[:, index],
+								le.fit_transform(pd.read_csv(train_labels)),
 								cv=kfold,
 								scoring=score,
 								n_jobs=n_cpu).mean()
 	except Exception as e:
-		metric = 0.0
+		raise optuna.TrialPruned()
 		
 	return metric
 
@@ -388,7 +388,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 
 	datasets = [os.path.join(path, fname) for fname in datasets]
 
-	print('Extracting features with MathFeature...')
+	print('Extracting features...')
  
 	for fasta_files, label_files, split_type in input_groups:
 		for fasta_file, label_file in zip(fasta_files, label_files):
@@ -457,8 +457,21 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 				'-input', preprocessed_fasta, '-output', os.path.join(path, 'Peptide.csv')]
 			]
 			
-			# Run all commands in parallel
-			processes = [Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) for cmd in commands]
+			log_dir = os.path.join(path, 'logs')
+			os.makedirs(log_dir, exist_ok=True)  # make sure the folder exists
+
+			processes = []
+			for cmd, dataset in zip(commands, datasets):
+				log_path = os.path.join(log_dir, f"{dataset.split('/')[-1].split('.csv')[0]}.log")
+				with open(log_path, "w") as log_file:
+					p = subprocess.Popen(
+						cmd,
+						stdout=log_file,
+						stderr=subprocess.STDOUT
+					)
+					processes.append(p)
+
+			# wait for all to finish
 			for p in processes:
 				p.wait()
 
@@ -552,7 +565,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 	y_train.write_csv(flabeltrain)
 
 	ftrain = os.path.join(path, "ftrain.csv")
-	X_train.select(pl.all().exclude(["category", "nameseq", "label"])).write_csv(ftrain)
+	X_train.select(pl.all().exclude(["split_type", "nameseq", "label"])).write_csv(ftrain)
 	
 	fnameseqtest, ftest, flabeltest = '', '', ''
 
@@ -568,7 +581,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		y_test.write_csv(flabeltest)
 
 		ftest = os.path.join(path, "ftest.csv")
-		X_test.select(pl.all().exclude(["category", "nameseq", "label"])).write_csv(ftest)
+		X_test.select(pl.all().exclude(["split_type", "nameseq", "label"])).write_csv(ftest)
 
 	return fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
