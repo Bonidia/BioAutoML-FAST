@@ -812,7 +812,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
         model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
-        model_dict["nameseq_train"] = pd.read_csv(os.path.join(output, 'feat_extraction/fnameseqtrain.csv'))
+        model_dict["nameseq_train"] = pd.read_csv(nameseq_train)
         
         print('Saving results in ' + train_output + '...')
         print('Saving confusion matrix in ' + matrix_output + '...')
@@ -930,6 +930,7 @@ if __name__ == '__main__':
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
+    parser.add_argument('-train_nameseq', '--train_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-test', '--test', default='', help='csv format file, e.g., test.csv')
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
@@ -944,6 +945,7 @@ if __name__ == '__main__':
     path_model = args.path_model
     ftrain = str(args.train)
     ftrain_labels = str(args.train_label)
+    nameseq_train = str(args.train_nameseq)
     ftest = str(args.test)
     ftest_labels = str(args.test_label)
     nameseq_test = str(args.test_nameseq)

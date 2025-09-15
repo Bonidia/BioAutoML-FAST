@@ -7,7 +7,7 @@ from App.utils.stats import summary_stats
 
 def main():
     full_datasets_path = "App/datasets"
-    num_runs = 1  # Number of times to run each dataset
+    num_runs = 10  # Number of times to run each dataset
 
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
@@ -17,8 +17,8 @@ def main():
 
         # Skip this dataset if it already has a "runs" folder
         experiments_folder = os.path.join(dataset_path, "runs")
-        if os.path.exists(experiments_folder):
-            continue
+        # if os.path.exists(experiments_folder):
+        #     continue
 
         dtype_str = dataset.split('_')[-1]
 
@@ -43,61 +43,63 @@ def main():
         for run_num in range(1, num_runs + 1):
             # Create a folder for this run inside the runs folder
             run_folder = os.path.join(experiments_folder, f"run_{run_num}")
-            os.makedirs(run_folder, exist_ok=True)
+            if not os.path.exists(run_folder):
+                os.makedirs(run_folder, exist_ok=True)
 
-            command = [
-                "python",
-                "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
-                "--imbalance",
-                "0", # "1" if imbalance else "0",
-                "--fselection",
-                "0", # "1" if fselection else "0",
-                "--fasta_train",
-            ]
+                command = [
+                    "python",
+                    "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
+                    "--imbalance",
+                    "0", # "1" if imbalance else "0",
+                    "--fselection",
+                    "0", # "1" if fselection else "0",
+                    "--fasta_train",
+                ]
 
-            command.extend(train_files)
+                command.extend(train_files)
 
-            command.append("--fasta_label_train")
-            command.extend(train_labels)
+                command.append("--fasta_label_train")
+                command.extend(train_labels)
 
-            if os.path.exists(test_path):
-                command.append("--fasta_test")
-                command.extend(test_files)
+                if os.path.exists(test_path):
+                    command.append("--fasta_test")
+                    command.extend(test_files)
 
-                command.append("--fasta_label_test")
-                command.extend(test_labels)
+                    command.append("--fasta_label_test")
+                    command.extend(test_labels)
 
-            command.extend(["--n_cpu", "20"])
-            command.extend(["--output", run_folder])  # Output to the run-specific folder
+                command.extend(["--n_cpu", "20"])
+                command.extend(["--output", run_folder])  # Output to the run-specific folder
 
-            print(f"Running dataset {dataset}, iteration {run_num}")
-            subprocess.run(command)
+                print(f"Running dataset {dataset}, iteration {run_num}")
+                subprocess.run(command)
 
-            classifier, imbalance, fselection = False, False, False
+                classifier, imbalance, fselection = False, False, False
 
-            job_data = {
-                "data_type": [data_type],
-                "training_set": ["Training set"],
-                "testing_set": ["Test set"],
-                "classifier_selected": [classifier], 
-                "imbalance_methods": [imbalance],  
-                "feature_selection": [fselection],  
-                "run_number": [run_num],
-            }
+                job_data = {
+                    "data_type": [data_type],
+                    "training_set": ["Training set"],
+                    "testing_set": ["Test set"],
+                    "classifier_selected": [classifier], 
+                    "imbalance_methods": [imbalance],  
+                    "feature_selection": [fselection],  
+                    "run_number": [run_num],
+                }
 
-            df_job_data = pl.DataFrame(job_data)
-            tsv_path = os.path.join(run_folder, "job_info.tsv")
-            df_job_data.write_csv(tsv_path, separator='\t')
+                df_job_data = pl.DataFrame(job_data)
+                tsv_path = os.path.join(run_folder, "job_info.tsv")
+                df_job_data.write_csv(tsv_path, separator='\t')
 
-            # Update paths for summary stats to use the run folder
-            summary_stats(os.path.join(run_folder, "feat_extraction", "train"), data_type, run_folder, False)
-            summary_stats(os.path.join(run_folder, "feat_extraction", "test"), data_type, run_folder, False)
+                # Update paths for summary stats to use the run folder
+                
+                summary_stats(os.path.join(run_folder if run_num == 1 else os.path.join(experiments_folder, "run_1"), "feat_extraction", "train"), data_type, run_folder, False)
+                summary_stats(os.path.join(run_folder if run_num == 1 else os.path.join(experiments_folder, "run_1"), "feat_extraction", "test"), data_type, run_folder, False)
 
-            model_path = os.path.join(run_folder, "trained_model.sav")
-            if os.path.exists(model_path):
-                model = joblib.load(model_path)
-                model["train_stats"] = pd.read_csv(os.path.join(run_folder, "train_stats.csv"))
-                joblib.dump(model, model_path)
+                model_path = os.path.join(run_folder, "trained_model.sav")
+                if os.path.exists(model_path):
+                    model = joblib.load(model_path)
+                    model["train_stats"] = pd.read_csv(os.path.join(run_folder, "train_stats.csv"))
+                    joblib.dump(model, model_path)
 
 if __name__ == "__main__":
     main()

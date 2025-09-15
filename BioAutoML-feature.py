@@ -59,8 +59,7 @@ def objective_rf(space):
 	elif int(space['Classifier']) == 2:
 		model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
 	elif int(space['Classifier']) == 3:
-		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, 
-                            			n_jobs=1, random_state=63)
+		model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=1, random_state=63)
 	else:
 		sys.exit('This classifier option does not exist - Try again')
 
@@ -182,7 +181,7 @@ def best_algorithms(train, train_labels):
     #                         logging_level='Silent', random_state=63)
     rfa = RandomForestClassifier(n_jobs=n_cpu, random_state=63)
     lgba = lgb.LGBMClassifier(n_jobs=n_cpu, random_state=63, verbosity=-1)
-    xgba = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=n_cpu, random_state=63)
+    xgba = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
     # one = check_techniques(cata, train, train_labels)
     two = check_techniques(rfa, train, train_labels)
     three = check_techniques(lgba, train, train_labels)
@@ -227,7 +226,7 @@ def feature_engineering_ga(train, train_labels, test, foutput):
         model = lgb.LGBMClassifier(n_jobs=n_cpu, random_state=63, verbosity=-1)
     
     else:
-        model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=n_cpu, random_state=63)
+        model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
             
     selection = GeneticSelectionCV(estimator=model,
                                    cv=cv,
@@ -305,7 +304,7 @@ def feature_engineering_ga_sklearn(train, train_labels, test, foutput):
         model = lgb.LGBMClassifier(n_jobs=n_cpu, random_state=63, verbosity=-1)
     
     else:
-        model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, n_jobs=n_cpu, random_state=63)
+        model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
         
     selection = GAFeatureSelectionCV(estimator=model,
                                    cv=cv,
@@ -406,8 +405,7 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
     elif classifier == 2:
         model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
     else:
-        model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, 
-                                 n_jobs=1, random_state=63)
+        model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=1, random_state=63)
 
     print('Checking the best descriptors...')
     ga_instance = pygad.GA(num_generations=estimations,
@@ -504,8 +502,7 @@ def objective(trial, train, train_labels):
 	elif int(space['Classifier']) == 2:
 		model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
 	elif int(space['Classifier']) == 3:
-		model = xgb.XGBClassifier(eval_metric='mlogloss', use_label_encoder=False, 
-                            			n_jobs=1, random_state=63)
+		model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=1, random_state=63)
 
 
 	if len(fasta_label_train) > 2:
@@ -722,7 +719,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
     
     if datasets:
         dfs_list = [
-            pl.read_csv(f, ignore_errors=True)
+            pl.read_csv(f, infer_schema=False)
             .select(pl.all().exclude("nameseq"), pl.col("nameseq"))
             .filter(~pl.col("nameseq").str.contains("nameseq")) 
             .set_sorted("nameseq")
@@ -767,7 +764,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
         ftest = os.path.join(path, "ftest.csv")
         X_test.select(pl.all().exclude(["split_type", "nameseq", "label"])).write_csv(ftest)
 
-    return fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
+    return fnameseqtrain, fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
 ##########################################################################
 ##########################################################################
@@ -848,10 +845,25 @@ if __name__ == '__main__':
     # process.start()
     # process.join()
 
-    fnameseqtest, ftrain, ftrain_labels, \
-        ftest, ftest_labels = feature_extraction(fasta_train, fasta_label_train,
-                                                    fasta_test, fasta_label_test, foutput)
+    folder_name = foutput.split("/")[-1]
 
+    if folder_name == "run_1" or "run" not in folder_name:
+        fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, \
+            ftest, ftest_labels = feature_extraction(fasta_train, fasta_label_train,
+                                                        fasta_test, fasta_label_test, foutput)
+    else:
+        dataset = "/".join(foutput.split("/")[:-1])
+        dataset_run1 = os.path.join(dataset, "run_1")
+
+        if os.path.exists(dataset_run1):
+            dataset_run1_feat = os.path.join(dataset_run1, "feat_extraction")
+
+            fnameseqtrain, ftrain, ftrain_labels = os.path.join(dataset_run1_feat, "fnameseqtrain.csv"), os.path.join(dataset_run1_feat, "ftrain.csv"), os.path.join(dataset_run1_feat, "flabeltrain.csv")
+
+            fnameseqtest, ftest, ftest_labels = '', '', ''
+            if os.path.exists(os.path.join(dataset_run1_feat, "ftest.csv")):
+                fnameseqtest, ftest, ftest_labels = os.path.join(dataset_run1_feat, "fnameseqtest.csv"), os.path.join(dataset_run1_feat, "ftest.csv"), os.path.join(dataset_run1_feat, "flabeltest.csv") 
+         
     if algo == 0:
         classifier, path_train, path_test, train_best, test_best = \
             feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
@@ -868,15 +880,15 @@ if __name__ == '__main__':
     if len(fasta_label_train) > 2:
         subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
                             '-train_label', ftrain_labels, '-test', path_test,
-                            '-test_label', ftest_labels, '-test_nameseq',
-                            fnameseqtest, '-nf', 'True', '-fselection', fs,  
+                            '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+                            '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
                             '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
                             '-classifier', str(classifier), '-output', foutput])
     else:
         subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
-                            '-train_label', ftrain_labels, '-test', path_test, '-test_label',
-                            ftest_labels, '-test_nameseq', fnameseqtest,
-                            '-nf', 'True', '-fselection', fs,  
+                            '-train_label', ftrain_labels, '-test', path_test, 
+                            '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+                            '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
                             '-imbalance', imbalance_data, '-classifier', str(classifier), 
                             '-n_cpu', str(n_cpu), '-output', foutput])
 
