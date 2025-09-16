@@ -741,17 +741,17 @@ def runUI():
 
             path_stats = os.path.join(st.session_state["job_path"], "train_stats.csv")
             if os.path.exists(path_stats):
-                train_stats = pl.read_csv(path_stats)
+                train_stats = pd.read_csv(path_stats)
             else:
                 train_stats = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["train_stats"]
             
-            train_stats_formatted = train_stats.to_pandas().style.format(thousands=",")
+            train_stats_formatted = train_stats.style.format(thousands=",")
             st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
             if df_job_info["testing_set"].item() != "No test set":
                 st.markdown("**Test set**")
-                test_stats = pl.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
-                test_stats_formatted = test_stats.to_pandas().style.format(thousands=",")
+                test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
+                test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
         if df_job_info["testing_set"].item() != "No test set":

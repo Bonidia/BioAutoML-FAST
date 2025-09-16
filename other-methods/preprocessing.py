@@ -57,8 +57,8 @@ if __name__ == "__main__":
     fset = str(args.set)
     fdata = str(args.data)
 
-    if fdata == "Protein":
-        preprocessing_protein(finput,foutput,fset)
-    else:
+    if fdata == "DNA/RNA":
         preprocessing_dna(finput,foutput,fset)
+    elif fdata == "Protein":
+        preprocessing_protein(finput,foutput,fset)
 #############################################################################]

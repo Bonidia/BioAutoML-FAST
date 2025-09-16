@@ -36,11 +36,12 @@ def test_extraction(job_path, test_data, model, data_type):
 
     if data_type == "DNA/RNA":
         for label in test_data:
-            subprocess.run(["python", "MathFeature/preprocessing/preprocessing.py",
-                        "-i", test_data[label], 
-                        "-o", os.path.join(path, f"pre_{label}.fasta")],
-                        cwd="..",
-                        stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            subprocess.run(["python", "other-methods/preprocessing.py",
+            "-i", test_data[label],
+            "--data", data_type,
+            "-o", os.path.join(path, f"pre_{label}.fasta")],
+            cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
 
             datasets.append(feat_path + "/NAC.csv")
             datasets.append(feat_path + "/DNC.csv")
@@ -98,10 +99,11 @@ def test_extraction(job_path, test_data, model, data_type):
     elif data_type == "Protein":
         for label in test_data:
             subprocess.run(["python", "other-methods/preprocessing.py",
-            "-i", test_data[label], 
+            "-i", test_data[label],
+            "--data", data_type,
             "-o", os.path.join(path, f"pre_{label}.fasta")],
-            cwd="..",
-            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+            )
 
             datasets.append(feat_path + "/Shannon.csv")
             datasets.append(feat_path + "/Tsallis_23.csv")
@@ -406,11 +408,11 @@ def runUI():
         st.session_state.queue_started = True
     
     model = st.selectbox("Select trained model", [
-                "Non-classical secreted proteins",
-                "Phage virion proteins"])
+                "Dataset 1: Non-classical secreted proteins",
+                "Dataset 2: Phage virion proteins"])
     job_id = ""
     
-    if model == "Non-classical secreted proteins":
+    if model == "Dataset 1: non-classical secreted proteins":
         dataset_id = "dataset1_zhang_protein"
         st.info(f"""
                 **Data set from the following paper:** Zhang, Y., Yu, S., 
@@ -421,7 +423,7 @@ def runUI():
 
                 You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Phage virion proteins":
+    elif model == "Dataset 2: phage virion proteins":
         dataset_id = "dataset2_phasit_protein"
         st.info(f"""
                 **Data set from the following paper:** Charoenkwan, P., 
@@ -430,6 +432,222 @@ def runUI():
                 the prediction of phage virion proteins using effective 
                 feature representation. Journal of Computer-Aided Molecular 
                 Design, 34(10), 1105-1116.
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 3: sigma70 promoters":
+        dataset_id = "dataset3_lin_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** Lin, H., Liang, Z. Y., 
+                Tang, H., & Chen, W. (2017). Identifying sigma70 promoters 
+                with novel pseudo nucleotide composition. IEEE/ACM transactions 
+                on computational biology and bioinformatics, 16(4), 1316-1321.
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 4: anticancer peptides":
+        dataset_id = "dataset4_li_protein"
+        st.info(f"""
+                **Data set from the following paper:** Li, Q., Zhou, W., Wang, 
+                D., Wang, S., & Li, Q. (2020). Prediction of anticancer peptides 
+                using a low-dimensional feature model. Frontiers in Bioengineering 
+                and Biotechnology, 8, 892.
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 5: protein lysine crotonylation sites":
+        dataset_id = "dataset5_zhao_protein"
+        st.info(f"""
+                **Data set from the following paper:** Zhao, Y., He, N., Chen, Z., 
+                & Li, L. (2020). Identification of protein lysine crotonylation sites 
+                by a deep learning framework with convolutional neural networks. Ieee 
+                Access, 8, 14244-14252.
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 6: ":
+        dataset_id = "dataset6_han_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** Han, S., Liang, Y., Ma, Q., 
+                Xu, Y., Zhang, Y., Du, W., ... & Li, Y. (2019). LncFinder: an integrated 
+                platform for long non-coding RNA identification utilizing sequence 
+                intrinsic composition, structural information and physicochemical property. 
+                Briefings in bioinformatics, 20(6), 2009-2027. 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 7: ":
+        dataset_id = "dataset7_han_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 8: ":
+        dataset_id = "dataset8_meng_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 9: ":
+        dataset_id = "dataset9_lv_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 10: ":
+        dataset_id = "dataset10_lv_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 11: ":
+        dataset_id = "dataset11_lv_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 12: ":
+        dataset_id = "dataset12_lv_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 13: ":
+        dataset_id = "dataset13_bonidia_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 14: ":
+        dataset_id = "dataset14_bonidia_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 15: ":
+        dataset_id = "dataset15_bonidia_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 16: ":
+        dataset_id = "dataset16_chung_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 17: ":
+        dataset_id = "dataset17_timmons_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 18: ":
+        dataset_id = "dataset18_timmons_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 19: ":
+        dataset_id = "dataset19_timmons_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 20: ":
+        dataset_id = "dataset20_timmons_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 21: ":
+        dataset_id = "dataset21_xing_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 22: ":
+        dataset_id = "dataset22_xing_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 23: ":
+        dataset_id = "dataset23_yu_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 24: ":
+        dataset_id = "dataset24_bonidia_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 25: ":
+        dataset_id = "dataset25_musleh_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 26: ":
+        dataset_id = "dataset26_cai_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 27: ":
+        dataset_id = "dataset27_cai_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 28: ":
+        dataset_id = "dataset28_lam_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 29: ":
+        dataset_id = "dataset29_lam_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 30: ":
+        dataset_id = "dataset30_khatun_protein"
+        st.info(f"""
+                **Data set from the following paper:** 
+
+                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Dataset 31: ":
+        dataset_id = "dataset31_khan_dnarna"
+        st.info(f"""
+                **Data set from the following paper:** 
 
                 You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
@@ -454,7 +672,7 @@ def runUI():
         else:
             job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
             job_path = os.path.join(predict_path, job_id)
-            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id)
+            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
 
             os.makedirs(job_path)
 
