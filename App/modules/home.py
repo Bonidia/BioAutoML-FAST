@@ -290,6 +290,7 @@ def submit_job(train_files, test_files, job_path, data_type, training, testing, 
                     "1" if fselection else "0",
                     "--train", os.path.join(feat_path, "train.csv"),
                     "--train_label", os.path.join(feat_path, "train_labels.csv"),
+                    "--train_nameseq", os.path.join(feat_path, "fnameseqtrain.csv"),
                     "--classifier", str(classifier_option),
                     "-nf", "True",
                 ]

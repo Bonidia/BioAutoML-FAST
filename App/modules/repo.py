@@ -408,248 +408,350 @@ def runUI():
         st.session_state.queue_started = True
     
     model = st.selectbox("Select trained model", [
-                "Dataset 1: Non-classical secreted proteins",
-                "Dataset 2: Phage virion proteins"])
+        "Dataset 1: non-classical secreted proteins",
+        "Dataset 2: phage virion proteins",
+        "Dataset 3: sigma70 promoters",
+        "Dataset 4: anticancer peptides",
+        "Dataset 5: protein lysine crotonylation sites",
+        "Dataset 6: long non-coding RNA - human",
+        "Dataset 7: long non-coding RNA - wheat",
+        "Dataset 8: plant long non-coding RNA",
+        "Dataset 9: 5-methylcytosine sites - H. sapiens",
+        "Dataset 10: 5-methylcytosine sites - M. musculus",
+        "Dataset 11: 5-methylcytosine sites - S. cerevisiae",
+        "Dataset 12: 5-methylcytosine sites - A. thaliana",
+        "Dataset 13: non-coding RNA - E. coli K12",
+        "Dataset 14: non-coding RNA - Multiple bacterial phyla",
+        "Dataset 15: non-coding RNA - 8 classes",
+        "Dataset 16: antimicrobial peptides",
+        "Dataset 17: antiviral",
+        "Dataset 18: antiviral using random sequences",
+        "Dataset 19: anti-coronavirus",
+        "Dataset 20: anti-coronavirus using random sequences",
+        "Dataset 21: antimicrobial peptides",
+        "Dataset 22: antimicrobial peptides",
+        "Dataset 23: anticancer peptides",
+        "Dataset 24: circRNA vs lncRNA",
+        "Dataset 25: mRNA subcellular localization",
+        "Dataset 26: lncRNAs subcellular localization - training set with 5 classes",
+        "Dataset 27: lncRNAs subcellular localization - training set with 4 classes",
+        "Dataset 28: antioxidant proteins",
+        "Dataset 29: antioxidant proteins - only positive class in test set",
+        "Dataset 30: proinflammatory peptides",
+        "Dataset 31: recombination spots"
+    ])
     job_id = ""
     
     if model == "Dataset 1: non-classical secreted proteins":
         dataset_id = "dataset1_zhang_protein"
         st.info(f"""
-                **Data set from the following paper:** Zhang, Y., Yu, S., 
+                **Dataset from the following paper:** Zhang, Y., Yu, S., 
                 Xie, R., Li, J., Leier, A., Marquez-Lago, T. T., ... & 
                 Song, J. (2020). PeNGaRoo, a combined gradient boosting 
                 and ensemble learning framework for predicting non-classical 
                 secreted proteins. Bioinformatics, 36(3), 704-712.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
     elif model == "Dataset 2: phage virion proteins":
         dataset_id = "dataset2_phasit_protein"
         st.info(f"""
-                **Data set from the following paper:** Charoenkwan, P., 
+                **Dataset from the following paper:** Charoenkwan, P., 
                 Nantasenamat, C., Hasan, M. M., & Shoombuatong, W. (2020). 
                 Meta-iPVP: a sequence-based meta-predictor for improving 
                 the prediction of phage virion proteins using effective 
                 feature representation. Journal of Computer-Aided Molecular 
                 Design, 34(10), 1105-1116.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
     elif model == "Dataset 3: sigma70 promoters":
         dataset_id = "dataset3_lin_dnarna"
         st.info(f"""
-                **Data set from the following paper:** Lin, H., Liang, Z. Y., 
+                **Dataset from the following paper:** Lin, H., Liang, Z. Y., 
                 Tang, H., & Chen, W. (2017). Identifying sigma70 promoters 
                 with novel pseudo nucleotide composition. IEEE/ACM transactions 
                 on computational biology and bioinformatics, 16(4), 1316-1321.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
     elif model == "Dataset 4: anticancer peptides":
         dataset_id = "dataset4_li_protein"
         st.info(f"""
-                **Data set from the following paper:** Li, Q., Zhou, W., Wang, 
+                **Dataset from the following paper:** Li, Q., Zhou, W., Wang, 
                 D., Wang, S., & Li, Q. (2020). Prediction of anticancer peptides 
                 using a low-dimensional feature model. Frontiers in Bioengineering 
                 and Biotechnology, 8, 892.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
     elif model == "Dataset 5: protein lysine crotonylation sites":
         dataset_id = "dataset5_zhao_protein"
         st.info(f"""
-                **Data set from the following paper:** Zhao, Y., He, N., Chen, Z., 
+                **Dataset from the following paper:** Zhao, Y., He, N., Chen, Z., 
                 & Li, L. (2020). Identification of protein lysine crotonylation sites 
                 by a deep learning framework with convolutional neural networks. Ieee 
                 Access, 8, 14244-14252.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 6: ":
+    elif model == "Dataset 6: long non-coding RNA - human":
         dataset_id = "dataset6_han_dnarna"
         st.info(f"""
-                **Data set from the following paper:** Han, S., Liang, Y., Ma, Q., 
+                **Dataset from the following paper:** Han, S., Liang, Y., Ma, Q., 
                 Xu, Y., Zhang, Y., Du, W., ... & Li, Y. (2019). LncFinder: an integrated 
                 platform for long non-coding RNA identification utilizing sequence 
                 intrinsic composition, structural information and physicochemical property. 
                 Briefings in bioinformatics, 20(6), 2009-2027. 
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 7: ":
+    elif model == "Dataset 7: long non-coding RNA - wheat":
         dataset_id = "dataset7_han_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Han, S., Liang, Y., Ma, Q., 
+                Xu, Y., Zhang, Y., Du, W., ... & Li, Y. (2019). LncFinder: an integrated 
+                platform for long non-coding RNA identification utilizing sequence 
+                intrinsic composition, structural information and physicochemical property. 
+                Briefings in bioinformatics, 20(6), 2009-2027. 
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 8: ":
+    elif model == "Dataset 8: plant long non-coding RNA":
         dataset_id = "dataset8_meng_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Meng, J., Kang, Q., Chang, Z., 
+                & Luan, Y. (2021). PlncRNA-HDeep: plant long noncoding RNA prediction 
+                using hybrid deep learning based on two encoding styles. BMC bioinformatics, 
+                22(Suppl 3), 242.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 9: ":
+    elif model == "Dataset 9: 5-methylcytosine sites - H. sapiens":
         dataset_id = "dataset9_lv_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
+                Tan, J. X., Chen, W., & Lin, H. (2020). Evaluation of different computational
+                methods on 5-methylcytosine sites identification. Briefings in bioinformatics, 
+                21(3), 982-995.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 10: ":
+    elif model == "Dataset 10: 5-methylcytosine sites - M. musculus":
         dataset_id = "dataset10_lv_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
+                Tan, J. X., Chen, W., & Lin, H. (2020). Evaluation of different computational
+                methods on 5-methylcytosine sites identification. Briefings in bioinformatics, 
+                21(3), 982-995.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 11: ":
+    elif model == "Dataset 11: 5-methylcytosine sites - S. cerevisiae":
         dataset_id = "dataset11_lv_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
+                Tan, J. X., Chen, W., & Lin, H. (2020). Evaluation of different computational
+                methods on 5-methylcytosine sites identification. Briefings in bioinformatics, 
+                21(3), 982-995.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 12: ":
+    elif model == "Dataset 12: 5-methylcytosine sites - A. thaliana":
         dataset_id = "dataset12_lv_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
+                Tan, J. X., Chen, W., & Lin, H. (2020). Evaluation of different computational
+                methods on 5-methylcytosine sites identification. Briefings in bioinformatics, 
+                21(3), 982-995.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 13: ":
+    elif model == "Dataset 13: non-coding RNA - E. coli K12":
         dataset_id = "dataset13_bonidia_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
+                de Almeida, B. L., Stadler, P. F., da Rocha, U. N., Sanches, D. S., & de Carvalho, 
+                A. C. (2022). BioAutoML: automated feature engineering and metalearning to predict 
+                noncoding RNAs in bacteria. Briefings in Bioinformatics, 23(4), bbac218.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 14: ":
+    elif model == "Dataset 14: non-coding RNA - Multiple bacterial phyla":
         dataset_id = "dataset14_bonidia_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
+                de Almeida, B. L., Stadler, P. F., da Rocha, U. N., Sanches, D. S., & de Carvalho, 
+                A. C. (2022). BioAutoML: automated feature engineering and metalearning to predict 
+                noncoding RNAs in bacteria. Briefings in Bioinformatics, 23(4), bbac218.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 15: ":
+    elif model == "Dataset 15: non-coding RNA - 8 classes":
         dataset_id = "dataset15_bonidia_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
+                de Almeida, B. L., Stadler, P. F., da Rocha, U. N., Sanches, D. S., & de Carvalho, 
+                A. C. (2022). BioAutoML: automated feature engineering and metalearning to predict 
+                noncoding RNAs in bacteria. Briefings in Bioinformatics, 23(4), bbac218.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 16: ":
+    elif model == "Dataset 16: antimicrobial peptides":
         dataset_id = "dataset16_chung_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Chung, C. R., Kuo, T. R., Wu, L. C., 
+                Lee, T. Y., & Horng, J. T. (2020). Characterization and identification of 
+                antimicrobial peptides with different functional activities. Briefings in 
+                bioinformatics, 21(3), 1098-1114.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 17: ":
+    elif model == "Dataset 17: antiviral":
         dataset_id = "dataset17_timmons_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
+                ENNAVIA is a novel method which employs neural networks for antiviral and 
+                anti-coronavirus activity prediction for therapeutic peptides. Briefings in 
+                bioinformatics, 22(6).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 18: ":
+    elif model == "Dataset 18: antiviral using random sequences":
         dataset_id = "dataset18_timmons_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
+                ENNAVIA is a novel method which employs neural networks for antiviral and 
+                anti-coronavirus activity prediction for therapeutic peptides. Briefings in 
+                bioinformatics, 22(6).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 19: ":
+    elif model == "Dataset 19: anti-coronavirus":
         dataset_id = "dataset19_timmons_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
+                ENNAVIA is a novel method which employs neural networks for antiviral and 
+                anti-coronavirus activity prediction for therapeutic peptides. Briefings in 
+                bioinformatics, 22(6).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 20: ":
+    elif model == "Dataset 20: anti-coronavirus using random sequences":
         dataset_id = "dataset20_timmons_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
+                ENNAVIA is a novel method which employs neural networks for antiviral and 
+                anti-coronavirus activity prediction for therapeutic peptides. Briefings in 
+                bioinformatics, 22(6).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 21: ":
+    elif model == "Dataset 21: antimicrobial peptides":
         dataset_id = "dataset21_xing_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Xing, W., Zhang, J., Li, C., Huo, Y., 
+                & Dong, G. (2023). iAMP-Attenpred: a novel antimicrobial peptide predictor based 
+                on BERT feature extraction method and CNN-BiLSTM-Attention combination model. 
+                Briefings in bioinformatics, 25(1).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 22: ":
+    elif model == "Dataset 22: antimicrobial peptides":
         dataset_id = "dataset22_xing_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Xing, W., Zhang, J., Li, C., Huo, Y., 
+                & Dong, G. (2023). iAMP-Attenpred: a novel antimicrobial peptide predictor based 
+                on BERT feature extraction method and CNN-BiLSTM-Attention combination model. 
+                Briefings in bioinformatics, 25(1).
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 23: ":
+    elif model == "Dataset 23: anticancer peptides":
         dataset_id = "dataset23_yu_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Yu, L., Jing, R., Liu, F., Luo, J., & Li, 
+                Y. (2020). DeepACP: a novel computational approach for accurate identification 
+                of anticancer peptides by deep learning algorithm. Molecular Therapy Nucleic Acids, 
+                22, 862-870.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 24: ":
+    elif model == "Dataset 24: circRNA vs lncRNA":
         dataset_id = "dataset24_bonidia_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Bonidia, R. P., Sampaio, L. D., Domingues, 
+                D. S., Paschoal, A. R., Lopes, F. M., de Carvalho, A. C., & Sanches, D. S. (2021). 
+                Feature extraction approaches for biological sequences: a comparative study of 
+                mathematical features. Briefings in Bioinformatics, 22(5), bbab011.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 25: ":
+    elif model == "Dataset 25: mRNA subcellular localization":
         dataset_id = "dataset25_musleh_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Musleh, S., Islam, M. T., Qureshi, R., Alajez, 
+                N. M., & Alam, T. (2023). MSLP: mRNA subcellular localization predictor based on 
+                machine learning techniques. BMC bioinformatics, 24(1), 109.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 26: ":
+    elif model == "Dataset 26: lncRNAs subcellular localization - training set with 5 classes":
         dataset_id = "dataset26_cai_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Cai, J., Wang, T., Deng, X., Tang, L., & Liu, L. 
+                (2023). GM-lncLoc: LncRNAs subcellular localization prediction based on graph neural 
+                network with meta-learning. BMC genomics, 24(1), 52.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 27: ":
+    elif model == "Dataset 27: lncRNAs subcellular localization - training set with 4 classes":
         dataset_id = "dataset27_cai_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Cai, J., Wang, T., Deng, X., Tang, L., & Liu, L. 
+                (2023). GM-lncLoc: LncRNAs subcellular localization prediction based on graph neural 
+                network with meta-learning. BMC genomics, 24(1), 52.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 28: ":
+    elif model == "Dataset 28: antioxidant proteins":
         dataset_id = "dataset28_lam_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Ho Thanh Lam, L., Le, N. H., Van Tuan, L., 
+                Tran Ban, H., Nguyen Khanh Hung, T., Nguyen, N. T. K., ... & Le, N. Q. K. (2020). 
+                Machine learning model for identifying antioxidant proteins using features calculated 
+                from primary sequences. Biology, 9(10), 325.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 29: ":
+    elif model == "Dataset 29: antioxidant proteins - only positive class in test set":
         dataset_id = "dataset29_lam_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Ho Thanh Lam, L., Le, N. H., Van Tuan, L., 
+                Tran Ban, H., Nguyen Khanh Hung, T., Nguyen, N. T. K., ... & Le, N. Q. K. (2020). 
+                Machine learning model for identifying antioxidant proteins using features calculated 
+                from primary sequences. Biology, 9(10), 325.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 30: ":
+    elif model == "Dataset 30: proinflammatory peptides":
         dataset_id = "dataset30_khatun_protein"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Khatun, M. S., Hasan, M. M., Shoombuatong, 
+                W., & Kurata, H. (2020). ProIn-Fuse: improved and robust prediction of proinflammatory 
+                peptides by fusing of multiple feature representations. Journal of Computer-Aided 
+                Molecular Design, 34(12), 1229-1236.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 31: ":
+    elif model == "Dataset 31: recombination spots":
         dataset_id = "dataset31_khan_dnarna"
         st.info(f"""
-                **Data set from the following paper:** 
+                **Dataset from the following paper:** Khan, F., Khan, M., Iqbal, N., Khan, S., Muhammad Khan, 
+                D., Khan, A., & Wei, D. Q. (2020). Prediction of recombination spots using novel hybrid feature 
+                extraction method via deep learning approach. Frontiers in Genetics, 11, 539227.
 
-                You can consult experiments done with this data set in \"Jobs\" using the following ID: **{dataset_id}**
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
         
     queue_info = st.container()

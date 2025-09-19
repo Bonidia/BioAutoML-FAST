@@ -13,6 +13,7 @@ from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OrdinalEncoder
 from sklearn import tree
 import matplotlib.pyplot as plt
 
@@ -29,7 +30,7 @@ def load_reduction_data(job_path, evaluation):
             model = joblib.load(os.path.join(job_path, "trained_model.sav"))
             features = model["train"]
             labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
-            nameseqs = model["nameseq_train"]["nameseq"].tolist()
+            nameseqs = model["nameseq_train"]
     else:
         if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
             features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
@@ -186,16 +187,26 @@ def compute_correlation_matrix(features, method):
     return features.corr(method=method.lower())
 
 @st.cache_data
-def get_top_correlations(corr_matrix, top_n=1000):
-    """Get top correlated feature pairs"""
-    corr_pairs = corr_matrix.abs().unstack()
-    corr_pairs = corr_pairs[corr_pairs.index.get_level_values(0) != corr_pairs.index.get_level_values(1)]
-    sorted_pairs = corr_pairs.sort_values(ascending=False).head(top_n)
+def get_top_correlations(corr_matrix, top_n=100):
+    """Get top correlated feature pairs and return matrix with features involved in top pairs"""
+    # Create a copy and set diagonal to NaN to exclude self-correlations
+    corr_matrix_copy = corr_matrix.copy()
+    np.fill_diagonal(corr_matrix_copy.values, np.nan)
     
-    top_features = np.unique(
-        sorted_pairs.index.get_level_values(0).tolist() + 
-        sorted_pairs.index.get_level_values(1).tolist()
-    )[:top_n]
+    # Get upper triangle only (excluding diagonal and duplicates)
+    corr_pairs = corr_matrix_copy.unstack()
+    corr_pairs = corr_pairs.dropna()
+    
+    # Sort by absolute correlation but keep original values
+    sorted_pairs = corr_pairs.iloc[corr_pairs.abs().argsort()[::-1]].head(top_n)
+    
+    # Get all unique features from top pairs
+    top_features = set()
+    for idx in sorted_pairs.index:
+        top_features.add(idx[0])
+        top_features.add(idx[1])
+    
+    top_features = sorted(top_features)
     
     return corr_matrix.loc[top_features, top_features]
 
@@ -276,7 +287,9 @@ def load_training_data(job_path):
         nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
     else:
         model = joblib.load(os.path.join(job_path, "trained_model.sav"))
+        
         features = model["train"]
+
         labels = pd.DataFrame(model["train_labels"], columns=["label"])
         nameseqs = model["nameseq_train"]
     return features, labels, nameseqs
@@ -361,7 +374,7 @@ def feature_distribution():
             group_data = feature_data[group_indices]
             fig_data.append(group_data)
             if show_rug:  # Only prepare rug text if needed
-                group_names = nameseqs[group_indices]["nameseq"]
+                group_names = nameseqs[group_indices]#["nameseq"]
                 fig_rug_text.append(group_names.tolist())
             else:
                 fig_rug_text.append(None)
