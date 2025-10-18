@@ -1,0 +1,10 @@
+REAL,Eastern Metropolitan,Eastern Victoria,Northern Metropolitan,Northern Victoria,South-Eastern Metropolitan,Southern Metropolitan,Western Metropolitan,Western Victoria,All
+Eastern Metropolitan,895,1,17,0,13,89,15,0,1030
+Eastern Victoria,1,22,1,1,11,0,1,0,37
+Northern Metropolitan,13,1,2656,0,1,29,23,0,2723
+Northern Victoria,1,2,1,12,8,0,0,5,29
+South-Eastern Metropolitan,26,1,4,0,271,10,3,0,315
+Southern Metropolitan,26,0,15,0,0,3222,23,0,3286
+Western Metropolitan,9,0,26,0,4,50,1975,0,2064
+Western Victoria,0,0,0,2,2,0,0,18,22
+All,971,27,2720,15,310,3400,2040,23,9506

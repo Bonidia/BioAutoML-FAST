@@ -35,7 +35,7 @@ from sklearn.model_selection import cross_validate
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
 # from sklearn.preprocessing import MinMaxScaler
 # from sklearn.model_selection import KFold
 # from sklearn.model_selection import train_test_split
@@ -570,9 +570,9 @@ def build_interpretability_report(generated_plt,  n_samples, report_name="interp
     report.build()
 
 
-def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tuning, imbalance_data, fs, output, exp_n_samples):
+def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_labels, test_nameseq, norm, classifier, tuning, imbalance_data, fs, output, exp_n_samples):
 
-    global clf, train, train_labels, lb_encoder
+    global clf, lb_encoder
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -582,8 +582,6 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         train_labels = model["train_labels"]
         column_train = model["column_train"]
     else:
-        train = train_read
-        train_labels = train_labels_read
         column_train = train.columns
 
         model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
@@ -620,11 +618,30 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
     if model:
         lb_encoder = model["label_encoder"]
-        train_labels = lb_encoder.fit_transform(train_labels)
+        if "ordinal_encoder" in model:
+            ord_encoder = model["ordinal_encoder"]
+
+        train_labels = lb_encoder.transform(train_labels)
+
+        string_cols = train.select_dtypes(include=["object"]).columns
+        if not string_cols.empty:
+            train[string_cols] = ord_encoder.transform(train[string_cols])
     else:
-        lb_encoder = LabelEncoder()
+        lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder()
+
         train_labels = lb_encoder.fit_transform(train_labels)
+
+        string_cols = train.select_dtypes(include=["object"]).columns
+        if not string_cols.empty:
+            train[string_cols] = ord_encoder.fit_transform(train[string_cols])
+
+        if os.path.exists(ftest) is True:
+            string_cols = test.select_dtypes(include=["object"]).columns
+            if not string_cols.empty:
+                test[string_cols] = ord_encoder.fit_transform(test[string_cols])
+
         model_dict["label_encoder"] = lb_encoder
+        model_dict["ordinal_encoder"] = ord_encoder
 
     """Preprocessing:  Missing Values"""
 
@@ -775,7 +792,7 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
         model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
-        model_dict["nameseq_train"] = pd.read_csv(nameseq_train)
+        model_dict["nameseq_train"] = train_nameseq
         
         print('Saving results in ' + train_output + '...')
         print('Saving confusion matrix in ' + matrix_output + '...')
@@ -802,25 +819,25 @@ def multiclass_pipeline(model, test, test_labels, test_nameseq, norm, classifier
         print('Saving prediction in ' + pred_output + '...')
         save_prediction(probs, test_nameseq, pred_output)
 
-        """Generating Explainable Machine Learning plots from the test set..."""
+        # """Generating Explainable Machine Learning plots from the test set..."""
 
-        try:
-            plot_output = os.path.join(output, 'explanations')
-            generated_plt = generate_all_plots(clf, train.values, test.values, preds,
-                                               test.columns, path=plot_output, n_samples=exp_n_samples)
-            build_interpretability_report(generated_plt, exp_n_samples, directory=output)
-        except ValueError as e:
-            print(e)
-            print("If you believe this is a bug, please report it to https://github.com/Bonidia/BioAutoML.")
-            print("Generation of explanation plots and report failed. Proceeding without it...")
-        except AssertionError as e:
-            print(e)
-            print("This is certainly a bug. Please report it to https://github.com/Bonidia/BioAutoML.")
-            print("Generation of explanation plots and report failed. Proceeding without it...")
-        except:
-            pass
-        else:
-            print("Explanation plots and report generated successfully!")
+        # try:
+        #     plot_output = os.path.join(output, 'explanations')
+        #     generated_plt = generate_all_plots(clf, train.values, test.values, preds,
+        #                                        test.columns, path=plot_output, n_samples=exp_n_samples)
+        #     build_interpretability_report(generated_plt, exp_n_samples, directory=output)
+        # except ValueError as e:
+        #     print(e)
+        #     print("If you believe this is a bug, please report it to https://github.com/Bonidia/BioAutoML.")
+        #     print("Generation of explanation plots and report failed. Proceeding without it...")
+        # except AssertionError as e:
+        #     print(e)
+        #     print("This is certainly a bug. Please report it to https://github.com/Bonidia/BioAutoML.")
+        #     print("Generation of explanation plots and report failed. Proceeding without it...")
+        # except:
+        #     pass
+        # else:
+        #     print("Explanation plots and report generated successfully!")
 
         if os.path.exists(ftest_labels) is True and len(np.unique(test_labels)) > 1:
             print('Generating Metrics - Test set...')
@@ -927,6 +944,13 @@ if __name__ == '__main__':
             print('Train_labels - %s: File not exists' % ftrain_labels)
             sys.exit()
 
+        if os.path.exists(nameseq_train) is True:
+            train_nameseq_read = pd.read_csv(nameseq_train).values.ravel()
+            print('Train_nameseq - %s: Found File' % nameseq_train)
+        else:
+            print('Train_nameseq - %s: File not exists' % nameseq_train)
+            sys.exit()
+
     test_read = ''
     if ftest != '':
         if os.path.exists(ftest) is True:
@@ -955,7 +979,8 @@ if __name__ == '__main__':
             sys.exit()
 
     multiclass_pipeline(
-        model, test_read, test_labels_read, test_nameseq_read, norm, classifier, 
+        model, train_read, train_labels_read, train_nameseq_read, 
+        test_read, test_labels_read, test_nameseq_read, norm, classifier, 
         tuning, imbalance_data, fs, foutput, n_exp_samples
     )
     cost = (time.time() - start_time)/60

@@ -7,7 +7,7 @@ from App.utils.stats import summary_stats
 
 def main():
     full_datasets_path = "App/datasets"
-    num_runs = 10  # Number of times to run each dataset
+    num_runs = 1  # Number of times to run each dataset
 
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
@@ -17,8 +17,8 @@ def main():
 
         # Skip this dataset if it already has a "runs" folder
         experiments_folder = os.path.join(dataset_path, "runs")
-        # if os.path.exists(experiments_folder):
-        #     continue
+        if os.path.exists(experiments_folder):
+            continue
 
         dtype_str = dataset.split('_')[-1]
 
@@ -61,7 +61,9 @@ def main():
                 command.append("--fasta_label_train")
                 command.extend(train_labels)
 
-                if os.path.exists(test_path):
+                testing_set = True if os.path.exists(test_path) else False
+
+                if testing_set:
                     command.append("--fasta_test")
                     command.extend(test_files)
 
@@ -79,7 +81,7 @@ def main():
                 job_data = {
                     "data_type": [data_type],
                     "training_set": ["Training set"],
-                    "testing_set": ["Test set"],
+                    "testing_set": ["Test set" if testing_set else "No test set"],
                     "classifier_selected": [classifier], 
                     "imbalance_methods": [imbalance],  
                     "feature_selection": [fselection],  
@@ -93,7 +95,9 @@ def main():
                 # Update paths for summary stats to use the run folder
                 
                 summary_stats(os.path.join(run_folder if run_num == 1 else os.path.join(experiments_folder, "run_1"), "feat_extraction", "train"), data_type, run_folder, False)
-                summary_stats(os.path.join(run_folder if run_num == 1 else os.path.join(experiments_folder, "run_1"), "feat_extraction", "test"), data_type, run_folder, False)
+
+                if testing_set:
+                    summary_stats(os.path.join(run_folder if run_num == 1 else os.path.join(experiments_folder, "run_1"), "feat_extraction", "test"), data_type, run_folder, False)
 
                 model_path = os.path.join(run_folder, "trained_model.sav")
                 if os.path.exists(model_path):

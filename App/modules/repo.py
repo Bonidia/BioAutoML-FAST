@@ -408,41 +408,41 @@ def runUI():
         st.session_state.queue_started = True
     
     model = st.selectbox("Select trained model", [
-        "Dataset 1: non-classical secreted proteins",
-        "Dataset 2: phage virion proteins",
-        "Dataset 3: sigma70 promoters",
-        "Dataset 4: anticancer peptides",
-        "Dataset 5: protein lysine crotonylation sites",
-        "Dataset 6: long non-coding RNA - human",
-        "Dataset 7: long non-coding RNA - wheat",
-        "Dataset 8: plant long non-coding RNA",
-        "Dataset 9: 5-methylcytosine sites - H. sapiens",
-        "Dataset 10: 5-methylcytosine sites - M. musculus",
-        "Dataset 11: 5-methylcytosine sites - S. cerevisiae",
-        "Dataset 12: 5-methylcytosine sites - A. thaliana",
-        "Dataset 13: non-coding RNA - E. coli K12",
-        "Dataset 14: non-coding RNA - Multiple bacterial phyla",
-        "Dataset 15: non-coding RNA - 8 classes",
-        "Dataset 16: antimicrobial peptides",
-        "Dataset 17: antiviral",
-        "Dataset 18: antiviral using random sequences",
-        "Dataset 19: anti-coronavirus",
-        "Dataset 20: anti-coronavirus using random sequences",
-        "Dataset 21: antimicrobial peptides",
-        "Dataset 22: antimicrobial peptides",
-        "Dataset 23: anticancer peptides",
-        "Dataset 24: circRNA vs lncRNA",
-        "Dataset 25: mRNA subcellular localization",
-        "Dataset 26: lncRNAs subcellular localization - training set with 5 classes",
-        "Dataset 27: lncRNAs subcellular localization - training set with 4 classes",
-        "Dataset 28: antioxidant proteins",
-        "Dataset 29: antioxidant proteins - only positive class in test set",
-        "Dataset 30: proinflammatory peptides",
-        "Dataset 31: recombination spots"
+        "Model 1: non-classical secreted proteins",
+        "Model 2: phage virion proteins",
+        "Model 3: sigma70 promoters",
+        "Model 4: anticancer peptides",
+        "Model 5: protein lysine crotonylation sites",
+        "Model 6: long non-coding RNA - human",
+        "Model 7: long non-coding RNA - wheat",
+        "Model 8: plant long non-coding RNA",
+        "Model 9: 5-methylcytosine sites - H. sapiens",
+        "Model 10: 5-methylcytosine sites - M. musculus",
+        "Model 11: 5-methylcytosine sites - S. cerevisiae",
+        "Model 12: 5-methylcytosine sites - A. thaliana",
+        "Model 13: non-coding RNA - E. coli K12",
+        "Model 14: non-coding RNA - Multiple bacterial phyla",
+        "Model 15: non-coding RNA - 8 classes",
+        "Model 16: antimicrobial peptides",
+        "Model 17: antiviral",
+        "Model 18: antiviral using random sequences",
+        "Model 19: anti-coronavirus",
+        "Model 20: anti-coronavirus using random sequences",
+        "Model 21: antimicrobial peptides",
+        "Model 22: antimicrobial peptides",
+        "Model 23: anticancer peptides",
+        "Model 24: circRNA vs lncRNA",
+        "Model 25: mRNA subcellular localization",
+        "Model 26: lncRNAs subcellular localization - training set with 5 classes",
+        "Model 27: lncRNAs subcellular localization - training set with 4 classes",
+        "Model 28: antioxidant proteins",
+        "Model 29: proinflammatory peptides",
+        "Model 30: recombination spots",
+        "Model 31: DNA-binding proteins"
     ])
     job_id = ""
     
-    if model == "Dataset 1: non-classical secreted proteins":
+    if model == "Model 1: non-classical secreted proteins":
         dataset_id = "dataset1_zhang_protein"
         st.info(f"""
                 **Dataset from the following paper:** Zhang, Y., Yu, S., 
@@ -453,7 +453,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 2: phage virion proteins":
+    elif model == "Model 2: phage virion proteins":
         dataset_id = "dataset2_phasit_protein"
         st.info(f"""
                 **Dataset from the following paper:** Charoenkwan, P., 
@@ -465,7 +465,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 3: sigma70 promoters":
+    elif model == "Model 3: sigma70 promoters":
         dataset_id = "dataset3_lin_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Lin, H., Liang, Z. Y., 
@@ -475,7 +475,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 4: anticancer peptides":
+    elif model == "Model 4: anticancer peptides":
         dataset_id = "dataset4_li_protein"
         st.info(f"""
                 **Dataset from the following paper:** Li, Q., Zhou, W., Wang, 
@@ -485,7 +485,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 5: protein lysine crotonylation sites":
+    elif model == "Model 5: protein lysine crotonylation sites":
         dataset_id = "dataset5_zhao_protein"
         st.info(f"""
                 **Dataset from the following paper:** Zhao, Y., He, N., Chen, Z., 
@@ -495,7 +495,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 6: long non-coding RNA - human":
+    elif model == "Model 6: long non-coding RNA - human":
         dataset_id = "dataset6_han_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Han, S., Liang, Y., Ma, Q., 
@@ -506,7 +506,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 7: long non-coding RNA - wheat":
+    elif model == "Model 7: long non-coding RNA - wheat":
         dataset_id = "dataset7_han_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Han, S., Liang, Y., Ma, Q., 
@@ -517,7 +517,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 8: plant long non-coding RNA":
+    elif model == "Model 8: plant long non-coding RNA":
         dataset_id = "dataset8_meng_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Meng, J., Kang, Q., Chang, Z., 
@@ -527,7 +527,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 9: 5-methylcytosine sites - H. sapiens":
+    elif model == "Model 9: 5-methylcytosine sites - H. sapiens":
         dataset_id = "dataset9_lv_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
@@ -537,7 +537,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 10: 5-methylcytosine sites - M. musculus":
+    elif model == "Model 10: 5-methylcytosine sites - M. musculus":
         dataset_id = "dataset10_lv_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
@@ -547,7 +547,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 11: 5-methylcytosine sites - S. cerevisiae":
+    elif model == "Model 11: 5-methylcytosine sites - S. cerevisiae":
         dataset_id = "dataset11_lv_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
@@ -557,7 +557,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 12: 5-methylcytosine sites - A. thaliana":
+    elif model == "Model 12: 5-methylcytosine sites - A. thaliana":
         dataset_id = "dataset12_lv_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Lv, H., Zhang, Z. M., Li, S. H., 
@@ -567,7 +567,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 13: non-coding RNA - E. coli K12":
+    elif model == "Model 13: non-coding RNA - E. coli K12":
         dataset_id = "dataset13_bonidia_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
@@ -577,7 +577,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 14: non-coding RNA - Multiple bacterial phyla":
+    elif model == "Model 14: non-coding RNA - Multiple bacterial phyla":
         dataset_id = "dataset14_bonidia_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
@@ -587,7 +587,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 15: non-coding RNA - 8 classes":
+    elif model == "Model 15: non-coding RNA - 8 classes":
         dataset_id = "dataset15_bonidia_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Bonidia, R. P., Santos, A. P. A., 
@@ -597,7 +597,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 16: antimicrobial peptides":
+    elif model == "Model 16: antimicrobial peptides":
         dataset_id = "dataset16_chung_protein"
         st.info(f"""
                 **Dataset from the following paper:** Chung, C. R., Kuo, T. R., Wu, L. C., 
@@ -607,7 +607,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 17: antiviral":
+    elif model == "Model 17: antiviral":
         dataset_id = "dataset17_timmons_protein"
         st.info(f"""
                 **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
@@ -617,7 +617,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 18: antiviral using random sequences":
+    elif model == "Model 18: antiviral using random sequences":
         dataset_id = "dataset18_timmons_protein"
         st.info(f"""
                 **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
@@ -627,7 +627,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 19: anti-coronavirus":
+    elif model == "Model 19: anti-coronavirus":
         dataset_id = "dataset19_timmons_protein"
         st.info(f"""
                 **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
@@ -637,7 +637,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 20: anti-coronavirus using random sequences":
+    elif model == "Model 20: anti-coronavirus using random sequences":
         dataset_id = "dataset20_timmons_protein"
         st.info(f"""
                 **Dataset from the following paper:** Timmons, P. B., & Hewage, C. M. (2021). 
@@ -647,7 +647,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 21: antimicrobial peptides":
+    elif model == "Model 21: antimicrobial peptides":
         dataset_id = "dataset21_xing_protein"
         st.info(f"""
                 **Dataset from the following paper:** Xing, W., Zhang, J., Li, C., Huo, Y., 
@@ -657,7 +657,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 22: antimicrobial peptides":
+    elif model == "Model 22: antimicrobial peptides":
         dataset_id = "dataset22_xing_protein"
         st.info(f"""
                 **Dataset from the following paper:** Xing, W., Zhang, J., Li, C., Huo, Y., 
@@ -667,7 +667,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 23: anticancer peptides":
+    elif model == "Model 23: anticancer peptides":
         dataset_id = "dataset23_yu_protein"
         st.info(f"""
                 **Dataset from the following paper:** Yu, L., Jing, R., Liu, F., Luo, J., & Li, 
@@ -677,7 +677,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 24: circRNA vs lncRNA":
+    elif model == "Model 24: circRNA vs lncRNA":
         dataset_id = "dataset24_bonidia_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Bonidia, R. P., Sampaio, L. D., Domingues, 
@@ -687,7 +687,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 25: mRNA subcellular localization":
+    elif model == "Model 25: mRNA subcellular localization":
         dataset_id = "dataset25_musleh_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Musleh, S., Islam, M. T., Qureshi, R., Alajez, 
@@ -696,7 +696,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 26: lncRNAs subcellular localization - training set with 5 classes":
+    elif model == "Model 26: lncRNAs subcellular localization - training set with 5 classes":
         dataset_id = "dataset26_cai_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Cai, J., Wang, T., Deng, X., Tang, L., & Liu, L. 
@@ -705,7 +705,7 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 27: lncRNAs subcellular localization - training set with 4 classes":
+    elif model == "Model 27: lncRNAs subcellular localization - training set with 4 classes":
         dataset_id = "dataset27_cai_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Cai, J., Wang, T., Deng, X., Tang, L., & Liu, L. 
@@ -714,8 +714,8 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 28: antioxidant proteins":
-        dataset_id = "dataset28_lam_protein"
+    elif model == "Model 28: antioxidant proteins":
+        dataset_id = "dataset28_1_lam_protein"
         st.info(f"""
                 **Dataset from the following paper:** Ho Thanh Lam, L., Le, N. H., Van Tuan, L., 
                 Tran Ban, H., Nguyen Khanh Hung, T., Nguyen, N. T. K., ... & Le, N. Q. K. (2020). 
@@ -724,18 +724,8 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 29: antioxidant proteins - only positive class in test set":
-        dataset_id = "dataset29_lam_protein"
-        st.info(f"""
-                **Dataset from the following paper:** Ho Thanh Lam, L., Le, N. H., Van Tuan, L., 
-                Tran Ban, H., Nguyen Khanh Hung, T., Nguyen, N. T. K., ... & Le, N. Q. K. (2020). 
-                Machine learning model for identifying antioxidant proteins using features calculated 
-                from primary sequences. Biology, 9(10), 325.
-
-                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
-                """)
-    elif model == "Dataset 30: proinflammatory peptides":
-        dataset_id = "dataset30_khatun_protein"
+    elif model == "Model 29: proinflammatory peptides":
+        dataset_id = "dataset29_khatun_protein"
         st.info(f"""
                 **Dataset from the following paper:** Khatun, M. S., Hasan, M. M., Shoombuatong, 
                 W., & Kurata, H. (2020). ProIn-Fuse: improved and robust prediction of proinflammatory 
@@ -744,8 +734,8 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-    elif model == "Dataset 31: recombination spots":
-        dataset_id = "dataset31_khan_dnarna"
+    elif model == "Model 30: recombination spots":
+        dataset_id = "dataset30_khan_dnarna"
         st.info(f"""
                 **Dataset from the following paper:** Khan, F., Khan, M., Iqbal, N., Khan, S., Muhammad Khan, 
                 D., Khan, A., & Wei, D. Q. (2020). Prediction of recombination spots using novel hybrid feature 
@@ -753,7 +743,41 @@ def runUI():
 
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
-        
+    elif model == "Model 31: DNA-binding proteins":
+        dataset_id = "dataset31_chowdhury_protein"
+        st.info(f"""
+                **Dataset from the following paper:** Chowdhury, S. Y., Shatabda, S., & Dehzangi, A. (2017). 
+                iDNAProt-ES: identification of DNA-binding proteins using evolutionary and structural features. 
+                Scientific reports, 7(1), 14938.
+
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 32: DNase I hypersensitive sites":
+        dataset_id = "dataset32_liu_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Liu, B., Long, R., & Chou, K. C. (2016). iDHS-EL: identifying 
+                DNase I hypersensitive sites by fusing three different modes of pseudo nucleotide composition into 
+                an ensemble learning framework. Bioinformatics, 32(16), 2411-2418.
+
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 33: real microRNA precursors":
+        dataset_id = "dataset33_liu_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Liu, B., Fang, L., Liu, F., Wang, X., Chen, J., & Chou, K. C. (2015). 
+                Identification of real microRNA precursors with a pseudo structure status composition approach. PloS one, 
+                10(3), e0121501.
+
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 34: small non-coding RNAs in bacteria":
+        dataset_id = "dataset34_barman_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Barman, R. K., Mukhopadhyay, A., & Das, S. (2017). An improved method 
+                for identification of small non-coding RNAs in bacteria using support vector machine. Scientific reports, 7(1), 46070.
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+
     queue_info = st.container()
 
     with st.form("repo_submit", clear_on_submit=True):

@@ -639,7 +639,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
                 '-i', fasta_file,
                 '-o', preprocessed_fasta,
                 '-s', split_type,
-                '-d', "DNA",
+                '-d', "DNA/RNA",
             ], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             
             if split_type == 'train':

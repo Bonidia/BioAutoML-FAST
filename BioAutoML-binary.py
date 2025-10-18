@@ -47,7 +47,7 @@ from imblearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
 from tpot import TPOTClassifier
 from reportlab.lib.enums import TA_JUSTIFY, TA_CENTER
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
@@ -582,9 +582,9 @@ def build_interpretability_report(generated_plt=[], report_name="interpretabilit
     report.build()
 
 
-def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tuning, imbalance_data, fs, output):
+def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels, test_nameseq, norm, classifier, tuning, imbalance_data, fs, output):
     
-    global clf, train, train_labels, lb_encoder
+    global clf, lb_encoder, ord_encoder
 
     if not os.path.exists(output):
         os.mkdir(output)
@@ -594,8 +594,6 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
         train_labels = model["train_labels"]
         column_train = model["column_train"]
     else:
-        train = train_read
-        train_labels = train_labels_read
         column_train = train.columns
 
         model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
@@ -629,11 +627,30 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
 
     if model:
         lb_encoder = model["label_encoder"]
-        train_labels = lb_encoder.fit_transform(train_labels)
+        if "ordinal_encoder" in model:
+            ord_encoder = model["ordinal_encoder"]
+
+        train_labels = lb_encoder.transform(train_labels)
+
+        string_cols = train.select_dtypes(include=["object"]).columns
+        if not string_cols.empty:
+            train[string_cols] = ord_encoder.transform(train[string_cols])
     else:
-        lb_encoder = LabelEncoder()
+        lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder()
+
         train_labels = lb_encoder.fit_transform(train_labels)
+
+        string_cols = train.select_dtypes(include=["object"]).columns
+        if not string_cols.empty:
+            train[string_cols] = ord_encoder.fit_transform(train[string_cols])
+
+        if os.path.exists(ftest) is True:
+            string_cols = test.select_dtypes(include=["object"]).columns
+            if not string_cols.empty:
+                test[string_cols] = ord_encoder.fit_transform(test[string_cols])
+
         model_dict["label_encoder"] = lb_encoder
+        model_dict["ordinal_encoder"] = ord_encoder
     
     """Preprocessing:  Missing Values"""
 
@@ -812,7 +829,7 @@ def binary_pipeline(model, test, test_labels, test_nameseq, norm, classifier, tu
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
         model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
-        model_dict["nameseq_train"] = pd.read_csv(nameseq_train)
+        model_dict["nameseq_train"] = train_nameseq
         
         print('Saving results in ' + train_output + '...')
         print('Saving confusion matrix in ' + matrix_output + '...')
@@ -959,6 +976,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     model = ''
+    train_read, train_labels_read, train_nameseq_read = '', '', ''
     if path_model:
         model = joblib.load(path_model)
     else:
@@ -974,6 +992,13 @@ if __name__ == '__main__':
             print('Train_labels - %s: Found File' % ftrain_labels)
         else:
             print('Train_labels - %s: File not exists' % ftrain_labels)
+            sys.exit()
+
+        if os.path.exists(nameseq_train) is True:
+            train_nameseq_read = pd.read_csv(nameseq_train).values.ravel()
+            print('Train_nameseq - %s: Found File' % nameseq_train)
+        else:
+            print('Train_nameseq - %s: File not exists' % nameseq_train)
             sys.exit()
 
     test_read = ''
@@ -1003,7 +1028,11 @@ if __name__ == '__main__':
             print('Test_nameseq - %s: File not exists' % nameseq_test)
             sys.exit()
 
-    binary_pipeline(model, test_read, test_labels_read, test_nameseq_read, norm, classifier, tuning, imbalance_data, fs, foutput)
+    binary_pipeline(
+        model, train_read, train_labels_read, train_nameseq_read, 
+        test_read, test_labels_read, test_nameseq_read, norm, classifier,
+        tuning, imbalance_data, fs, foutput
+    )
     cost = (time.time() - start_time) / 60
     print('Computation time - Pipeline: %s minutes' % cost)
 ##########################################################################

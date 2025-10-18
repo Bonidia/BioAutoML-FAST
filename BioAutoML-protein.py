@@ -462,7 +462,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			processes = []
 			for cmd, dataset in zip(commands, datasets):
 				log_path = os.path.join(log_dir, f"{dataset.split('/')[-1].split('.csv')[0]}.log")
-				with open(log_path, "w") as log_file:
+				with open(log_path, "a") as log_file:
 					p = subprocess.Popen(
 						cmd,
 						stdout=log_file,
