@@ -13,7 +13,7 @@ def preprocessing_protein(finput, foutput, fset):
     
     with open(foutput, 'a') as file:
         for i, seq_record in enumerate(SeqIO.parse(finput, "fasta")):
-            name_seq = f"pre_{f'{i}_{fset}_' if fset else ''}{seq_record.name}"
+            name_seq = f"pre_{f'{i}_{fset}_' if fset else f'{i}_'}{seq_record.name}"
             seq = str(seq_record.seq.upper())
 
             # Remove invalid amino acids and alignment hyphens
@@ -30,7 +30,7 @@ def preprocessing_dna(finput, foutput, fset):
     
     with open(foutput, 'a') as file:
         for i, seq_record in enumerate(SeqIO.parse(finput, "fasta")):
-            name_seq = f"pre_{f'{i}_{fset}_' if fset else ''}{seq_record.name}"
+            name_seq = f"pre_{f'{i}_{fset}_' if fset else f'{i}_'}{seq_record.name}"
             seq = str(seq_record.seq.upper())
 
             cleaned_seq = re.sub(invalid_chars, "", seq)

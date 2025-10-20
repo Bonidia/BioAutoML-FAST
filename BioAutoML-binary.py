@@ -30,7 +30,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
-from sklearn.metrics import matthews_corrcoef
+from sklearn.metrics import matthews_corrcoef, classification_report
 from sklearn.feature_selection import SelectFromModel
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
@@ -647,8 +647,7 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
 
     if model:
         lb_encoder = model["label_encoder"]
-        if "ordinal_encoder" in model:
-            ord_encoder = model["ordinal_encoder"]
+        ord_encoder = model["ordinal_encoder"]
 
         train_labels = lb_encoder.transform(train_labels)
 
@@ -904,6 +903,11 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
         save_prediction(probs, test_nameseq, pred_output)
         if os.path.exists(ftest_labels) is True and len(np.unique(test_labels)) > 1:
             print('Generating Metrics - Test set...')
+            try:
+                report = classification_report(test_labels, preds, output_dict=True)
+            except:
+                pass
+
             labels = np.unique(test_labels)
             accu = accuracy_score(test_labels, preds)
             recall = recall_score(test_labels, preds, pos_label=labels[0])
@@ -917,13 +921,17 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
 
             metrics_output = os.path.join(output, "metrics_test.csv")
             print('Saving Metrics - Test set: ' + metrics_output + '...')
-            metrics = {
-                'Metric': ['Accuracy', 'Recall', 'Precision', 'F1-score', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
-                'Value': [accu, recall, precision, f1, auc, balanced, gmean, mcc]
-            }
+            
+            metr_report = pd.DataFrame(report).transpose()
+            metr_report.to_csv(metrics_output)
+            
+            # metrics = {
+            #     'Metric': ['Accuracy', 'Recall', 'Precision', 'F1-score', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
+            #     'Value': [accu, recall, precision, f1, auc, balanced, gmean, mcc]
+            # }
 
-            metrics_df = pd.DataFrame(metrics)
-            metrics_df.to_csv(metrics_output, index=False)
+            # metrics_df = pd.DataFrame(metrics)
+            # metrics_df.to_csv(metrics_output, index=False)
 
             matrix_output_test = os.path.join(output, "test_confusion_matrix.csv")
             matrix_test.to_csv(matrix_output_test)

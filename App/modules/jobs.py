@@ -470,8 +470,10 @@ def performance_metrics():
             if "F1_micro" not in df_cv.columns:
                 metrics.extend([
                     f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                    f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
+                    f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
                     f"**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}",
+                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
                     f"**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}",
                     f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}",
                     f"**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}"
@@ -479,10 +481,12 @@ def performance_metrics():
             else: 
                 metrics.extend([
                     f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                    f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
+                    f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
                     f"**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}",
                     f"**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}",
-                    f"**F1-score (weighted avg.):** {df_cv['F1_w'].item()} ± {df_cv['std_F1_w'].item()}",
+                    f"**F1-score (weighted avg.):** {df_cv['F1_weighted'].item()} ± {df_cv['std_F1_weighted'].item()}",
+                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
                     f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}"
                 ])
             

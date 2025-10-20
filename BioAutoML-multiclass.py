@@ -56,7 +56,7 @@ def header(output_header):
     """Header Function: Header of the evaluate_model_cross Function"""
     with open(output_header, 'a') as file:
         file.write(
-            'ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1,std_F1,MCC,std_MCC,'
+            'ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1_macro,std_F1_macro,MCC,std_MCC,'
             'kappa,std_kappa,F1_micro,std_F1_micro,F1_weighted,std_F1_weighted'
         )
         file.write('\n')
@@ -70,7 +70,7 @@ def save_measures(output_measures, scores):
             '%0.4f,%0.4f,'  # ACC
             '%0.4f,%0.4f,'  # Sn (macro)
             '%0.4f,%0.4f,'  # Sp (macro)
-            '%0.4f,%0.4f,'  # F1 (macro)
+            '%0.4f,%0.4f,'  # F1 macro
             '%0.4f,%0.4f,'  # MCC
             '%0.4f,%0.4f,'  # kappa
             '%0.4f,%0.4f,'  # F1 micro
@@ -79,7 +79,7 @@ def save_measures(output_measures, scores):
             scores['test_ACC'].mean(), scores['test_ACC'].std(),
             scores['test_Sn'].mean(), scores['test_Sn'].std(),
             scores['test_Sp'].mean(), scores['test_Sp'].std(),
-            scores['test_F1'].mean(), scores['test_F1'].std(),
+            scores['test_F1_macro'].mean(), scores['test_F1_macro'].std(),
             scores['test_MCC'].mean(), scores['test_MCC'].std(),
             scores['test_kappa'].mean(), scores['test_kappa'].std(),
             scores['test_F1_micro'].mean(), scores['test_F1_micro'].std(),
@@ -107,7 +107,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
         'ACC': make_scorer(accuracy_score),
         'Sn': make_scorer(recall_score, average='macro'),
         'Sp': make_scorer(specificity_score),
-        'F1': make_scorer(f1_score, average='macro'),
+        'F1_macro': make_scorer(f1_score, average='macro'),
         'MCC': make_scorer(matthews_corrcoef),
         'kappa': make_scorer(cohen_kappa_score),
         'F1_micro': make_scorer(f1_score, average='micro'),
@@ -645,8 +645,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
 
     if model:
         lb_encoder = model["label_encoder"]
-        if "ordinal_encoder" in model:
-            ord_encoder = model["ordinal_encoder"]
+        ord_encoder = model["ordinal_encoder"]
 
         train_labels = lb_encoder.transform(train_labels)
 
