@@ -777,6 +777,37 @@ def runUI():
                 for identification of small non-coding RNAs in bacteria using support vector machine. Scientific reports, 7(1), 46070.
                 You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
                 """)
+    elif model == "Model 35: non-coding RNA - 4 classes":
+        dataset_id = "dataset35_avila_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Avila Santos, A. P., de Almeida, B. L., Bonidia, R. P., Stadler, P. F., Stefanic, 
+                P., Mandic-Mulec, I., ... & de Carvalho, A. C. (2024). BioDeepfuse: a hybrid deep learning approach with integrated 
+                feature extraction techniques for enhanced non-coding RNA classification. RNA biology, 21(1), 410-421.
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 36: toehold switch sequences":
+        dataset_id = "dataset36_valeri_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Valeri, J. A., Collins, K. M., Ramesh, P., Alcantar, M. A., Lepe, B. A., Lu, T. K.,
+                & Camacho, D. M. (2020). Sequence-to-function deep learning frameworks for engineered riboregulators. Nature communications, 
+                11(1), 5058.
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 37: ribosome binding site sequences":
+        dataset_id = "dataset37_hoellerer_dnarna"
+        st.info(f"""
+                **Dataset from the following paper:** Höllerer, S., Papaxanthos, L., Gumpinger, A. C., Fischer, K., Beisel, C., Borgwardt, 
+                K., ... & Jeschek, M. (2020). Large-scale DNA-based phenotypic recording and deep learning enable highly accurate 
+                sequence-function mapping. Nature communications, 11(1), 3551.
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
+    elif model == "Model 38: antibody sequences":
+        dataset_id = "dataset38_liu_protein"
+        st.info(f"""
+                **Dataset from the following paper:** Liu, G., Zeng, H., Mueller, J., Carter, B., Wang, Z., Schilz, J., ... & Gifford, D. K. 
+                (2020). Antibody complementarity determining region design using high-capacity machine learning. Bioinformatics, 36(7), 2126-2133.
+                You can consult experiments done with this dataset in \"Jobs\" using the following ID: **{dataset_id}**
+                """)
 
     queue_info = st.container()
 
@@ -786,8 +817,8 @@ def runUI():
                                     help="Single file for prediction (e.g. predict.fasta)")
 
         submitted = st.form_submit_button("Submit", 
-                                        use_container_width=True, 
-                                        type="primary")
+                                    use_container_width=True, 
+                                    type="primary")
 
     predict_path = os.path.abspath("jobs")
 

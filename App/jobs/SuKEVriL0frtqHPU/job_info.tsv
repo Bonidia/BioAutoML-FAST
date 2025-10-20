@@ -1,2 +1,0 @@
-data_type	training_set	testing_set	classifier_selected	imbalance_methods	feature_selection
-DNA/RNA	true	Test set	false	true	false

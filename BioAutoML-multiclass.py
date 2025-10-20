@@ -17,11 +17,7 @@ import optuna
 # import shutil
 from catboost import CatBoostClassifier
 # from tpot import TPOTClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import classification_report
-from sklearn.metrics import f1_score
-from sklearn.metrics import cohen_kappa_score, make_scorer
-from sklearn.metrics import matthews_corrcoef
+from sklearn.metrics import classification_report, accuracy_score, recall_score, f1_score, make_scorer, matthews_corrcoef, cohen_kappa_score
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.under_sampling import NearMiss
@@ -57,51 +53,82 @@ SUMMARY = 0
 WATERFALL = 1
 
 def header(output_header):
-
     """Header Function: Header of the evaluate_model_cross Function"""
-
-    file = open(output_header, 'a')
-    file.write('ACC,std_ACC,MCC,std_MCC,F1_micro,std_F1_micro,'
-               'F1_macro,std_F1_macro,F1_w,std_F1_w,kappa,std_kappa')
-    file.write('\n')
+    with open(output_header, 'a') as file:
+        file.write(
+            'ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1,std_F1,MCC,std_MCC,'
+            'kappa,std_kappa,F1_micro,std_F1_micro,F1_weighted,std_F1_weighted'
+        )
+        file.write('\n')
     return
-
 
 def save_measures(output_measures, scores):
-
     """Save Measures Function: Output of the evaluate_model_cross Function"""
-
     header(output_measures)
-    file = open(output_measures, 'a')
-    file.write('%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f' % (scores['test_ACC'].mean(),
-                + scores['test_ACC'].std(), scores['test_MCC'].mean(), scores['test_MCC'].std(),
-                + scores['test_f1_mi'].mean(), scores['test_f1_mi'].std(),
-                + scores['test_f1_ma'].mean(), scores['test_f1_ma'].std(),
-                + scores['test_f1_w'].mean(), scores['test_f1_w'].std(),
-                + scores['test_kappa'].mean(), scores['test_kappa'].std()))
-    file.write('\n')
+    with open(output_measures, 'a') as file:
+        file.write((
+            '%0.4f,%0.4f,'  # ACC
+            '%0.4f,%0.4f,'  # Sn (macro)
+            '%0.4f,%0.4f,'  # Sp (macro)
+            '%0.4f,%0.4f,'  # F1 (macro)
+            '%0.4f,%0.4f,'  # MCC
+            '%0.4f,%0.4f,'  # kappa
+            '%0.4f,%0.4f,'  # F1 micro
+            '%0.4f,%0.4f'   # F1 weighted
+        ) % (
+            scores['test_ACC'].mean(), scores['test_ACC'].std(),
+            scores['test_Sn'].mean(), scores['test_Sn'].std(),
+            scores['test_Sp'].mean(), scores['test_Sp'].std(),
+            scores['test_F1'].mean(), scores['test_F1'].std(),
+            scores['test_MCC'].mean(), scores['test_MCC'].std(),
+            scores['test_kappa'].mean(), scores['test_kappa'].std(),
+            scores['test_F1_micro'].mean(), scores['test_F1_micro'].std(),
+            scores['test_F1_weighted'].mean(), scores['test_F1_weighted'].std()
+        ))
+        file.write('\n')
     return
 
-
 def evaluate_model_cross(X, y, model, output_cross, matrix_output):
-
     """Evaluation Function: Using Cross-Validation"""
 
-    scoring = {'ACC': make_scorer(accuracy_score),
-               'MCC': make_scorer(matthews_corrcoef),
-               'f1_mi': make_scorer(f1_score, average='micro'),
-               'f1_ma': make_scorer(f1_score, average='macro'),
-               'f1_w': make_scorer(f1_score, average='weighted'),
-               'kappa': make_scorer(cohen_kappa_score)}
+    # --- Custom metric for specificity ---
+    def specificity_score(y_true, y_pred):
+        labels = np.unique(y_true)
+        specs = []
+        for label in labels:
+            tn = ((y_true != label) & (y_pred != label)).sum()
+            fp = ((y_true != label) & (y_pred == label)).sum()
+            spec = tn / (tn + fp) if (tn + fp) > 0 else 0
+            specs.append(spec)
+        return np.mean(specs)
 
+    # --- Scoring dictionary (all macro except F1 micro/weighted) ---
+    scoring = {
+        'ACC': make_scorer(accuracy_score),
+        'Sn': make_scorer(recall_score, average='macro'),
+        'Sp': make_scorer(specificity_score),
+        'F1': make_scorer(f1_score, average='macro'),
+        'MCC': make_scorer(matthews_corrcoef),
+        'kappa': make_scorer(cohen_kappa_score),
+        'F1_micro': make_scorer(f1_score, average='micro'),
+        'F1_weighted': make_scorer(f1_score, average='weighted')
+    }
+
+    # --- Cross-validation ---
     kfold = StratifiedKFold(n_splits=10, shuffle=True)
     scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
+
     save_measures(output_cross, scores)
+
+    # --- Confusion matrix ---
     y_pred = cross_val_predict(model, X, y, cv=kfold)
-
-    conf_mat = (pd.crosstab(lb_encoder.inverse_transform(y), lb_encoder.inverse_transform(y_pred), rownames=['REAL'], colnames=['PREDITO'], margins=True))
+    conf_mat = pd.crosstab(
+        lb_encoder.inverse_transform(y),
+        lb_encoder.inverse_transform(y_pred),
+        rownames=['REAL'], colnames=['PREDICTED'], margins=True
+    )
     conf_mat.to_csv(matrix_output)
-
+    return
 
 def objective_rf(space):
 
@@ -848,7 +875,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
                 pass
             
             matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"],
-                           colnames=["PREDITO"], margins=True))
+                           colnames=["PREDICTED"], margins=True))
             metrics_output = os.path.join(output, 'metrics_test.csv')
             print('Saving Metrics - Test set: ' + metrics_output + '...')
             metr_report = pd.DataFrame(report).transpose()

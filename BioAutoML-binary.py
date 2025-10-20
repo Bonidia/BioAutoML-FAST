@@ -41,7 +41,7 @@ from imblearn.combine import SMOTEENN
 from imblearn.combine import SMOTETomek
 from imblearn.under_sampling import ClusterCentroids
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import cohen_kappa_score, make_scorer
+from sklearn.metrics import make_scorer, matthews_corrcoef, cohen_kappa_score, recall_score, f1_score
 from imblearn.metrics import geometric_mean_score
 from imblearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
@@ -57,53 +57,73 @@ from interpretability_report import Report, REPORT_MAIN_TITLE_BINARY, REPORT_SHA
     REPORT_SHAP_BAR_BINARY, \
     REPORT_SHAP_BEESWARM_BINARY, REPORT_SHAP_WATERFALL_BINARY
 
-
 def header(output_header):
     """Header Function: Header of the evaluate_model_cross Function"""
-
-    file = open(output_header, 'a')
-    file.write('ACC,std_ACC,MCC,std_MCC,F1,std_F1,balanced_ACC,std_balanced_ACC,kappa,std_kappa,gmean,std_gmean')
-    file.write('\n')
+    with open(output_header, 'a') as file:
+        file.write('ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1,std_F1,MCC,std_MCC,balanced_ACC,std_balanced_ACC,kappa,std_kappa,gmean,std_gmean')
+        file.write('\n')
     return
-
 
 def save_measures(output_measures, scores):
     """Save Measures Function: Output of the evaluate_model_cross Function"""
 
     header(output_measures)
-    file = open(output_measures, 'a')
-    file.write('%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f,%0.4f,%0.2f' % (scores['test_ACC'].mean(),
-                                                                                            + scores['test_ACC'].std(),
-                                                                                            scores['test_MCC'].mean(),
-                                                                                            scores['test_MCC'].std(),
-                                                                                            + scores['test_f1'].mean(),
-                                                                                            scores['test_f1'].std(),
-                                                                                            + scores[
-                                                                                                'test_ACC_B'].mean(),
-                                                                                            scores['test_ACC_B'].std(),
-                                                                                            + scores[
-                                                                                                'test_kappa'].mean(),
-                                                                                            scores['test_kappa'].std(),
-                                                                                            + scores[
-                                                                                                'test_gmean'].mean(),
-                                                                                            scores['test_gmean'].std()))
-    file.write('\n')
+    with open(output_measures, 'a') as file:
+        file.write((
+            '%0.4f,%0.4f,'  # ACC, std_ACC
+            '%0.4f,%0.4f,'  # Sn, std_Sn
+            '%0.4f,%0.4f,'  # Sp, std_Sp
+            '%0.4f,%0.4f,'  # F1, std_F1
+            '%0.4f,%0.4f,'  # MCC, std_MCC
+            '%0.4f,%0.4f,'  # balanced_ACC, std_balanced_ACC
+            '%0.4f,%0.4f,'  # kappa, std_kappa
+            '%0.4f,%0.4f'   # gmean, std_gmean
+        ) % (
+            scores['test_ACC'].mean(), scores['test_ACC'].std(),
+            scores['test_Sn'].mean(), scores['test_Sn'].std(),
+            scores['test_Sp'].mean(), scores['test_Sp'].std(),
+            scores['test_F1'].mean(), scores['test_F1'].std(),
+            scores['test_MCC'].mean(), scores['test_MCC'].std(),
+            scores['test_ACC_B'].mean(), scores['test_ACC_B'].std(),
+            scores['test_kappa'].mean(), scores['test_kappa'].std(),
+            scores['test_gmean'].mean(), scores['test_gmean'].std()
+        ))
+        file.write('\n')
     return
-
 
 def evaluate_model_cross(X, y, model, output_cross, matrix_output):
     """Evaluation Function: Using Cross-Validation"""
-    scoring = {'ACC': 'accuracy', 'MCC': make_scorer(matthews_corrcoef), 'f1': 'f1',
-               'ACC_B': 'balanced_accuracy', 'kappa': make_scorer(cohen_kappa_score),
-               'gmean': make_scorer(geometric_mean_score)}
+
+    # Custom scoring for sensitivity (recall) and specificity
+    def specificity_score(y_true, y_pred):
+        tn = ((y_true == 0) & (y_pred == 0)).sum()
+        fp = ((y_true == 0) & (y_pred == 1)).sum()
+        return tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
+    scoring = {
+        'ACC': 'accuracy',
+        'Sn': make_scorer(recall_score, average='macro'),
+        'Sp': make_scorer(specificity_score),
+        'F1': make_scorer(f1_score, average='macro'),
+        'MCC': make_scorer(matthews_corrcoef),
+        'ACC_B': 'balanced_accuracy',
+        'kappa': make_scorer(cohen_kappa_score),
+        'gmean': make_scorer(geometric_mean_score)
+    }
+
     kfold = StratifiedKFold(n_splits=10, shuffle=True)
     scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
+
     save_measures(output_cross, scores)
+
     y_pred = cross_val_predict(model, X, y, cv=kfold)
-    conf_mat = (pd.crosstab(lb_encoder.inverse_transform(y), lb_encoder.inverse_transform(y_pred), rownames=['REAL'], colnames=['PREDITO'], margins=True))
+    conf_mat = pd.crosstab(
+        lb_encoder.inverse_transform(y),
+        lb_encoder.inverse_transform(y_pred),
+        rownames=['REAL'], colnames=['PREDICTED'], margins=True
+    )
     conf_mat.to_csv(matrix_output)
     return
-
 
 def tuning_rf_ga():
     """Tuning of classifier using Genetic Algorithm: Random Forest"""
@@ -893,7 +913,7 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
             balanced = balanced_accuracy_score(test_labels, preds)
             gmean = geometric_mean_score(test_labels, preds)
             mcc = matthews_corrcoef(test_labels, preds)
-            matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDITO"], margins=True))
+            matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
 
             metrics_output = os.path.join(output, "metrics_test.csv")
             print('Saving Metrics - Test set: ' + metrics_output + '...')
