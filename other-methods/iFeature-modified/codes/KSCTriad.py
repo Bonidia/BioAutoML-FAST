@@ -51,22 +51,26 @@ def KSCTriad(fastas, gap = 0, **kw):
 		for aa in AAGroup[g]:
 			AADict[aa] = g
 
-	features = [f1 + '.'+ f2 + '.' + f3 for f1 in myGroups for f2 in myGroups for f3 in myGroups]
+	features = [f1 + '.' + f2 + '.' + f3 for f1 in myGroups for f2 in myGroups for f3 in myGroups]
 
 	encodings = []
 	header = ['#']
-	for g in range(gap+1):
+	for g in range(gap + 1):
 		for f in features:
-			header.append(f+'.gap'+str(g))
+			header.append(f + '.gap' + str(g))
 	encodings.append(header)
 
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
+
+		# If the sequence is too short, fill with nulls (or zeros)
+		if len(sequence) < 2 * gap + 3:
+			null_values = [None] * ((gap + 1) * len(features))
+			encodings.append([name] + null_values)
+			continue
+
 		code = [name]
-		if len(sequence) < 2*gap + 3:
-			print('Error: for "KSCTriad" encoding, the input fasta sequences should be greater than (2*gap+3). \n\n')
-			return 0
-		code = code + CalculateKSCTriad(sequence, gap, features, AADict)
+		code += CalculateKSCTriad(sequence, gap, features, AADict)
 		encodings.append(code)
 
 	return encodings

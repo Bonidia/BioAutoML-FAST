@@ -30,10 +30,6 @@ def CKSAAGP(fastas, gap = 5, **kw):
 		print('Error: the gap should be equal or greater than zero' + '\n\n')
 		return 0
 
-	if checkFasta.minSequenceLength(fastas) < gap+2:
-		print('Error: all the sequence length should be greater than the (gap value) + 2 = ' + str(gap+2) + '\n\n')
-		return 0
-
 	group = {
 		'alphaticr': 'GAVLMI',
 		'aromatic': 'FYW',
@@ -43,7 +39,6 @@ def CKSAAGP(fastas, gap = 5, **kw):
 	}
 
 	AA = 'ARNDCQEGHILKMFPSTWYV'
-
 	groupKey = group.keys()
 
 	index = {}
@@ -65,6 +60,13 @@ def CKSAAGP(fastas, gap = 5, **kw):
 
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
+
+		# If sequence is too short, fill with nulls (or zeros)
+		if len(sequence) < gap + 2:
+			null_values = [None] * ((gap + 1) * len(gPairIndex))
+			encodings.append([name] + null_values)
+			continue
+
 		code = [name]
 		for g in range(gap + 1):
 			gPair = generateGroupPairs(groupKey)
@@ -72,8 +74,8 @@ def CKSAAGP(fastas, gap = 5, **kw):
 			for p1 in range(len(sequence)):
 				p2 = p1 + g + 1
 				if p2 < len(sequence) and sequence[p1] in AA and sequence[p2] in AA:
-					gPair[index[sequence[p1]]+'.'+index[sequence[p2]]] = gPair[index[sequence[p1]]+'.'+index[sequence[p2]]] + 1
-					sum = sum + 1
+					gPair[index[sequence[p1]]+'.'+index[sequence[p2]]] += 1
+					sum += 1
 
 			if sum == 0:
 				for gp in gPairIndex:

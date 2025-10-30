@@ -22,23 +22,28 @@ def CKSAAP(fastas, gap=5, **kw):
 		print('Error: the gap should be equal or greater than zero' + '\n\n')
 		return 0
 
-	if checkFasta.minSequenceLength(fastas) < gap+2:
-		print('Error: all the sequence length should be larger than the (gap value) + 2 = ' + str(gap+2) + '\n\n')
-		return 0
-
-	AA = kw['order'] if kw['order'] != None else 'ACDEFGHIKLMNPQRSTVWY'
+	AA = kw['order'] if kw['order'] is not None else 'ACDEFGHIKLMNPQRSTVWY'
 	encodings = []
 	aaPairs = []
 	for aa1 in AA:
 		for aa2 in AA:
 			aaPairs.append(aa1 + aa2)
+
 	header = ['#']
 	for g in range(gap+1):
 		for aa in aaPairs:
 			header.append(aa + '.gap' + str(g))
 	encodings.append(header)
+
 	for i in fastas:
 		name, sequence = i[0], i[1]
+
+		# If sequence is too short, fill with nulls (or zeros)
+		if len(sequence) < gap + 2:
+			null_values = [None] * ((gap + 1) * len(aaPairs))
+			encodings.append([name] + null_values)
+			continue
+
 		code = [name]
 		for g in range(gap+1):
 			myDict = {}
@@ -48,11 +53,12 @@ def CKSAAP(fastas, gap=5, **kw):
 			for index1 in range(len(sequence)):
 				index2 = index1 + g + 1
 				if index1 < len(sequence) and index2 < len(sequence) and sequence[index1] in AA and sequence[index2] in AA:
-					myDict[sequence[index1] + sequence[index2]] = myDict[sequence[index1] + sequence[index2]] + 1
-					sum = sum + 1
+					myDict[sequence[index1] + sequence[index2]] += 1
+					sum += 1
 			for pair in aaPairs:
-				code.append(myDict[pair] / sum)
+				code.append(myDict[pair] / sum if sum != 0 else 0)
 		encodings.append(code)
+
 	return encodings
 
 if __name__ == '__main__':

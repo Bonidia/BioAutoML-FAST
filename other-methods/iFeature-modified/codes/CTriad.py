@@ -73,7 +73,7 @@ def CTriad(fastas, gap = 0, **kw):
 		for aa in AAGroup[g]:
 			AADict[aa] = g
 
-	features = [f1 + '.'+ f2 + '.' + f3 for f1 in myGroups for f2 in myGroups for f3 in myGroups]
+	features = [f1 + '.' + f2 + '.' + f3 for f1 in myGroups for f2 in myGroups for f3 in myGroups]
 
 	encodings = []
 	header = ['#']
@@ -83,11 +83,15 @@ def CTriad(fastas, gap = 0, **kw):
 
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
-		code = [name]
+
+		# If the sequence is too short, fill with nulls (or zeros)
 		if len(sequence) < 3:
-			print('Error: for "CTriad" encoding, the input fasta sequences should be greater than 3. \n\n')
-			return 0
-		code = code + CalculateKSCTriad(sequence, 0, features, AADict)
+			null_values = [None] * len(features)
+			encodings.append([name] + null_values)
+			continue
+
+		code = [name]
+		code += CalculateKSCTriad(sequence, 0, features, AADict)
 		encodings.append(code)
 
 	return encodings
