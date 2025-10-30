@@ -309,7 +309,6 @@ def objective_feature_selection(trial, importances):
 
     return f1
 
-
 def feature_importance_fs_bayesian(model, train, train_labels):
 
     """Feature Importance-based Feature selection using Bayesian Optimization"""
@@ -711,7 +710,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
         if classifier == 3:
             print('Tuning: ' + str(bool(tuning)))
             print('Classifier: XGBClassifier')
-            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63, use_label_encoder=False)
+            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
             if imbalance_data:
                 train, train_labels = imbalanced_function(clf, train, train_labels)
                 model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels

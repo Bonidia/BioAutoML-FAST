@@ -14,6 +14,7 @@ import joblib
 import xgboost as xgb
 import matplotlib.pyplot as plt
 import shap
+import optuna
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import cross_val_predict
 #  from sklearn.metrics import multilabel_confusion_matrix
@@ -53,6 +54,7 @@ from reportlab.lib.enums import TA_JUSTIFY, TA_CENTER
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from numpy.random import default_rng
+from functools import partial
 from interpretability_report import Report, REPORT_MAIN_TITLE_BINARY, REPORT_SHAP_PREAMBLE_BINARY, \
     REPORT_SHAP_BAR_BINARY, \
     REPORT_SHAP_BEESWARM_BINARY, REPORT_SHAP_WATERFALL_BINARY
@@ -60,9 +62,11 @@ from interpretability_report import Report, REPORT_MAIN_TITLE_BINARY, REPORT_SHA
 def header(output_header):
     """Header Function: Header of the evaluate_model_cross Function"""
     with open(output_header, 'a') as file:
-        file.write('ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1,std_F1,MCC,std_MCC,balanced_ACC,std_balanced_ACC,kappa,std_kappa,gmean,std_gmean')
-        file.write('\n')
+        file.write('ACC,std_ACC,Sn,std_Sn,Sp,std_Sp,F1,std_F1,'
+                   'MCC,std_MCC,AUC,std_AUC,balanced_ACC,std_balanced_ACC,'
+                   'kappa,std_kappa,gmean,std_gmean\n')
     return
+
 
 def save_measures(output_measures, scores):
     """Save Measures Function: Output of the evaluate_model_cross Function"""
@@ -75,6 +79,7 @@ def save_measures(output_measures, scores):
             '%0.4f,%0.4f,'  # Sp, std_Sp
             '%0.4f,%0.4f,'  # F1, std_F1
             '%0.4f,%0.4f,'  # MCC, std_MCC
+            '%0.4f,%0.4f,'  # AUC, std_AUC
             '%0.4f,%0.4f,'  # balanced_ACC, std_balanced_ACC
             '%0.4f,%0.4f,'  # kappa, std_kappa
             '%0.4f,%0.4f'   # gmean, std_gmean
@@ -84,12 +89,14 @@ def save_measures(output_measures, scores):
             scores['test_Sp'].mean(), scores['test_Sp'].std(),
             scores['test_F1'].mean(), scores['test_F1'].std(),
             scores['test_MCC'].mean(), scores['test_MCC'].std(),
+            scores['test_AUC'].mean(), scores['test_AUC'].std(),
             scores['test_ACC_B'].mean(), scores['test_ACC_B'].std(),
             scores['test_kappa'].mean(), scores['test_kappa'].std(),
             scores['test_gmean'].mean(), scores['test_gmean'].std()
         ))
         file.write('\n')
     return
+
 
 def evaluate_model_cross(X, y, model, output_cross, matrix_output):
     """Evaluation Function: Using Cross-Validation"""
@@ -106,6 +113,7 @@ def evaluate_model_cross(X, y, model, output_cross, matrix_output):
         'Sp': make_scorer(specificity_score),
         'F1': make_scorer(f1_score, average='macro'),
         'MCC': make_scorer(matthews_corrcoef),
+        'AUC': 'roc_auc',
         'ACC_B': 'balanced_accuracy',
         'kappa': make_scorer(cohen_kappa_score),
         'gmean': make_scorer(geometric_mean_score)
@@ -302,11 +310,12 @@ def tuning_lightgbm_bayesian():
 
     return best_tuning, best_cb
 
+def objective_feature_selection(trial, importances, train, train_labels):
 
-def objective_feature_selection(space):
     """Feature Importance-based Feature selection: Objective Function - Bayesian Optimization"""
 
-    t = space['threshold']
+    opt = {'threshold': trial.suggest_uniform('threshold', min(importances), max(importances))}
+    t = opt['threshold']
 
     fs = SelectFromModel(clf, threshold=t)
     fs.fit(train, train_labels)
@@ -319,28 +328,26 @@ def objective_feature_selection(space):
                            scoring=make_scorer(balanced_accuracy_score),
                            n_jobs=n_cpu).mean()
 
-    return {'loss': -bacc, 'status': STATUS_OK}
-
+    return bacc
 
 def feature_importance_fs_bayesian(model, train, train_labels):
+
     """Feature Importance-based Feature selection using Bayesian Optimization"""
 
     model.fit(train, train_labels)
     importances = set(model.feature_importances_)
     importances.remove(max(importances))
     importances.remove(max(importances))
-
-    space = {'threshold': hp.uniform('threshold', min(importances), max(importances))}
-
-    trials = Trials()
-    best_threshold = fmin(fn=objective_feature_selection,
-                          space=space,
-                          algo=tpe.suggest,
-                          max_evals=100,
-                          trials=trials)
+    
+    fun = lambda trial: objective_feature_selection(trial, importances, train, train_labels)
+  
+    results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    results.optimize(fun, n_trials=50, timeout=7200, 
+                     n_jobs=n_cpu, show_progress_bar=True)
+ 
+    best_threshold = results.best_params
 
     return best_threshold['threshold']
-
 
 def feature_importance_fs(model, train, train_labels, column_train):
     """threshold: features that have an importance of more than ..."""
@@ -770,7 +777,7 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
             if tuning:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: XGBClassifier')
-                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
+                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                     model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
@@ -778,7 +785,7 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
             else:
                 print('Tuning: ' + str(tuning))
                 print('Classifier: XGBClassifier')
-                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, use_label_encoder=False, random_state=63)
+                clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
                 if imbalance_data:
                     train, train_labels = imbalanced_function(clf, train, train_labels)
                     model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
@@ -908,30 +915,27 @@ def binary_pipeline(model, train, train_labels, train_nameseq, test, test_labels
             except:
                 pass
 
-            labels = np.unique(test_labels)
-            accu = accuracy_score(test_labels, preds)
-            recall = recall_score(test_labels, preds, pos_label=labels[0])
-            precision = precision_score(test_labels, preds, pos_label=labels[0])
-            f1 = f1_score(test_labels, preds, pos_label=labels[0])
-            auc = roc_auc_score(test_labels, clf.predict_proba(test)[:, 1])
-            balanced = balanced_accuracy_score(test_labels, preds)
-            gmean = geometric_mean_score(test_labels, preds)
-            mcc = matthews_corrcoef(test_labels, preds)
-            matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
-
             metrics_output = os.path.join(output, "metrics_test.csv")
             print('Saving Metrics - Test set: ' + metrics_output + '...')
             
             metr_report = pd.DataFrame(report).transpose()
             metr_report.to_csv(metrics_output)
             
-            # metrics = {
-            #     'Metric': ['Accuracy', 'Recall', 'Precision', 'F1-score', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
-            #     'Value': [accu, recall, precision, f1, auc, balanced, gmean, mcc]
-            # }
+            metrics_other_output = os.path.join(output, "metrics_other.csv")
+            accu = accuracy_score(test_labels, preds)
+            auc = roc_auc_score(test_labels, clf.predict_proba(test)[:, 1])
+            balanced = balanced_accuracy_score(test_labels, preds)
+            gmean = geometric_mean_score(test_labels, preds)
+            mcc = matthews_corrcoef(test_labels, preds)
+            matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
 
-            # metrics_df = pd.DataFrame(metrics)
-            # metrics_df.to_csv(metrics_output, index=False)
+            metrics = {
+                'Metric': ['Accuracy', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
+                'Value': [accu, auc, balanced, gmean, mcc]
+            }
+
+            metrics_df = pd.DataFrame(metrics)
+            metrics_df.to_csv(metrics_other_output, index=False)
 
             matrix_output_test = os.path.join(output, "test_confusion_matrix.csv")
             matrix_test.to_csv(matrix_output_test)

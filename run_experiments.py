@@ -2,10 +2,13 @@ import subprocess
 import polars as pl
 import pandas as pd
 import os
+import time
 import joblib
 from App.utils.stats import summary_stats
 
 def main():
+    start_all = time.time()  # ⏱ Start measuring total time of main()
+
     full_datasets_path = "App/datasets"
     num_runs = 1  # Number of times to run each dataset
 
@@ -49,8 +52,10 @@ def main():
                 command = [
                     "python",
                     "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
+                    "--estimations",
+                    "50",
                     "--imbalance",
-                    "0", # "1" if imbalance else "0",
+                    "1", # "1" if imbalance else "0",
                     "--fselection",
                     "0", # "1" if fselection else "0",
                     "--fasta_train",
@@ -104,6 +109,10 @@ def main():
                     model = joblib.load(model_path)
                     model["train_stats"] = pd.read_csv(os.path.join(run_folder, "train_stats.csv"))
                     joblib.dump(model, model_path)
+    
+    # End total time
+    total_time = round(time.time() - start_all, 2)
+    print(f"\n⏱ Total execution time for all datasets: {total_time} seconds")
 
 if __name__ == "__main__":
     main()
