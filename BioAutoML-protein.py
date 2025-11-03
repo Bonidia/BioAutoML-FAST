@@ -213,7 +213,6 @@ def objective(trial, train, train_labels):
 		if int(space[descriptor]) == 1:
 			index = index + ind
 	
- 
 	if int(space['Classifier']) == 0:
 		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
 								   	   logging_level='Silent', random_state=63)

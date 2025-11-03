@@ -10,18 +10,20 @@ def main():
     start_all = time.time()  # ⏱ Start measuring total time of main()
 
     full_datasets_path = "App/datasets"
-    num_runs = 1  # Number of times to run each dataset
+    num_runs = 2  # Number of times to run each dataset
 
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
     
+    datasets_list = ["dataset58_valeri_dnarna"] # 29, 58
+
     for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         # Skip this dataset if it already has a "runs" folder
         experiments_folder = os.path.join(dataset_path, "runs")
-        if os.path.exists(experiments_folder):
-            continue
+        # if os.path.exists(experiments_folder):
+        #     continue
 
         dtype_str = dataset.split('_')[-1]
 
@@ -53,7 +55,9 @@ def main():
                     "python",
                     "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
                     "--estimations",
-                    "50",
+                    "10",
+                    "--task",
+                    "1",
                     "--imbalance",
                     "1", # "1" if imbalance else "0",
                     "--fselection",
@@ -75,7 +79,7 @@ def main():
                     command.append("--fasta_label_test")
                     command.extend(test_labels)
 
-                command.extend(["--n_cpu", "20"])
+                command.extend(["--n_cpu", "60"])
                 command.extend(["--output", run_folder])  # Output to the run-specific folder
 
                 print(f"Running dataset {dataset}, iteration {run_num}")
