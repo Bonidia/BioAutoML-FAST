@@ -440,9 +440,10 @@ def runUI():
         "Model 30: ribosome binding site sequences",
         "Model 31: antibody sequences",
         "Model 32: DNA-binding proteins",
-        "Model 33: antimalarial peptides (main)",
-        "Model 34: antimalarial peptides (alternative)",
-
+        "Model 33: antimalarial peptides (main)", # charoenkwan2022iamap dataset
+        "Model 34: antimalarial peptides (alternative)", # charoenkwan2022iamap dataset
+        "Model 35: anti-hypertensive peptides",
+        "Model 36: anti-hypertensive peptides",
         
         "Model 33: non-coding RNA - E. coli K12",
         "Model 34: non-coding RNA - Multiple bacterial phyla",

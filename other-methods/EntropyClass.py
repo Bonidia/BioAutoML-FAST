@@ -12,11 +12,11 @@ from Bio import SeqIO
 from itertools import product
 
 
-def header(foutput, ksize):
+def header(ksize):
     file = open(foutput, 'a')
     file.write("nameseq,")
     for i in range(1, ksize+1):
-        file.write("k-tsallis" + str(i) + str(q) + ",")
+        file.write("k" + str(i) + ",")
     file.write("label")
     file.write("\n")
     return
@@ -40,7 +40,7 @@ def chunks_two(seq, win):
     return
 
             
-def file_record(foutput, label_dataset):
+def file_record():
     file = open(foutput, 'a')
     file.write("%s," % (name_seq))
     for data in information_entropy:
@@ -50,19 +50,18 @@ def file_record(foutput, label_dataset):
             file.write(",")
     file.write(label_dataset)
     file.write("\n")
-    print ("Recorded Sequence: %s" % (name_seq))
+    print ("Recorded Sequence!!!")
     return
     
 
 def entropy_equation():
-    header(foutput, ksize)
+    header(ksize)
     global name_seq, information_entropy
     for seq_record in SeqIO.parse(finput, "fasta"):
         seq = seq_record.seq
         seq = seq.upper()
         name_seq = seq_record.name
         information_entropy = []
-
         for k in range(1, ksize+1):
             probabilities = []
             kmer = {}
@@ -70,7 +69,7 @@ def entropy_equation():
             if total_windows <= 0:  # sequence shorter than k
                 information_entropy.append(None)
                 continue
-
+            
             for subseq in chunks_two(seq, k):
                 if subseq in kmer:
                     # print(subseq)
@@ -81,10 +80,16 @@ def entropy_equation():
                 # print(key)
                 # print(value)
                 probabilities.append(value/total_windows)
-            entropy_equation = [(p ** q) for p in probabilities]
-            entropy =  (1/(q - 1)) * (1 - sum(entropy_equation))
-            information_entropy.append(entropy)
-        file_record(foutput, str(label_dataset))
+            if e == "Shannon" or e == "shannon":
+                entropy_equation = [(p * math.log(p, 2)) for p in probabilities]
+                entropy = -(sum(entropy_equation))
+                information_entropy.append(entropy)
+            else:
+                q = 2
+                entropy_equation = [(p ** q) for p in probabilities]
+                entropy =  (1/(q - 1)) * (1 - sum(entropy_equation))
+                information_entropy.append(entropy)
+        file_record()
     return
 
         
@@ -93,7 +98,7 @@ if __name__ == "__main__":
     print("\n")
     print("###################################################################################")
     print("######################## Feature Extraction: Entropy  #############################")
-    print("######   Arguments: -i input -o output -l label -k kmer -q entropic parameter  ####")
+    print("##########   Arguments: -i input -o output -l label -k kmer -e entropy  ###########")
     print("##########               Author: Robson Parmezan Bonidia                ###########")
     print("###################################################################################")
     print("\n")
@@ -102,13 +107,17 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--output', help='CSV format file, E.g., test.csv')
     parser.add_argument('-l', '--label', help='Dataset Label, E.g., lncRNA, mRNA, sncRNA ...')
     parser.add_argument('-k', '--kmer', help='Range of k-mer, E.g., 1-mer (1) or 2-mer (1, 2) ...')
-    parser.add_argument('-q', '--parameter', help='Tsallis - entropic parameter q')
+    parser.add_argument('-e', '--entropy', help='Type of Entropy, E.g., Shannon or Tsallis')
     args = parser.parse_args()
     finput = str(args.input)
     foutput = str(args.output)
     label_dataset = str(args.label)
     ksize = int(args.kmer)
-    q = float(args.parameter)
     stepw = 1
-    entropy_equation()   
+    e = str(args.entropy)
+    if e == "Shannon" or e == "shannon" or e == "Tsallis" or e == "tsallis":
+        entropy_equation()
+    else:
+        print("This package does not contain this entropy")
+       
 #############################################################################
