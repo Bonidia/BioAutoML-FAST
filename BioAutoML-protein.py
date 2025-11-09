@@ -20,15 +20,17 @@ from sklearn.metrics import balanced_accuracy_score
 # from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 # from sklearn.ensemble import AdaBoostClassifier
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import make_scorer
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import f1_score
+from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
 # from sklearn_genetic import GAFeatureSelectionCV
 # from hyperopt import hp, fmin, tpe, STATUS_OK, Trials, SparkTrials, early_stop
+from catboost import CatBoostRegressor
 from subprocess import Popen
 from multiprocessing import Manager
+import numpy as np
 from Bio import SeqIO
 
 def objective_ga_pygad(ga_instance, solution, solution_idx):
@@ -43,7 +45,6 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
 				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
  
- 
 	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
          	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
 	for gene in range(0, len(solution)):
@@ -51,7 +52,6 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 			ind = descriptors[desc[int(gene)]]
 			index = index + ind
 	
- 
 	if len(fasta_label_train) > 2:
 		score = make_scorer(f1_score, average='weighted')
 	else:
@@ -67,8 +67,7 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 	
 	return metric
 
-
-def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
+def feature_engineering_pygad(task, estimations, train, train_labels, test, foutput):
 
 	"""Automated Feature Engineering - Genetic Algorithm"""
 
@@ -153,7 +152,7 @@ def feature_engineering_pygad(estimations, train, train_labels, test, foutput):
 	return classifier, path_btrain, path_btest, btrain, btest
 
 
-def objective(trial, train, train_labels):
+def objective(trial, train, task, y):
 
 	"""Automated Feature Engineering - Optuna - Objective Function - Bayesian Optimization"""
  
@@ -213,39 +212,53 @@ def objective(trial, train, train_labels):
 		if int(space[descriptor]) == 1:
 			index = index + ind
 	
-	if int(space['Classifier']) == 0:
-		model = CatBoostClassifier(thread_count=1, nan_mode='Max',
-								   	   logging_level='Silent', random_state=63)
-	elif int(space['Classifier']) == 1:
-		model = RandomForestClassifier(n_jobs=1, random_state=63)
-	elif int(space['Classifier']) == 2:
-		model = lgb.LGBMClassifier(n_jobs=1, random_state=63, verbosity=-1)
-	elif int(space['Classifier']) == 3:
-		model = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=1, random_state=63)
+	# === Classification Task ===
+	if task == 0:
+		if space['Classifier'] == 0:
+			model = CatBoostClassifier(nan_mode='Max', logging_level='Silent', random_state=63)
+		elif space['Classifier'] == 1:
+			model = RandomForestClassifier(random_state=63)
+		elif space['Classifier'] == 2:
+			model = lgb.LGBMClassifier(random_state=63, verbosity=-1)
+		elif space['Classifier'] == 3:
+			model = xgb.XGBClassifier(eval_metric='mlogloss', random_state=63)
 
+		# Use weighted F1 for multiclass, balanced accuracy for binary
+		if len(np.unique(y)) > 2:
+			score = make_scorer(f1_score, average='weighted')
+		else:
+			score = make_scorer(balanced_accuracy_score)
 
-	if len(fasta_label_train) > 2:
-		score = make_scorer(f1_score, average='weighted')
+		kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+
+	# === Regression Task ===
+	elif task == 1:
+		if space['Classifier'] == 0:
+			model = CatBoostRegressor(nan_mode='Max', logging_level='Silent', random_state=63)
+		elif space['Classifier'] == 1 or space['Classifier'] == 2 or space['Classifier'] == 3:
+			model = lgb.LGBMRegressor(random_state=63, verbosity=-1)
+			# model = RandomForestRegressor(random_state=63)
+
+		score = make_scorer(r2_score)
+		kfold = KFold(n_splits=5, shuffle=True, random_state=63)
 	else:
-		score = make_scorer(balanced_accuracy_score)
+		raise ValueError("Invalid task type. Use 0 for classification or 1 for regression.")
 
-	kfold = StratifiedKFold(n_splits=5, shuffle=True)
-	le = LabelEncoder()
-
+	# === Cross-validation ===
 	try:
-		metric = cross_val_score(model,
-								train.iloc[:, index],
-								le.fit_transform(pd.read_csv(train_labels)),
-								cv=kfold,
-								scoring=score,
-								n_jobs=n_cpu).mean()
-	except Exception as e:
+		metric = cross_val_score(
+			model,
+			train.iloc[:, index],
+			y,
+			cv=kfold,
+			scoring=score
+		).mean()
+	except Exception:
 		raise optuna.TrialPruned()
 		
 	return metric
 
-
-def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
+def feature_engineering_optuna(task, estimations, train, train_labels, test, foutput):
 
 	"""Automated Feature Engineering - Bayesian Optimization"""
 
@@ -283,7 +296,14 @@ def feature_engineering_optuna(estimations, train, train_labels, test, foutput):
 			#  'AAAF': [0, 1],
 			 'Classifier': [1, 2, 3]}
  
-	func = lambda trial: objective(trial, ns.df, train_labels)
+	if task == 0:
+		labels = pd.read_csv(train_labels)
+		le = LabelEncoder()
+		y = le.fit_transform(labels)
+	elif task == 1:
+		y = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(fnameseqtrain)["nameseq"].to_list()]
+
+	func = lambda trial: objective(trial, ns.df, task, y)
 	
 	results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
 	results.optimize(func, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
@@ -615,6 +635,7 @@ if __name__ == '__main__':
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
 	parser.add_argument('-algorithm', '--algorithm', default=0, help='0 - Bayesian Optimization ---- 1 - Genetic Algorithm')
+	parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
 	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
 	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
 	parser.add_argument('-estimations', '--estimations', default=50, help='number of estimations - BioAutoML - default = 50')
@@ -627,6 +648,7 @@ if __name__ == '__main__':
 	fasta_test = args.fasta_test
 	fasta_label_test = args.fasta_label_test
 	algo = int(args.algorithm)
+	task = int(args.task)
 	estimations = int(args.estimations)
 	imbalance_data = str(args.imbalance)
 	fs = str(args.fselection)
@@ -682,10 +704,10 @@ if __name__ == '__main__':
 
 	if algo == 0:
 		classifier, path_train, path_test, train_best, test_best = \
-          feature_engineering_optuna(estimations, ftrain, ftrain_labels, ftest, foutput)
+          feature_engineering_optuna(task, estimations, ftrain, ftrain_labels, ftest, foutput)
 	else:
 		classifier, path_train, path_test, train_best, test_best = \
-          feature_engineering_pygad(estimations, ftrain, ftrain_labels, ftest, foutput)
+          feature_engineering_pygad(task, estimations, ftrain, ftrain_labels, ftest, foutput)
     
 	# classifier, path_train, path_test, train_best, test_best = \
     #  	feature_engineering_ga_sklearn(ftrain, ftrain_labels, ftest, foutput)
@@ -693,20 +715,27 @@ if __name__ == '__main__':
 	cost = (time.time() - start_time) / 60
 	print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
-	if len(fasta_label_train) > 2:
-		subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
-							'-train_label', ftrain_labels, '-test', path_test,
-							'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
-							'-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
-							'-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
-							'-classifier', str(classifier), '-output', foutput])
-	else:
-		subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
-							'-train_label', ftrain_labels, '-test', path_test, 
-							'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
-							'-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
-							'-imbalance', imbalance_data, '-classifier', str(classifier), 
-							'-n_cpu', str(n_cpu), '-output', foutput])
+	if task == 0:
+		if len(fasta_label_train) > 2:
+			subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
+								'-train_label', ftrain_labels, '-test', path_test,
+								'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+								'-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
+								'-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
+								'-classifier', str(classifier), '-output', foutput])
+		else:
+			subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
+								'-train_label', ftrain_labels, '-test', path_test, 
+								'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+								'-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
+								'-imbalance', imbalance_data, '-classifier', str(classifier), 
+								'-n_cpu', str(n_cpu), '-output', foutput])
+	if task == 1:
+		subprocess.run(['python', 'BioAutoML-regression.py', '-train', path_train,
+				'-train_label', ftrain_labels, '-test', path_test,
+				'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+				'-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs, 
+				'-n_cpu', str(n_cpu), '-classifier', str(classifier), '-output', foutput])
 
 ##########################################################################
 ##########################################################################

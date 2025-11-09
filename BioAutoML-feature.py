@@ -524,15 +524,12 @@ def objective(trial, train, task, y):
     elif task == 1:
         if space['Classifier'] == 0:
             model = CatBoostRegressor(nan_mode='Max', logging_level='Silent', random_state=63)
-        elif space['Classifier'] == 1:
-            model = RandomForestRegressor(random_state=63)
-        elif space['Classifier'] == 2:
+        elif space['Classifier'] == 1 or space['Classifier'] == 2 or space['Classifier'] == 3:
             model = lgb.LGBMRegressor(random_state=63, verbosity=-1)
-        elif space['Classifier'] == 3:
-            model = xgb.XGBRegressor(random_state=63)
+            # model = RandomForestRegressor(random_state=63)
 
         score = make_scorer(r2_score)
-        kfold = KFold(n_splits=2, shuffle=True, random_state=63)
+        kfold = KFold(n_splits=5, shuffle=True, random_state=63)
     else:
         raise ValueError("Invalid task type. Use 0 for classification or 1 for regression.")
 
@@ -900,20 +897,27 @@ if __name__ == '__main__':
     cost = (time.time() - start_time) / 60
     print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
-    # if len(fasta_label_train) > 2:
-    #     subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
-    #                         '-train_label', ftrain_labels, '-test', path_test,
-    #                         '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
-    #                         '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
-    #                         '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
-    #                         '-classifier', str(classifier), '-output', foutput])
-    # else:
-    #     subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
-    #                         '-train_label', ftrain_labels, '-test', path_test, 
-    #                         '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
-    #                         '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
-    #                         '-imbalance', imbalance_data, '-classifier', str(classifier), 
-    #                         '-n_cpu', str(n_cpu), '-output', foutput])
+    if task == 0:
+        if len(fasta_label_train) > 2:
+            subprocess.run(['python', 'BioAutoML-multiclass.py', '-train', path_train,
+                                '-train_label', ftrain_labels, '-test', path_test,
+                                '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+                                '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
+                                '-imbalance', imbalance_data, '-n_cpu', str(n_cpu), 
+                                '-classifier', str(classifier), '-output', foutput])
+        else:
+            subprocess.run(['python', 'BioAutoML-binary.py', '-train', path_train,
+                                '-train_label', ftrain_labels, '-test', path_test, 
+                                '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+                                '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs,  
+                                '-imbalance', imbalance_data, '-classifier', str(classifier), 
+                                '-n_cpu', str(n_cpu), '-output', foutput])
+    if task == 1:
+        subprocess.run(['python', 'BioAutoML-regression.py', '-train', path_train,
+                '-train_label', ftrain_labels, '-test', path_test,
+                '-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
+                '-test_nameseq', fnameseqtest, '-nf', 'True', '-fselection', fs, 
+                '-n_cpu', str(n_cpu), '-classifier', str(classifier), '-output', foutput])
 
     ##########################################################################
     ##########################################################################
