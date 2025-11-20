@@ -337,11 +337,19 @@ def feature_engineering_optuna(task, estimations, train, train_labels, test, fou
 				#    'EIIP': list(range(5046, (5046 + position))),
 				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
+	# Determine which descriptors were selected
+	descriptor_presence = {}
 	for descriptor, ind in descriptors.items():
-		result = param[descriptor][best_tuning[descriptor]]
+		result = best_tuning[descriptor]
 		if result == 1:
-			index = index + ind
+			index.extend(ind)
+			descriptor_presence[descriptor] = 1
+		else:
+			descriptor_presence[descriptor] = 0
 
+	# Save presence/absence summary CSV
+	df_presence = pd.DataFrame([descriptor_presence])
+	df_presence.to_csv(os.path.join(path_bio, 'selected_descriptors.csv'), index=False)
 	classifier = best_tuning['Classifier']
 
 	if test != '':

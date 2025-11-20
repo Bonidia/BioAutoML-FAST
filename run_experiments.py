@@ -10,12 +10,10 @@ def main():
     start_all = time.time()  # Start measuring total time of main()
 
     full_datasets_path = "App/datasets"
-    num_runs = 1  # Number of times to run each dataset
+    num_runs = 10  # Number of times to run each dataset
 
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
-    
-    datasets_list = ["dataset61_protein"] # 29, 58
 
     for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
@@ -25,7 +23,7 @@ def main():
         # if os.path.exists(experiments_folder):
         #     continue
 
-        dtype_str = dataset.split('_')[-1]
+        dtype_str, task = dataset.split('_')[-2:]
 
         if dtype_str == "protein":
             data_type = "Protein"
@@ -45,23 +43,25 @@ def main():
         # Create a runs folder for this dataset
         os.makedirs(experiments_folder, exist_ok=True)
 
-        for run_num in range(1, num_runs + 1):
+        for run_num in range(6, num_runs + 1):
             # Create a folder for this run inside the runs folder
             run_folder = os.path.join(experiments_folder, f"run_{run_num}")
             if not os.path.exists(run_folder):
                 os.makedirs(run_folder, exist_ok=True)
 
+                classifier, imbalance, fselection = False, True, False
+
                 command = [
                     "python",
                     "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
                     "--estimations",
-                    "50",
+                    "1000",
                     "--task",
-                    "1",
+                    task,
                     "--imbalance",
-                    "1", # "1" if imbalance else "0",
+                    "1" if imbalance else "0",
                     "--fselection",
-                    "0", # "1" if fselection else "0",
+                    "1" if fselection else "0",
                     "--fasta_train",
                 ]
 
@@ -85,10 +85,9 @@ def main():
                 print(f"Running dataset {dataset}, iteration {run_num}")
                 subprocess.run(command)
 
-                classifier, imbalance, fselection = False, False, False
-
                 job_data = {
                     "data_type": [data_type],
+                    "task": ["Classification" if task == "0" else "Regression"],
                     "training_set": ["Training set"],
                     "testing_set": ["Test set" if testing_set else "No test set"],
                     "classifier_selected": [classifier], 

@@ -952,6 +952,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     model = ''
+    train_read, train_labels_read, train_nameseq_read = '', '', ''
     if path_model:
         model = joblib.load(path_model)
     else:

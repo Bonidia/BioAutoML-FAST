@@ -1,0 +1,2 @@
+data_type	training_set	testing_set	classifier_selected	imbalance_methods	feature_selection
+DNA/RNA	false	Prediction set	false	false	false

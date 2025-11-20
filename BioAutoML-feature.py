@@ -591,10 +591,20 @@ def feature_engineering_optuna(task, estimations, fnameseqtrain, train, train_la
                    'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
                    'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
 
+    # Get indices of selected descriptors
+    index = []
+    descriptor_presence = {}
     for descriptor, ind in descriptors.items():
-        result = param[descriptor][best_tuning[descriptor]]
+        result = best_tuning[descriptor]
         if result == 1:
-            index = index + ind
+            index.extend(ind)
+            descriptor_presence[descriptor] = 1
+        else:
+            descriptor_presence[descriptor] = 0
+
+    # Save presence/absence table
+    df_presence = pd.DataFrame([descriptor_presence])
+    df_presence.to_csv(os.path.join(path_bio, 'selected_descriptors.csv'), index=False)
 
     classifier = best_tuning['Classifier']
     

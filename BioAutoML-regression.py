@@ -345,9 +345,8 @@ if __name__ == '__main__':
 	parser.add_argument('-fselection', '--fselection', default=0,
 						help='Feature Selection (default = True)')
 	parser.add_argument('-n_cpu', '--n_cpu', default=1, help='number of cpus - default = 1')
-	parser.add_argument('-classifier', '--classifier', default=0,
-						help='Classifier - 0: CatBoost, 1: Random Forest'
-							 '2: LightGBM, 3: XGBoost')
+	parser.add_argument('-classifier', '--classifier', default=1,
+						help='Classifier - 0: CatBoost, 1: LightGBM')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 	args = parser.parse_args()
 	path_model = args.path_model

@@ -556,7 +556,7 @@ def runUI():
      BioAutoML, optimized for speed and enhanced functionality. It allows
      users to input their sequences or structured data for classification, 
      generating models that can be saved for future use. The application 
-     features a repository of around 50 trained models for various problems,
+     features a repository of 60 trained models for various problems,
      such as cancer, COVID-19, and other diseases. By automating feature extraction, 
      selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
      learning tools accessible to researchers, biologists, and physicians, 

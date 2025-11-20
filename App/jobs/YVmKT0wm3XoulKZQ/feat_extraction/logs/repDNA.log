@@ -1,0 +1,22 @@
+Sorry, the sequence length must be larger than 5Sorry, the sequence length must be larger than 4Sorry, the sequence length must be larger than 3Sorry, the sequence length must be larger than 5Traceback (most recent call last):
+  File "/mnt/UFZ_data_2/breno/BioAutoML-Fast/other-methods/repDNA/repDNA-feat.py", line 97, in <module>
+    results.append(runs[data].result())
+                   ^^^^^^^^^^^^^^^^^^^
+  File "/home/mdsufz/.local/share/uv/python/cpython-3.11.12-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/mdsufz/.local/share/uv/python/cpython-3.11.12-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/home/mdsufz/.local/share/uv/python/cpython-3.11.12-linux-x86_64-gnu/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/UFZ_data_2/breno/BioAutoML-Fast/other-methods/repDNA/repDNA-feat.py", line 21, in revkmer
+    data_kmer = rev_kmer.make_revckmer_vec(open(finput))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/UFZ_data_2/breno/BioAutoML-Fast/other-methods/repDNA/repDNA/nac.py", line 84, in make_revckmer_vec
+    vec = make_kmer_vector(sequence_list, kmer_list, rev_kmer_list, self.k, self.upto, revcomp, self.normalize)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/UFZ_data_2/breno/BioAutoML-Fast/other-methods/repDNA/repDNA/nacutil.py", line 464, in make_kmer_vector
+    temp_vec[j] = round(float(e) / sum[i], 3)
+                        ~~~~~~~~~^~~~~~~~
+ZeroDivisionError: float division by zero
