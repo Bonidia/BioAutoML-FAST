@@ -64,10 +64,20 @@ wheels = [
 ]
 
 [[package]]
+name = "bibtexparser"
+version = "1.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/8d/e296c7af03757debd8fc80df2898cbed4fb69fc61ed2c9b4a1d42e923a9e/bibtexparser-1.4.3.tar.gz", hash = "sha256:a9c7ded64bc137720e4df0b1b7f12734edc1361185f1c9097048ff7c35af2b8f", size = 55582 }
+
+[[package]]
 name = "bioautoml-fast"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bibtexparser" },
     { name = "biopython" },
     { name = "catboost" },
     { name = "fastexcel" },
@@ -100,6 +110,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bibtexparser", specifier = ">=1.4.3" },
     { name = "biopython", specifier = ">=1.85" },
     { name = "catboost", specifier = ">=1.2.7" },
     { name = "fastexcel", specifier = ">=0.14.0" },

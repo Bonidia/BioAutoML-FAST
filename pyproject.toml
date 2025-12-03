@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "bibtexparser>=1.4.3",
     "biopython>=1.85",
     "catboost>=1.2.7",
     "fastexcel>=0.14.0",
