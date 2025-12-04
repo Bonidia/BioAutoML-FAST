@@ -79,7 +79,7 @@ def test_extraction(job_path, test_data, model, data_type):
                         ["python", "MathFeature/methods/FickettScore.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
                                 "-seq", "1"],
-                        ["python", "MathFeature/methods/EntropyClass.py", "-i",
+                        ["python", "other-methods/methods/EntropyClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
                         ["python", "MathFeature/methods/FourierClass.py", "-i",
@@ -118,7 +118,7 @@ def test_extraction(job_path, test_data, model, data_type):
             datasets.append(feat_path + "/Global.csv")
             datasets.append(feat_path + "/Peptide.csv")
             
-            commands = [["python", "MathFeature/methods/EntropyClass.py",
+            commands = [["python", "other-methods/EntropyClass.py",
                                 "-i", os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
                         ["python", "other-methods/TsallisEntropy.py",
@@ -389,6 +389,8 @@ def submit_job(dataset_path, test_files, job_path, data_type, training, testing,
             command.extend(["--output", job_path])
 
             subprocess.run(command, cwd="..")
+
+            shutil.copy(os.path.join(dataset_path, "best_descriptors/selected_descriptors.csv"), os.path.join(job_path, "best_descriptors"))
     
     except Exception as e:
         print(f"Error in job processing: {e}")

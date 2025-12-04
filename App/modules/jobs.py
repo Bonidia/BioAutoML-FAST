@@ -374,8 +374,8 @@ def feature_distribution():
             group_data = feature_data[group_indices]
             fig_data.append(group_data)
             if show_rug:  # Only prepare rug text if needed
-                group_names = nameseqs[group_indices]#["nameseq"]
-                fig_rug_text.append(group_names.tolist())
+                group_names = nameseqs[group_indices]
+                fig_rug_text.append(group_names)
             else:
                 fig_rug_text.append(None)
 
@@ -592,28 +592,38 @@ def model_information():
 
     model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
 
-    # st.markdown(model.keys())
-    # st.markdown(model["clf"])
-
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns(2)
 
     with col1:
-        if "RandomForest" in str(model["clf"]):
-            st.image("imgs/models/rf.png", use_container_width=True)
-        elif "XGB" in str(model["clf"]):
-            st.image("imgs/models/xgboost.png", use_container_width=True)
-        elif "LGBM" in str(model["clf"]):
-            st.image("imgs/models/lightgbm.png", use_container_width=True)
-        elif "CatBoost" in str(model["clf"]):
-            st.image("imgs/models/catboost.png", use_container_width=True)
-
-    with col2:
         with st.container(border=True):
             cont1, cont2 = st.columns([3, 1])
 
             with cont1:
                 st.markdown("**Model**")
 
+                if "RandomForest" in str(model["clf"]):
+                    st.markdown("**Classifier:** Random Forest")
+                    params = model["clf"].get_params()
+                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                    st.markdown(f"**Criterion:** {params['criterion']}")
+                    st.markdown(f"**Max depth:** {params['max_depth']}")
+                    st.markdown(f"**Max features:** {params['max_features']}")
+                elif "XGB" in str(model["clf"]):
+                    st.markdown("**Classifier:** XGBoost")
+                    params = model["clf"].get_params()
+                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                    st.markdown(f"**Learning rate:** {params['learning_rate']}")
+                    st.markdown(f"**Max depth:** {params['max_depth']}")
+                    st.markdown(f"**Gamma:** {params['gamma']}")
+                    st.markdown(f"**Subsample:** {params['subsample']}")
+                elif "LGBM" in str(model["clf"]):
+                    st.markdown("**Classifier:** LightGBM")
+                    params = model["clf"].get_params()
+                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
+                    st.markdown(f"**Learning rate:** {params['learning_rate']}")
+                    st.markdown(f"**Max depth:** {params['max_depth']}")
+                    st.markdown(f"**Boosting type:** {params['boosting_type']}")
+                    st.markdown(f"**Subsample:** {params['subsample']}")
             with cont2:
                 with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
                     st.download_button(
@@ -625,44 +635,89 @@ def model_information():
                         help="SAV file can be loaded into the application"
                     )
 
-            if "RandomForest" in str(model["clf"]):
-                st.markdown("**Classifier:** Random Forest")
-                params = model["clf"].get_params()
-                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                st.markdown(f"**Criterion:** {params['criterion']}")
-                st.markdown(f"**Max depth:** {params['max_depth']}")
-                st.markdown(f"**Max features:** {params['max_features']}")
-            elif "XGB" in str(model["clf"]):
-                st.markdown("**Classifier:** XGBoost")
-                params = model["clf"].get_params()
-                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                st.markdown(f"**Learning rate:** {params['learning_rate']}")
-                st.markdown(f"**Max depth:** {params['max_depth']}")
-                st.markdown(f"**Gamma:** {params['gamma']}")
-                st.markdown(f"**Subsample:** {params['subsample']}")
-            elif "LGBM" in str(model["clf"]):
-                st.markdown("**Classifier:** LightGBM")
-                params = model["clf"].get_params()
-                st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                st.markdown(f"**Learning rate:** {params['learning_rate']}")
-                st.markdown(f"**Max depth:** {params['max_depth']}")
-                st.markdown(f"**Boosting type:** {params['boosting_type']}")
-                st.markdown(f"**Subsample:** {params['subsample']}")
-            elif "CatBoost" in str(model["clf"]):
-                st.markdown("**Classifier:** CatBoost")
-                params = model["clf"].get_params()
-                st.markdown(f"**Number of estimators:** {params['iterations']}")
-                st.markdown(f"**Learning rate:** {params['learning_rate']}")
-                st.markdown(f"**Depth:** {params['depth']}")
-                st.markdown(f"**L2 leaf regularization:** {params['l2_leaf_reg']}")
-                st.markdown(f"**Bagging temperature:** {params['bagging_temperature']}")
-                
-                # fig, axes = plt.subplots(nrows = 1,ncols = 1,figsize = (4,4), dpi=800)
-                # tree.plot_tree(model["clf"].estimators_[0],
-                #             feature_names = model["train"].columns, 
-                #             class_names=model["train_labels"],
-                #             filled = True)
-                # fig.savefig('rf_individualtree.png')
+                if "RandomForest" in str(model["clf"]):
+                    st.image("imgs/models/rf.png", use_container_width=True)
+                elif "XGB" in str(model["clf"]):
+                    st.image("imgs/models/xgboost.png", use_container_width=True)
+                elif "LGBM" in str(model["clf"]):
+                    st.image("imgs/models/lightgbm.png", use_container_width=True)
+
+    with col2:
+        st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
+
+        # if df_job_info["data_type"].item() == "Structured data":
+        #     tooltip_text = "<strong>num_samples</strong>: Number of samples;"
+        # else:
+        #     tooltip_text += str_type[df_job_info["data_type"].item()][0]
+
+        path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
+
+        df_descriptors = pd.read_csv(path_descriptors)
+
+        # Replace values
+        pd.set_option('future.no_silent_downcasting', True)
+        df_descriptors = df_descriptors.replace({1: True, 0: False})
+
+        # Show in Streamlit
+        st.dataframe(df_descriptors.sort_index(axis=1), hide_index=True)
+
+        df_job_info = pd.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), sep='\t')
+        
+        data_type = df_job_info["data_type"].item()
+
+        with st.expander("**Descriptors information**"):
+            if data_type == "DNA/RNA":
+                st.markdown(
+                    """**AAC**: Amino acid composition;  \n"""
+                    """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
+                    """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
+                    """**CTDC**: Composition;  \n"""
+                    """**CTDD**: Distribution;  \n"""
+                    """**CTDT**: Transition;  \n"""
+                    """**CTriad**: Conjoint triad;  \n"""
+                    """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
+                    """**DDE**: Dipeptide deviation from expected mean;  \n"""
+                    """**DPC**: Kmer dipeptides composition;  \n"""
+                    """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
+                    """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
+                    """**GAAC**: Grouped amino acid composition;  \n"""
+                    """**GDPC**: Grouped dipeptide composition;  \n"""
+                    """**GTPC**: Grouped tripeptide composition;  \n"""
+                    """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
+                    """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
+                    """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
+                    """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
+                    """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                    """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
+                    """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
+                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency of 3-mer;  \n"""
+                )
+            elif data_type == "Protein":
+                st.markdown(
+                    """**AAC**: Amino acid composition;  \n"""
+                    """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
+                    """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
+                    """**CTDC**: Composition;  \n"""
+                    """**CTDD**: Distribution;  \n"""
+                    """**CTDT**: Transition;  \n"""
+                    """**CTriad**: Conjoint triad;  \n"""
+                    """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
+                    """**DDE**: Dipeptide deviation from expected mean;  \n"""
+                    """**DPC**: Kmer dipeptides composition;  \n"""
+                    """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
+                    """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
+                    """**GAAC**: Grouped amino acid composition;  \n"""
+                    """**GDPC**: Grouped dipeptide composition;  \n"""
+                    """**GTPC**: Grouped tripeptide composition;  \n"""
+                    """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
+                    """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
+                    """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
+                    """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
+                    """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                    """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
+                    """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
+                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency of 3-mer;  \n"""
+                )
 
 def runUI():
     def get_job_example():
@@ -771,29 +826,51 @@ def runUI():
                 test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
+        tabs = {}
+
         if df_job_info["testing_set"].item() != "No test set":
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Predictions", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
+            if max(train_stats["num_seqs"].to_list()) > 1000 or max(test_stats["num_seqs"].to_list()) > 1000:
+                tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                            "Feature Importance", "Feature Distribution"]
+            else:
+                tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                            "Feature Importance", "Feature Distribution",
+                            "Feature Correlation", "Dimensionality Reduction"]
         else:
-            tab1, tab2, tab4, tab5, tab6, tab7 = st.tabs(["Model Information", "Performance Metrics", "Feature Importance", "Feature Distribution", "Feature Correlation", "Dimensionality Reduction"])
-        
-        with tab1:
+            if max(train_stats["num_seqs"].to_list()) > 1000:
+                tab_list = ["Model Information", "Performance Metrics",
+                            "Feature Importance", "Feature Distribution"]
+            else:
+                tab_list = ["Model Information", "Performance Metrics",
+                            "Feature Importance", "Feature Distribution",
+                            "Feature Correlation", "Dimensionality Reduction"]
+
+        # Create the tabs dynamically
+        streamlit_tabs = st.tabs(tab_list)
+
+        # Map tab names to Streamlit tab objects
+        tabs = {name: tab for name, tab in zip(tab_list, streamlit_tabs)}
+
+        with tabs["Model Information"]:
             model_information()
 
-        with tab2:
+        with tabs["Performance Metrics"]:
             performance_metrics()
 
-        if df_job_info["testing_set"].item() != "No test set":
-            with tab3:
+        if "Predictions" in tabs:
+            with tabs["Predictions"]:
                 show_predictions()
-        
-        with tab4:
+
+        with tabs["Feature Importance"]:
             feature_importance()
 
-        with tab5:
+        with tabs["Feature Distribution"]:
             feature_distribution()
 
-        with tab6:
-            feature_correlation()
-        
-        with tab7:
-            dimensionality_reduction()
+        if "Feature Correlation" in tabs:
+            with tabs["Feature Correlation"]:
+                feature_correlation()
+
+        if "Dimensionality Reduction" in tabs:
+            with tabs["Dimensionality Reduction"]:
+                dimensionality_reduction()

@@ -438,7 +438,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 			
 			# Define all feature extraction commands
 			commands = [
-				['python', 'MathFeature/methods/EntropyClass.py',
+				['python', 'other-methods/EntropyClass.py',
 				'-i', preprocessed_fasta, '-o', os.path.join(path, 'Shannon.csv'),
 				'-l', label_file, '-k', '5', '-e', 'Shannon'],
 
