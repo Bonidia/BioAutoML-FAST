@@ -15,6 +15,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn import tree
+from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
 
 @st.cache_data
@@ -46,13 +47,18 @@ def load_reduction_data(job_path, evaluation):
 @st.cache_data
 def scale_features(features):
     """Scale features with caching"""
-    scaler = StandardScaler()
-    return pd.DataFrame(scaler.fit_transform(features))
 
-@st.cache_data(show_spinner=False)
-def compute_reduction(_reducer, scaled_data, reduction_method, reduction_params):
-    """Compute dimensionality reduction with caching"""
-    return pd.DataFrame(_reducer.fit_transform(scaled_data))
+    if "imputer" in st.session_state:
+        imp = st.session_state["imputer"]
+        if imp:
+            features = imp.transform(features)
+
+    if "scaler" in st.session_state:
+        sc = st.session_state["scaler"]
+        if sc:
+            features = sc.transform(features)
+
+    return features
 
 @st.cache_data(show_spinner=False)
 def create_reduction_plot(reduced_data, labels, names, reduction_method):
@@ -130,23 +136,19 @@ def dimensionality_reduction():
 
         # Reduction parameters
         reducer = None
-        reduction_params = {}
-        
+
         if reduction == "t-Distributed Stochastic Neighbor Embedding (t-SNE)":
             perplexity = st.slider("Perplexity", min_value=5, max_value=50, value=30)
             learning_rate = st.slider("Learning rate", min_value=10, max_value=1000, value=200)
             max_iter = st.slider("Number of iterations", min_value=100, max_value=10000, value=1000)
             reducer = TSNE(n_components=3, perplexity=perplexity, 
                           learning_rate=learning_rate, max_iter=max_iter, n_jobs=-1)
-            reduction_params = {"perplexity": perplexity, "learning_rate": learning_rate, "max_iter": max_iter}
-            
+
         elif reduction == "Uniform Manifold Approximation and Projection (UMAP)":
             n_neighbors = st.slider("Number of neighbors", min_value=2, max_value=100, value=15)
             min_dist = st.slider("Minimum distance", min_value=0.0, max_value=1.0, value=0.1)
             reducer = UMAP(n_components=3, n_neighbors=n_neighbors, 
                          min_dist=min_dist, n_jobs=-1)
-            reduction_params = {"n_neighbors": n_neighbors, "min_dist": min_dist}
-            
         else:
             reducer = PCA(n_components=3)
 
@@ -154,12 +156,13 @@ def dimensionality_reduction():
         if reducer:
             with st.spinner(f'Computing {reduction}...'):
                 # Compute reduction with caching
-                reduced_data = compute_reduction(
-                    reducer, 
-                    scaled_data, 
-                    reduction, 
-                    tuple(reduction_params.items())  # Convert dict to tuple for hashability
-                )
+
+                if "reducer" not in st.session_state:
+                    if evaluation == "Training set":
+                        st.session_state["reducer"] = reducer.fit(scaled_data)
+                        reduced_data = reducer.transform(scaled_data)
+                else:
+                    reduced_data = st.session_state["reducer"].transform(scaled_data)
 
                 # Create plot with caching
                 fig = create_reduction_plot(reduced_data, labels, names, reduction)
@@ -261,6 +264,11 @@ def feature_correlation():
     # Load features with caching
     features = load_features(st.session_state["job_path"], evaluation)
 
+    if "imputer" in st.session_state:
+        imp = st.session_state["imputer"]
+        if imp:
+            features = pd.DataFrame(imp.transform(features), columns=features.columns)
+
     # Compute correlation matrix with caching
     with st.spinner('Computing correlations...'):
         corr_matrix = compute_correlation_matrix(features, correlation_method)
@@ -345,8 +353,18 @@ def feature_distribution():
     # Load appropriate dataset with caching
     if evaluation == "Training set":
         features, labels, nameseqs = load_training_data(st.session_state["job_path"])
+
+        if "imputer" in st.session_state:
+            imp = st.session_state["imputer"]
+            if imp:
+                features = pd.DataFrame(imp.transform(features), columns=features.columns)
     else:
         features, labels, nameseqs = load_test_data(st.session_state["job_path"])
+
+        if "imputer" in st.session_state:
+            imp = st.session_state["imputer"]
+            if imp:
+                features = pd.DataFrame(imp.transform(features), columns=features.columns)
 
     col1, col2 = st.columns(2)
 
@@ -577,16 +595,22 @@ def create_feature_importance_figure(df):
 def feature_importance():
     # Load data with caching
     df = load_feature_importance(st.session_state["job_path"])
+
+    col1, col2 = st.columns(2)
     
-    # Create plot with caching
-    fig = create_feature_importance_figure(df)
+    with col1:
+        # Create plot with caching
+        fig = create_feature_importance_figure(df.iloc[:10, :])
+        
+        # Display with loading indicator
+        st.markdown("**Importance of features regarding model training**", 
+                help="Ten most important features.")
+        
+        with st.spinner('Rendering feature importance...'):
+            st.plotly_chart(fig, use_container_width=True)
     
-    # Display with loading indicator
-    st.markdown("**Importance of features regarding model training**", 
-               help="It is possible to zoom in to visualize features properly.")
-    
-    with st.spinner('Rendering feature importance...'):
-        st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        st.dataframe(df, hide_index=True)
 
 def model_information():
 
@@ -601,29 +625,45 @@ def model_information():
             with cont1:
                 st.markdown("**Model**")
 
-                if "RandomForest" in str(model["clf"]):
-                    st.markdown("**Classifier:** Random Forest")
-                    params = model["clf"].get_params()
-                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                    st.markdown(f"**Criterion:** {params['criterion']}")
-                    st.markdown(f"**Max depth:** {params['max_depth']}")
-                    st.markdown(f"**Max features:** {params['max_features']}")
-                elif "XGB" in str(model["clf"]):
-                    st.markdown("**Classifier:** XGBoost")
-                    params = model["clf"].get_params()
-                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                    st.markdown(f"**Learning rate:** {params['learning_rate']}")
-                    st.markdown(f"**Max depth:** {params['max_depth']}")
-                    st.markdown(f"**Gamma:** {params['gamma']}")
-                    st.markdown(f"**Subsample:** {params['subsample']}")
-                elif "LGBM" in str(model["clf"]):
-                    st.markdown("**Classifier:** LightGBM")
-                    params = model["clf"].get_params()
-                    st.markdown(f"**Number of estimators:** {params['n_estimators']}")
-                    st.markdown(f"**Learning rate:** {params['learning_rate']}")
-                    st.markdown(f"**Max depth:** {params['max_depth']}")
-                    st.markdown(f"**Boosting type:** {params['boosting_type']}")
-                    st.markdown(f"**Subsample:** {params['subsample']}")
+                def show_params(title, params, keys):
+                    st.markdown(f"**Classifier:** {title}")
+                    for k in keys:
+                        if k in params and params[k] is not None:
+                            st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
+
+                clf_str = str(model["clf"])
+                params = model["clf"].get_params()
+
+                if "RandomForest" in clf_str:
+                    show_params(
+                        "Random Forest",
+                        params,
+                        keys=[
+                            "n_estimators", "criterion", "max_depth", "max_features",
+                            "min_samples_split", "min_samples_leaf", "bootstrap",
+                            "max_leaf_nodes", "min_impurity_decrease", "class_weight"
+                        ]
+                    )
+                elif "XGB" in clf_str:
+                    show_params(
+                        "XGBoost",
+                        params,
+                        keys=[
+                            "n_estimators", "learning_rate", "max_depth", "gamma",
+                            "subsample", "colsample_bytree", "reg_alpha", "reg_lambda",
+                            "min_child_weight", "objective"
+                        ]
+                    )
+                elif "LGBM" in clf_str:
+                    show_params(
+                        "LightGBM",
+                        params,
+                        keys=[
+                            "n_estimators", "learning_rate", "max_depth", "boosting_type",
+                            "subsample", "colsample_bytree", "num_leaves", "min_child_samples",
+                            "reg_alpha", "reg_lambda"
+                        ]
+                    )
             with cont2:
                 with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
                     st.download_button(
@@ -645,11 +685,6 @@ def model_information():
     with col2:
         st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
 
-        # if df_job_info["data_type"].item() == "Structured data":
-        #     tooltip_text = "<strong>num_samples</strong>: Number of samples;"
-        # else:
-        #     tooltip_text += str_type[df_job_info["data_type"].item()][0]
-
         path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
 
         df_descriptors = pd.read_csv(path_descriptors)
@@ -665,32 +700,22 @@ def model_information():
         
         data_type = df_job_info["data_type"].item()
 
+        
         with st.expander("**Descriptors information**"):
             if data_type == "DNA/RNA":
                 st.markdown(
-                    """**AAC**: Amino acid composition;  \n"""
-                    """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
-                    """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
-                    """**CTDC**: Composition;  \n"""
-                    """**CTDD**: Distribution;  \n"""
-                    """**CTDT**: Transition;  \n"""
-                    """**CTriad**: Conjoint triad;  \n"""
-                    """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
-                    """**DDE**: Dipeptide deviation from expected mean;  \n"""
-                    """**DPC**: Kmer dipeptides composition;  \n"""
-                    """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
-                    """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
-                    """**GAAC**: Grouped amino acid composition;  \n"""
-                    """**GDPC**: Grouped dipeptide composition;  \n"""
-                    """**GTPC**: Grouped tripeptide composition;  \n"""
-                    """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
-                    """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
-                    """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
+                    """**DNC**: Dinucleotide composition;  \n"""
+                    """**Fickett**: Fickett score based on positional nucleotide features;  \n"""
+                    """**FourierBinary**: Binary numerical mapping using Fourier transform;  \n"""
+                    """**FourierComplex**: Complex numerical mapping using Fourier transform;  \n"""
+                    """**NAC**: Nucleotide composition;  \n"""
+                    """**ORF**: Open reading frame-based features;  \n"""
                     """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
-                    """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
-                    """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
-                    """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
-                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency of 3-mer;  \n"""
+                    """**TNC**: Trinucleotide composition;  \n"""
+                    """**Tsallis**: Tsallis entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 2 after 1-gap;  \n"""
+                    """**kGap_tri**: Xmer k-Spaced Ymer composition frequency with 3 after 1-gap;  \n"""
+                    """**repDNA**: Comprehensive representation of DNA sequences including k-mers, autocorrelations, and physicochemical features;  \n"""
                 )
             elif data_type == "Protein":
                 st.markdown(
@@ -716,7 +741,7 @@ def model_information():
                     """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
                     """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
                     """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
-                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency of 3-mer;  \n"""
+                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 1 after 1-gap;  \n"""
                 )
 
 def runUI():
@@ -767,6 +792,12 @@ def runUI():
 
     if "job_path" in st.session_state:
         st.success("Job was completed with the following results")
+
+        if "imputer" in st.session_state:
+            del st.session_state["imputer"]
+        
+        if "scaler" in st.session_state:
+            del st.session_state["scaler"]
 
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
@@ -825,6 +856,18 @@ def runUI():
                 test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
                 test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
+
+        features, _, _ = load_training_data(st.session_state["job_path"])
+        if "imputer" not in st.session_state:
+            missing = features.isnull().values.any()
+            inf = features.isin([np.inf, -np.inf]).values.any()
+            if missing or inf:
+                imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+                st.session_state["imputer"] = imp.fit(features)
+
+        if "scaler" not in st.session_state:
+            sc = StandardScaler()
+            st.session_state["scaler"] = sc.fit(features)
 
         tabs = {}
 
