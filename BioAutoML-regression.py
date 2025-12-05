@@ -121,13 +121,20 @@ def features_importance_ensembles(model, features, output_importances):
 
 	"""Generate feature importance values"""
 
-	file = open(output_importances, 'a')
 	importances = model.feature_importances_
 	indices = np.argsort(importances)[::-1]
 	names = [features[i] for i in indices]
-	for f in range(len(features)):
-		file.write('%d. Feature (%s): (%f)' % (f + 1, names[f], importances[indices[f]]))
-		file.write('\n')
+	with open(output_importances, 'w') as file:
+		file.write('Feature\tImportance\n')  # Write header
+		for f in range(len(features)):
+			file.write('%s\t%f\n' % (names[f], importances[indices[f]]))
+	# file = open(output_importances, 'a')
+	# importances = model.feature_importances_
+	# indices = np.argsort(importances)[::-1]
+	# names = [features[i] for i in indices]
+	# for f in range(len(features)):
+	# 	file.write('%d. Feature (%s): (%f)' % (f + 1, names[f], importances[indices[f]]))
+	# 	file.write('\n')
 		#  print('%d. %s: (%f)' % (f + 1, names[f], importances[indices[f]]))
 	return names
 

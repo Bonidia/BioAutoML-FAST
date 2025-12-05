@@ -463,7 +463,7 @@ def create_confusion_matrix_figure(df):
 
 def performance_metrics():
     df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
-    
+
     has_test_set = True if df_job_info["testing_set"].item() == "Test set" else False
     
     evaluation_options = ["Training set", "Test set"] if has_test_set else ["Training set"]
@@ -473,7 +473,13 @@ def performance_metrics():
         help="Training set evaluated with 10-fold cross-validation"
     )
 
-    col1, col2 = st.columns(2)
+    task = df_job_info["task"].item()
+
+    if task == "Classification":
+        col1, col2 = st.columns(2)
+    else:
+        col1 = st.container()  # single column
+        col2 = None
 
     with col1:
         if evaluation == "Training set":
@@ -485,52 +491,63 @@ def performance_metrics():
                 df_cv = model_data["cross_validation"]
 
             metrics = []
-            if "F1_micro" not in df_cv.columns:
+
+            if task == "Classification":
+                if "F1_micro" not in df_cv.columns:
+                    metrics.extend([
+                        f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
+                        f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
+                        f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
+                        f"**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}",
+                        f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                        f"**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}",
+                        f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}",
+                        f"**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}"
+                    ])
+                else:
+                    metrics.extend([
+                        f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
+                        f"**Sensitivity (macro):** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
+                        f"**Specificity (macro):** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
+                        f"**F1-score (micro):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}",
+                        f"**F1-score (macro):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}",
+                        f"**F1-score (weighted):** {df_cv['F1_weighted'].item()} ± {df_cv['std_F1_weighted'].item()}",
+                        f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
+                        f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}"
+                    ])
+
+            elif task == "Regression":
                 metrics.extend([
-                    f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                    f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
-                    f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
-                    f"**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}",
-                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
-                    f"**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}",
-                    f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}",
-                    f"**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}"
-                ])
-            else: 
-                metrics.extend([
-                    f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                    f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
-                    f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
-                    f"**F1-score (micro avg.):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}",
-                    f"**F1-score (macro avg.):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}",
-                    f"**F1-score (weighted avg.):** {df_cv['F1_weighted'].item()} ± {df_cv['std_F1_weighted'].item()}",
-                    f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
-                    f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}"
+                    f"**Mean Absolute Error:** {df_cv['mean_absolute_error'].item()} ± {df_cv['std_mean_absolute_error'].item()}",
+                    f"**Mean Squared Error:** {df_cv['mean_squared_error'].item()} ± {df_cv['std_mean_squared_error'].item()}",
+                    f"**Root Mean Squared Error:** {df_cv['root_mean_squared_error'].item()} ± {df_cv['std_root_mean_squared_error'].item()}",
+                    f"**R2:** {df_cv['r2'].item()} ± {df_cv['std_r2'].item()}"
                 ])
             
             for metric in metrics:
                 st.markdown(metric)
+
         else:
             df_report = load_data(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
             df_report = df_report.rename(columns={"Unnamed: 0": ""})
-
             st.dataframe(df_report, hide_index=True, use_container_width=True)
-    
-    with col2:
-        if evaluation == "Training set":
-            path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
-            if os.path.exists(path_matrix):
-                df = load_data(path_matrix)
-            else:
-                model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-                df = model_data["confusion_matrix"]
-        else:
-            df = load_data(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
-        
-        fig = create_confusion_matrix_figure(df)
 
-        with st.spinner('Loading visualization...'):
-            st.plotly_chart(fig, use_container_width=True)
+    if task == "Classification":
+        with col2:
+            if evaluation == "Training set":
+                path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
+                if os.path.exists(path_matrix):
+                    df = load_data(path_matrix)
+                else:
+                    model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+                    df = model_data["confusion_matrix"]
+            else:
+                df = load_data(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+
+            fig = create_confusion_matrix_figure(df)
+
+            with st.spinner('Loading visualization...'):
+                st.plotly_chart(fig, use_container_width=True)
 
 @st.cache_data
 def load_predictions(job_path):
@@ -615,6 +632,7 @@ def feature_importance():
 def model_information():
 
     model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
+    df_job_info = pd.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), sep='\t')
 
     col1, col2 = st.columns(2)
 
@@ -625,8 +643,10 @@ def model_information():
             with cont1:
                 st.markdown("**Model**")
 
+                st.markdown(f"**Task:** {df_job_info['task'].item()}")
+
                 def show_params(title, params, keys):
-                    st.markdown(f"**Classifier:** {title}")
+                    st.markdown(f"**Algorithm:** {title}")
                     for k in keys:
                         if k in params and params[k] is not None:
                             st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
@@ -695,11 +715,8 @@ def model_information():
 
         # Show in Streamlit
         st.dataframe(df_descriptors.sort_index(axis=1), hide_index=True)
-
-        df_job_info = pd.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), sep='\t')
         
         data_type = df_job_info["data_type"].item()
-
         
         with st.expander("**Descriptors information**"):
             if data_type == "DNA/RNA":
@@ -872,7 +889,7 @@ def runUI():
         tabs = {}
 
         if df_job_info["testing_set"].item() != "No test set":
-            if max(train_stats["num_seqs"].to_list()) > 1000 or max(test_stats["num_seqs"].to_list()) > 1000:
+            if max(train_stats["num_seqs"].to_list()) > 2000 or max(test_stats["num_seqs"].to_list()) > 2000:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance", "Feature Distribution"]
             else:
@@ -880,7 +897,7 @@ def runUI():
                             "Feature Importance", "Feature Distribution",
                             "Feature Correlation", "Dimensionality Reduction"]
         else:
-            if max(train_stats["num_seqs"].to_list()) > 1000:
+            if max(train_stats["num_seqs"].to_list()) > 2000:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance", "Feature Distribution"]
             else:
