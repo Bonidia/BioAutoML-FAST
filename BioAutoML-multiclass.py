@@ -640,7 +640,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
     if os.path.exists(ftest_labels) is True:
         print('Number of features (test): ' + str(len(column_test)))
 
-    """Preprocessing:  Label Encoding"""
+    """Preprocessing: Label Encoding"""
 
     if model:
         lb_encoder = model["label_encoder"]

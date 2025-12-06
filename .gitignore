@@ -7,3 +7,4 @@ work
 runs
 DATA
 .venv
+secrets.toml

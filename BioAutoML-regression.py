@@ -128,14 +128,7 @@ def features_importance_ensembles(model, features, output_importances):
 		file.write('Feature\tImportance\n')  # Write header
 		for f in range(len(features)):
 			file.write('%s\t%f\n' % (names[f], importances[indices[f]]))
-	# file = open(output_importances, 'a')
-	# importances = model.feature_importances_
-	# indices = np.argsort(importances)[::-1]
-	# names = [features[i] for i in indices]
-	# for f in range(len(features)):
-	# 	file.write('%d. Feature (%s): (%f)' % (f + 1, names[f], importances[indices[f]]))
-	# 	file.write('\n')
-		#  print('%d. %s: (%f)' % (f + 1, names[f], importances[indices[f]]))
+
 	return names
 
 
@@ -143,19 +136,9 @@ def save_prediction(prediction, nameseqs, pred_output):
 
 	"""Saving prediction - test set"""
 
-	file = open(pred_output, 'a')
+	preds_df = pd.DataFrame({"nameseq": nameseqs, "prediction": prediction})
 
-	if os.path.exists(nameseq_test) is True:
-		for i in range(len(prediction)):
-			file.write('%s,' % str(nameseqs[i]))
-			file.write('%s' % str(prediction[i]))
-			file.write('\n')
-	else:
-		for i in range(len(prediction)):
-			file.write('%s' % str(prediction[i]))
-			file.write('\n')
-	return
-
+	preds_df.to_csv(pred_output, index=False)
 
 def regression_pipeline(model, train, train_labels, train_nameseq, test, test_labels, test_nameseq, norm, classifier, fs, output):
     """Unified Regression Pipeline — mirrors the structure of binary_pipeline"""

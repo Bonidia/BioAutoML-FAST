@@ -60,39 +60,54 @@ def scale_features(features):
 
     return features
 
-@st.cache_data(show_spinner=False)
-def create_reduction_plot(reduced_data, labels, names, reduction_method):
-    """Create and cache 3D reduction plot"""
+# @st.cache_data(show_spinner=False)
+def create_reduction_plot(reduced_data, labels, names_df, reduction_method):
+    """
+    reduced_data: numpy array shape (n_samples, 3)
+    labels: list/array length n_samples with label values
+    names_df: DataFrame with columns ['label','nameseq'] in the same order as labels OR
+              (preferred) used only to generate per-point hover text aligned with labels.
+    """
     fig = go.Figure()
+    reduced_data = np.asarray(reduced_data)
+    if reduced_data.ndim != 2 or reduced_data.shape[1] < 3:
+        raise ValueError("reduced_data must be shape (n_samples, >=3)")
+
+    labels = np.asarray(labels)
     unique_labels = np.unique(labels)
     colors = utils.get_colors(len(unique_labels))
-    
+
+    # Build per-point hover text aligned with original order.
+    # If names_df is the zipped DataFrame we created earlier (label, nameseq)
+    if isinstance(names_df, pd.DataFrame) and 'nameseq' in names_df.columns:
+        # assume names_df is aligned with labels order
+        point_names = names_df['nameseq'].astype(str).tolist()
+    else:
+        # fallback: use index as name
+        point_names = [str(i) for i in range(len(labels))]
+
     for i, label in enumerate(unique_labels):
-        mask = [True if l == label else False for l in labels]
-        hover_text = names[names["label"] == label]["nameseq"].tolist()
-        
+        mask = (labels == label)
+        xs = reduced_data[mask, 0]
+        ys = reduced_data[mask, 1]
+        zs = reduced_data[mask, 2]
+        hover_text = [n for n in np.array(point_names)[mask]]
+
         fig.add_trace(go.Scatter3d(
-            x=reduced_data[mask][0],
-            y=reduced_data[mask][1],
-            z=reduced_data[mask][2],
+            x=xs,
+            y=ys,
+            z=zs,
             mode='markers',
-            name=f'{label}',
-            marker=dict(color=colors[i], size=2),
+            name=str(label),
+            marker=dict(color=colors[i], size=5, opacity=0.8),
+            hoverlabel=dict( font=dict( family="Open Sans, History Sans Pro Light", color="white", size=12 ), bgcolor="black" ),
             hovertemplate=hover_text,
-            hoverlabel=dict(
-                font=dict(
-                    family="Open Sans, History Sans Pro Light",
-                    color="white",
-                    size=12
-                ),
-                bgcolor="black"
-            ),
-            textposition='top center',
-            hoverinfo='text'
+            hoverinfo='text',
+            showlegend=True
         ))
-    
+
     fig.update_layout(
-        height=500,
+        height=600,
         scene=dict(
             xaxis_title='Component 1',
             yaxis_title='Component 2',
@@ -101,7 +116,6 @@ def create_reduction_plot(reduced_data, labels, names, reduction_method):
         title=reduction_method,
         margin=dict(t=30, b=50)
     )
-    
     return fig
 
 def dimensionality_reduction():
@@ -121,6 +135,7 @@ def dimensionality_reduction():
 
         # Load data with caching
         features, labels, nameseqs = load_reduction_data(st.session_state["job_path"], evaluation)
+
         names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
         
         # Scale features with caching
@@ -163,6 +178,8 @@ def dimensionality_reduction():
                         reduced_data = reducer.transform(scaled_data)
                 else:
                     reduced_data = st.session_state["reducer"].transform(scaled_data)
+
+                reduced_data = reducer.fit_transform(scaled_data)
 
                 # Create plot with caching
                 fig = create_reduction_plot(reduced_data, labels, names, reduction)
@@ -816,6 +833,9 @@ def runUI():
         if "scaler" in st.session_state:
             del st.session_state["scaler"]
 
+        if "reducer" in st.session_state:
+            del st.session_state["reducer"]
+
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
         with st.expander("Summary Statistics"):
@@ -874,17 +894,18 @@ def runUI():
                 test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
-        features, _, _ = load_training_data(st.session_state["job_path"])
+        features_train, _, _ = load_training_data(st.session_state["job_path"])
         if "imputer" not in st.session_state:
-            missing = features.isnull().values.any()
-            inf = features.isin([np.inf, -np.inf]).values.any()
+            missing = features_train.isnull().values.any()
+            inf = features_train.isin([np.inf, -np.inf]).values.any()
             if missing or inf:
-                imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-                st.session_state["imputer"] = imp.fit(features)
+                features_train.replace([np.inf, -np.inf], np.nan, inplace=True)
+                imp = SimpleImputer(strategy='mean')
+                st.session_state["imputer"] = imp.fit(features_train)
 
         if "scaler" not in st.session_state:
             sc = StandardScaler()
-            st.session_state["scaler"] = sc.fit(features)
+            st.session_state["scaler"] = sc.fit(features_train)
 
         tabs = {}
 
