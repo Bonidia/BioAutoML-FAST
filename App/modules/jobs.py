@@ -17,6 +17,7 @@ from sklearn.preprocessing import OrdinalEncoder
 from sklearn import tree
 from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
+from utils.tasks import manager
 
 @st.cache_data
 def load_reduction_data(job_path, evaluation):
@@ -779,6 +780,10 @@ def model_information():
                 )
 
 def runUI():
+    
+    df = manager.get_db()
+    st.dataframe(df)
+
     def get_job_example():
         st.session_state["job_input"] = "SuKEVriL0frtqHPU"
 

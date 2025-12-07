@@ -141,167 +141,168 @@ def save_prediction(prediction, nameseqs, pred_output):
 	preds_df.to_csv(pred_output, index=False)
 
 def regression_pipeline(model, train, train_labels, train_nameseq, test, test_labels, test_nameseq, norm, classifier, fs, output):
-    """Unified Regression Pipeline — mirrors the structure of binary_pipeline"""
-    global clf, ord_encoder
+	"""Unified Regression Pipeline — mirrors the structure of binary_pipeline"""
+	global clf, ord_encoder
 
-    if not os.path.exists(output):
-        os.mkdir(output)
+	if not os.path.exists(output):
+		os.mkdir(output)
 
-    # Initialize model dictionary
-    if model:
-        train = model["train"]
-        train_labels = model["train_labels"]
-        column_train = model["column_train"]
-    else:
-        column_train = train.columns
-        model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
+	# Initialize model dictionary
+	if model:
+		train = model["train"]
+		train_labels = model["train_labels"]
+		column_train = model["column_train"]
+	else:
+		column_train = train.columns
+		model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
 
-    column_test = ''
+	column_test = ''
 
-    """Basic Info"""
-    print(f'Number of samples (train): {len(train)}')
-    print(f'Number of features (train): {len(column_train)}')
+	"""Basic Info"""
+	print(f'Number of samples (train): {len(train)}')
+	print(f'Number of features (train): {len(column_train)}')
 
-    if os.path.exists(ftest):
-        column_test = test.columns
-        print(f'Number of samples (test): {len(test)}')
-        print(f'Number of features (test): {len(column_test)}')
+	if os.path.exists(ftest):
+		column_test = test.columns
+		print(f'Number of samples (test): {len(test)}')
+		print(f'Number of features (test): {len(column_test)}')
 
-    """Preprocessing: Ordinal Encoding (categorical features)"""
-    if model:
-        ord_encoder = model["ordinal_encoder"]
-        string_cols = train.select_dtypes(include=["object"]).columns
-        if not string_cols.empty:
-            train[string_cols] = ord_encoder.transform(train[string_cols])
-    else:
-        string_cols = train.select_dtypes(include=["object"]).columns
-        if not string_cols.empty:
-            print('Applying OrdinalEncoder()...')
-            ord_encoder = OrdinalEncoder()
-            train[string_cols] = ord_encoder.fit_transform(train[string_cols])
-            if os.path.exists(ftest):
-                string_cols = test.select_dtypes(include=["object"]).columns
-                if not string_cols.empty:
-                    test[string_cols] = ord_encoder.transform(test[string_cols])
-            model_dict["ordinal_encoder"] = ord_encoder
+	"""Preprocessing: Ordinal Encoding (categorical features)"""
+	if model:
+		if "ordinal_encoder" in model:
+			ord_encoder = model["ordinal_encoder"]
+			string_cols = train.select_dtypes(include=["object"]).columns
+			if not string_cols.empty:
+				train[string_cols] = ord_encoder.transform(train[string_cols])
+	else:
+		string_cols = train.select_dtypes(include=["object"]).columns
+		if not string_cols.empty:
+			print('Applying OrdinalEncoder()...')
+			ord_encoder = OrdinalEncoder()
+			train[string_cols] = ord_encoder.fit_transform(train[string_cols])
+			if os.path.exists(ftest):
+				string_cols = test.select_dtypes(include=["object"]).columns
+				if not string_cols.empty:
+					test[string_cols] = ord_encoder.transform(test[string_cols])
+			model_dict["ordinal_encoder"] = ord_encoder
 
-    """Preprocessing: Missing Values"""
-    print('Checking missing values...')
-    missing = train.isnull().values.any()
-    inf = train.isin([np.inf, -np.inf]).values.any()
-    missing_test = inf_test = False
-    if os.path.exists(ftest):
-        missing_test = test.isnull().values.any()
-        inf_test = test.isin([np.inf, -np.inf]).values.any()
-    if missing or inf or missing_test or inf_test:
-        print('There are missing or infinite values — applying SimpleImputer(mean)')
-        train.replace([np.inf, -np.inf], np.nan, inplace=True)
-        imp = SimpleImputer(strategy='mean')
-        train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
-        if os.path.exists(ftest):
-            test.replace([np.inf, -np.inf], np.nan, inplace=True)
-            test = pd.DataFrame(imp.transform(test), columns=column_test)
-        model_dict["imputer"] = imp
-    else:
-        print('No missing values found.')
+	"""Preprocessing: Missing Values"""
+	print('Checking missing values...')
+	missing = train.isnull().values.any()
+	inf = train.isin([np.inf, -np.inf]).values.any()
+	missing_test = inf_test = False
+	if os.path.exists(ftest):
+		missing_test = test.isnull().values.any()
+		inf_test = test.isin([np.inf, -np.inf]).values.any()
+	if missing or inf or missing_test or inf_test:
+		print('There are missing or infinite values — applying SimpleImputer(mean)')
+		train.replace([np.inf, -np.inf], np.nan, inplace=True)
+		imp = SimpleImputer(strategy='mean')
+		train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
+		if os.path.exists(ftest):
+			test.replace([np.inf, -np.inf], np.nan, inplace=True)
+			test = pd.DataFrame(imp.transform(test), columns=column_test)
+		model_dict["imputer"] = imp
+	else:
+		print('No missing values found.')
 
-    """Preprocessing: Normalization"""
-    if norm:
-        print('Applying StandardScaler()...')
-        if model:
-            sc = model["scaler"]
-            train = pd.DataFrame(sc.transform(train), columns=column_train)
-        else:
-            sc = StandardScaler()
-            train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
-            model_dict["scaler"] = sc
-        if os.path.exists(ftest):
-            test = pd.DataFrame(sc.transform(test), columns=column_test)
+	"""Preprocessing: Normalization"""
+	if norm:
+		print('Applying StandardScaler()...')
+		if model:
+			sc = model["scaler"]
+			train = pd.DataFrame(sc.transform(train), columns=column_train)
+		else:
+			sc = StandardScaler()
+			train = pd.DataFrame(sc.fit_transform(train), columns=column_train)
+			model_dict["scaler"] = sc
+		if os.path.exists(ftest):
+			test = pd.DataFrame(sc.transform(test), columns=column_test)
 
-    """Choosing Regressor"""
-    if not model:
-        if classifier == 0:
-            print('Regressor: CatBoostRegressor')
-            clf = CatBoostRegressor(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                    logging_level='Silent', random_state=63)
-        elif classifier == 1 or classifier == 2 or classifier == 3:
-            print('Regressor: LightGBM')
-            clf = lgb.LGBMRegressor(n_estimators=500, n_jobs=n_cpu, random_state=63, verbosity=-1)
-    else:
-        clf = model["clf"]
+	"""Choosing Regressor"""
+	if not model:
+		if classifier == 0:
+			print('Regressor: CatBoostRegressor')
+			clf = CatBoostRegressor(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
+									logging_level='Silent', random_state=63)
+		elif classifier == 1 or classifier == 2 or classifier == 3:
+			print('Regressor: LightGBM')
+			clf = lgb.LGBMRegressor(n_estimators=500, n_jobs=n_cpu, random_state=63, verbosity=-1)
+	else:
+		clf = model["clf"]
 
-    """Feature Selection"""
-    feature_name = column_train
-    if not model:
-        if fs:
-            print('Applying Feature Importance-Based Feature Selection...')
-            best_t = feature_importance_fs_bayesian(clf, train, train_labels)
-            selector = SelectFromModel(clf, threshold=best_t)
-            selector.fit(train, train_labels)
-            feature_idx = selector.get_support()
-            feature_name = column_train[feature_idx]
-            train = pd.DataFrame(selector.transform(train), columns=feature_name)
-            if os.path.exists(ftest):
-                test = pd.DataFrame(selector.transform(test), columns=feature_name)
-            print(f'Feature Selection Done — Retained: {len(feature_name)} / {len(column_train)} features')
-            model_dict["fs"] = selector
-    else:
-        if "fs" in model:
-            feature_idx = model["fs"].get_support()
-            feature_name = column_train[feature_idx]
-            train = pd.DataFrame(model["fs"].transform(train), columns=feature_name)
-            if os.path.exists(ftest):
-                test = pd.DataFrame(model["fs"].transform(test), columns=feature_name)
+	"""Feature Selection"""
+	feature_name = column_train
+	if not model:
+		if fs:
+			print('Applying Feature Importance-Based Feature Selection...')
+			best_t = feature_importance_fs_bayesian(clf, train, train_labels)
+			selector = SelectFromModel(clf, threshold=best_t)
+			selector.fit(train, train_labels)
+			feature_idx = selector.get_support()
+			feature_name = column_train[feature_idx]
+			train = pd.DataFrame(selector.transform(train), columns=feature_name)
+			if os.path.exists(ftest):
+				test = pd.DataFrame(selector.transform(test), columns=feature_name)
+			print(f'Feature Selection Done — Retained: {len(feature_name)} / {len(column_train)} features')
+			model_dict["fs"] = selector
+	else:
+		if "fs" in model:
+			feature_idx = model["fs"].get_support()
+			feature_name = column_train[feature_idx]
+			train = pd.DataFrame(model["fs"].transform(train), columns=feature_name)
+			if os.path.exists(ftest):
+				test = pd.DataFrame(model["fs"].transform(test), columns=feature_name)
 
-    """Training and Cross-Validation"""
-    print('Training: KFold (cross-validation = 10)...')
-    train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
-    importance_output = os.path.join(output, 'feature_importance.csv')
-    model_output = os.path.join(output, 'trained_model.sav')
+	"""Training and Cross-Validation"""
+	print('Training: KFold (cross-validation = 10)...')
+	train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
+	importance_output = os.path.join(output, 'feature_importance.csv')
+	model_output = os.path.join(output, 'trained_model.sav')
 
-    if not model:
-        evaluate_model_cross(train, train_labels, clf, train_output)
-        clf.fit(train, train_labels)
-        model_dict["clf"] = clf
-        print(f'Saving training metrics → {train_output}')
-        print(f'Saving trained model → {model_output}')
+	if not model:
+		evaluate_model_cross(train, train_labels, clf, train_output)
+		clf.fit(train, train_labels)
+		model_dict["clf"] = clf
+		print(f'Saving training metrics → {train_output}')
+		print(f'Saving trained model → {model_output}')
 
-        features_importance_ensembles(clf, feature_name, importance_output)
-        print(f'Saving feature importance → {importance_output}')
+		features_importance_ensembles(clf, feature_name, importance_output)
+		print(f'Saving feature importance → {importance_output}')
 
-        model_dict["feature_importance"] = pd.read_csv(importance_output, sep='\t')
-        model_dict["nameseq_train"] = train_nameseq
-        joblib.dump(model_dict, model_output)
-    else:
-        clf = model["clf"]
+		model_dict["feature_importance"] = pd.read_csv(importance_output, sep='\t')
+		model_dict["nameseq_train"] = train_nameseq
+		joblib.dump(model_dict, model_output)
+	else:
+		clf = model["clf"]
 
-    """Testing"""
-    if os.path.exists(ftest):
-        print('Generating Performance on Test Set...')
-        preds = clf.predict(test)
-        pred_output = os.path.join(output, 'test_predictions.csv')
-        save_prediction(preds, test_nameseq, pred_output)
-        print(f'Saving predictions → {pred_output}')
+	"""Testing"""
+	if os.path.exists(ftest):
+		print('Generating Performance on Test Set...')
+		preds = clf.predict(test)
+		pred_output = os.path.join(output, 'test_predictions.csv')
+		save_prediction(preds, test_nameseq, pred_output)
+		print(f'Saving predictions → {pred_output}')
 
-        if os.path.exists(ftest_labels):
-            MAE = mean_absolute_error(test_labels, preds)
-            MSE = mean_squared_error(test_labels, preds)
-            RMSE = root_mean_squared_error(test_labels, preds)
-            R2 = r2_score(test_labels, preds)
-            metrics = pd.DataFrame({
-                "Metric": ["MAE", "MSE", "RMSE", "R2"],
-                "Value": [MAE, MSE, RMSE, R2]
-            })
-            metrics_output = os.path.join(output, 'metrics_test.csv')
-            metrics.to_csv(metrics_output, index=False)
-            print(f'Saving test metrics → {metrics_output}')
-            print('Task completed successfully!')
-        else:
-            print('No test labels provided for evaluation.')
-    else:
-        print('No test data found — skipping testing.')
+		if os.path.exists(ftest_labels):
+			MAE = mean_absolute_error(test_labels, preds)
+			MSE = mean_squared_error(test_labels, preds)
+			RMSE = root_mean_squared_error(test_labels, preds)
+			R2 = r2_score(test_labels, preds)
+			metrics = pd.DataFrame({
+				"Metric": ["MAE", "MSE", "RMSE", "R2"],
+				"Value": [MAE, MSE, RMSE, R2]
+			})
+			metrics_output = os.path.join(output, 'metrics_test.csv')
+			metrics.to_csv(metrics_output, index=False)
+			print(f'Saving test metrics → {metrics_output}')
+			print('Task completed successfully!')
+		else:
+			print('No test labels provided for evaluation.')
+	else:
+		print('No test data found — skipping testing.')
 
-    return
+	return
 
 ##########################################################################
 ##########################################################################

@@ -9,18 +9,18 @@ import streamlit.components.v1 as components
 import os
 from secrets import choice
 import string
-from queue import Queue
-from threading import Thread, Lock
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 import utils
 import base64
 import joblib
 import shutil
 import time
-import os
+import re
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
+from pathlib import Path
+from functools import partial
+from utils import tasks
 
 def send_job_finished_email(email: str, job_id: str):
     """
@@ -57,11 +57,6 @@ def send_job_finished_email(email: str, job_id: str):
         smtp_server.sendmail(sender, email, msg.as_string())
     # Print a message to console after successfully sending the email.
     print(f"Email sent to {email}.")
-
-# Global variables for thread management
-job_queue = Queue()
-queue_lock = Lock()
-queue_thread = None
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -259,34 +254,6 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def worker():
-    """Worker thread that processes jobs from the queue."""
-    ctx = get_script_run_ctx()
-    if ctx is None:
-        return
-    
-    while True:
-        with queue_lock:
-            if not job_queue.empty():
-                job_data = job_queue.get()
-                
-                try:
-                    # Unpack job data
-                    (train_files, test_files, job_path, data_type, task,
-                     training, testing, classifier, imbalance, email) = job_data
-                    
-                    # Process the job
-                    submit_job(train_files, test_files, job_path, data_type, task,
-                              training, testing, classifier, imbalance, email)
-                
-                except Exception as e:
-                    print(f"Error processing job: {e}")
-                
-                finally:
-                    job_queue.task_done()
-        
-        time.sleep(1)  # Prevent busy waiting
-
 def submit_job(train_files, test_files, job_path, data_type, task, training, testing, classifier, imbalance, email=None):
     """Process a single job - modified to be thread-safe."""
     try:
@@ -475,14 +442,22 @@ def submit_job(train_files, test_files, job_path, data_type, task, training, tes
 
             model = joblib.load(save_path)
 
-            command = [
-                "python",
-                "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-                "--task",
-                "1" if task == "Regression" else "0",
-                "-path_model", save_path,
-                "-nf", "True",
-            ]
+            if task == "Classification":
+                command = [
+                    "python",
+                    "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
+                    "--task",
+                    "1" if task == "Regression" else "0",
+                    "-path_model", save_path,
+                    "-nf", "True",
+                ]
+            elif task == "Regression":
+                command = [
+                    "python",
+                    "BioAutoML-regression.py",
+                    "-path_model", save_path,
+                    "-nf", "True",
+                ]
 
             if test_files:
                 if data_type == "Structured data":
@@ -592,18 +567,7 @@ def submit_job(train_files, test_files, job_path, data_type, task, training, tes
 
 def runUI():
     """Main Streamlit UI function with thread management."""
-    global job_queue, queue_thread
-    
-    if "queue_started" in st.session_state:
-        st.session_state.queue_started = False
-        
-    # Start the worker thread if not already running
-    if not st.session_state.queue_started:
-        queue_thread = Thread(target=worker, daemon=True)
-        add_script_run_ctx(queue_thread)
-        queue_thread.start()
-        st.session_state.queue_started = True
-    
+
     with open("imgs/logo.png", "rb") as file_:
         contents = file_.read()
         data_url = base64.b64encode(contents).decode("utf-8")
@@ -660,9 +624,15 @@ def runUI():
 
             # Simple validation (not strict): show warning if looks invalid
             if email:
-                import re
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
+    elif training == "Load model":
+        email = st.text_input("Email to notify when job finishes (Optional)", value="", help="We will send a completion notification to this address.")
+
+        # Simple validation (not strict): show warning if looks invalid
+        if email:
+            if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                st.warning("That doesn't look like a valid email address.")
 
     if training == "Training set" and data_type == "Structured data":
         # Show algorithm choices depending on the selected task
@@ -824,12 +794,24 @@ def runUI():
         tsv_path = os.path.join(job_path, "job_info.tsv")
         df_job_data.write_csv(tsv_path, separator='\t')
 
-        # Add job to the queue with thread safety
-        with queue_lock:
-            job_queue.put((train_files, test_files, job_path, data_type, task, training, testing, classifier, imbalance, email))
-        
         with queue_info:
             st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
+
+        fn_kwargs = {
+            "train_files": train_files,
+            "test_files": test_files,
+            "job_path":  job_path,
+            "data_type": data_type,
+            "task":      task,
+            "training":  training,
+            "testing":   testing,
+            "classifier":classifier,
+            "imbalance": imbalance,
+            "email":     email,
+        }
+
+        job_id_new = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs, user_id=job_id)
+        st.markdown(job_id_new)
 
 # Run the Streamlit app
 if __name__ == "__main__":

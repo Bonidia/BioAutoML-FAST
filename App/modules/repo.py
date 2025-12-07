@@ -5,9 +5,6 @@ import string
 from secrets import choice
 import subprocess
 from subprocess import Popen
-from queue import Queue
-from threading import Thread, Lock
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 import bibtexparser
 import utils
 import base64
@@ -15,11 +12,6 @@ import joblib
 import shutil
 import os
 import time
-
-# Global variables for thread management
-job_queue = Queue()
-queue_lock = Lock()
-queue_thread = None
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -253,35 +245,6 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-
-def worker():
-    """Worker thread that processes jobs from the queue."""
-    ctx = get_script_run_ctx()
-    if ctx is None:
-        return
-    
-    while True:
-        with queue_lock:
-            if not job_queue.empty():
-                job_data = job_queue.get()
-                
-                try:
-                    # Unpack job data
-                    (train_files, test_files, job_path, data_type, 
-                     training, testing, classifier, imbalance, fselection) = job_data
-                    
-                    # Process the job
-                    submit_job(train_files, test_files, job_path, data_type, 
-                              training, testing, classifier, imbalance, fselection)
-                
-                except Exception as e:
-                    print(f"Error processing job: {e}")
-                
-                finally:
-                    job_queue.task_done()
-        
-        time.sleep(1)  # Prevent busy waiting
-
 def submit_job(dataset_path, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection):
     """Process a single job - modified to be thread-safe."""
     try:
@@ -419,18 +382,6 @@ def bibtex_to_dict(bib_file="references.bib"):
 
 def runUI():
     """Main Streamlit UI function with thread management."""
-    global job_queue, queue_thread
-    
-    # Initialize session state for thread management
-    if "queue_started" in st.session_state:
-        st.session_state.queue_started = False
-    
-    # Start the worker thread if not already running
-    if not st.session_state.queue_started:
-        queue_thread = Thread(target=worker, daemon=True)
-        add_script_run_ctx(queue_thread)
-        queue_thread.start()
-        st.session_state.queue_started = True
     
     citation_dict = bibtex_to_dict()
 
@@ -708,9 +659,7 @@ def runUI():
             df_job_data.write_csv(tsv_path, separator='\t')
 
             # Add job to the queue
-            with queue_lock:
-                job_queue.put((dataset_path, test_files, job_path, data_type, 
-                             training, testing, classifier, imbalance, fselection))
+            submit_job(dataset_path, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection)
             
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
