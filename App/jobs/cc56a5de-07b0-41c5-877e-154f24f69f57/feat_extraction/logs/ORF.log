@@ -1,0 +1,49 @@
+
+
+###################################################################################
+######################## Feature Extraction: ORF feature   ########################
+##########   Arguments: python3.5 -i input -o output -l label    ##################
+###################################################################################
+
+
+Recorded Sequence: pre_0_train_U00096.3/780554-780626
+Recorded Sequence: pre_1_train_U00096.3/4175754-4175826
+Recorded Sequence: pre_2_train_U00096.3/3215598-3215670
+Recorded Sequence: pre_3_train_U00096.3/4175388-4175460
+Recorded Sequence: pre_4_train_U00096.3/2044549-2044621
+Recorded Sequence: pre_5_train_U00096.3/564723-564796
+Recorded Sequence: pre_6_train_U00096.3/2999057-2998987
+Recorded Sequence: pre_7_train_U00096.3/3423655-3423583
+Recorded Sequence: pre_8_train_U00096.3/3110366-3110438
+Recorded Sequence: pre_9_train_U00096.3/1992117-1992045
+Recorded Sequence: pre_10_train_U00096.3/1746435-1746508
+Recorded Sequence: pre_11_train_U00096.3/2817860-2817787
+Recorded Sequence: pre_12_train_U00096.3/228928-229001
+Recorded Sequence: pre_13_train_U00096.3/1746516-1746589
+Recorded Sequence: pre_14_train_U00096.3/3946957-3947029
+Recorded Sequence: pre_15_train_U00096.3/2043557-2043471
+Recorded Sequence: pre_16_train_U00096.3/4175673-4175744
+Recorded Sequence: pre_17_train_U00096.3/1031712-1031628
+Recorded Sequence: pre_18_train_U00096.3/3982735-3982808
+Recorded Sequence: pre_19_train_U00096.3/696830-696759
+Recorded Sequence: pre_20_train_U00096.3/696504-696433
+Recorded Sequence: pre_21_train_U00096.3/2520931-2521003
+Recorded Sequence: pre_22_train_U00096.3/2466309-2466380
+Recorded Sequence: pre_23_train_U00096.3/2818645-2818556
+Recorded Sequence: pre_24_train_U00096.3/4496405-4496486
+Recorded Sequence: pre_25_train_U00096.3/3318289-3318216
+Recorded Sequence: pre_26_train_U00096.3/4175472-4175553
+Recorded Sequence: pre_27_train_U00096.3/1287328-1287247
+Recorded Sequence: pre_28_train_U00096.3/2518116-2518044
+Recorded Sequence: pre_29_train_U00096.3/2729444-2729372
+Recorded Sequence: pre_30_train_U00096.3/1991901-1991818
+Recorded Sequence: pre_31_train_U00096.3/3708692-3708619
+Recorded Sequence: pre_32_train_U00096.3/697047-696966
+Recorded Sequence: pre_33_train_U00096.3/1991987-1991917
+Recorded Sequence: pre_34_train_U00096.3/3322158-3322075
+Recorded Sequence: pre_35_train_U00096.3/2286211-2286284
+Recorded Sequence: pre_36_train_U00096.3/4606286-4606203
+Recorded Sequence: pre_37_train_U00096.3/3982606-3982689
+Recorded Sequence: pre_38_train_U00096.3/3836223-3836312
+Recorded Sequence: pre_39_train_U00096.3/3836222-3836312
+Computation time 0.023662805557250977 senconds

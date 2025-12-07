@@ -781,8 +781,20 @@ def model_information():
 
 def runUI():
     
-    df = manager.get_db()
-    st.dataframe(df)
+    st.markdown("This page ...", help="")
+
+    with st.expander("Job queue"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
+            df = manager.get_pending_jobs()
+            st.dataframe(df, hide_index=True)
+
+        with col2:
+            st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
+            df = manager.get_recent_completed_jobs()
+            st.dataframe(df, hide_index=True)
 
     def get_job_example():
         st.session_state["job_input"] = "SuKEVriL0frtqHPU"
@@ -808,22 +820,19 @@ def runUI():
             elif os.path.exists(os.path.join(dataset_path, job_id)):
                 job_path = os.path.join(dataset_path, job_id, "runs", "run_1")
 
-            if job_path:
-                test_fold = os.path.join(job_path, "test")
+            job = manager.get_result(job_id)
 
-                test_set = True if os.path.exists(test_fold) else False
-
-                if test_set:
-                    predictions = os.path.join(job_path, "test_predictions.csv")
-                else:
-                    predictions = os.path.join(job_path, "trained_model.sav")
-                
-                if os.path.exists(predictions):
+            if job:
+                if job["status"] == "success":
                     st.session_state["job_path"] = job_path
-                else:
+                elif job["status"] == "running" or job["status"] == "pending":
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
-                    st.info("Job is still in progress. Come back later.")
+                    st.info(f"Job is position #{manager.get_job_position(job_id)} in the queue. Come back later.")
+                elif job["status"] == "failure":
+                    if "job_path" in st.session_state:
+                        del st.session_state["job_path"]
+                    st.info("Job failed. Try again.")
             else:
                 if "job_path" in st.session_state:
                     del st.session_state["job_path"]

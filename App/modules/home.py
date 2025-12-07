@@ -15,48 +15,12 @@ import joblib
 import shutil
 import time
 import re
-import smtplib
-from email.mime.text import MIMEText
-from email.utils import formataddr
 from pathlib import Path
 from functools import partial
 from utils import tasks
-
-def send_job_finished_email(email: str, job_id: str):
-    """
-    Send a job completion email using Gmail SMTP.
-    """
-
-    sender = st.secrets["email_sender"]
-    password = st.secrets["email_pass"]
-
-    # Email content
-    subject = f"[BioAutoML-FAST] Job ID {job_id} has finished"
-    body = (
-        f"Dear user,\n\n"
-        f"Your job has completed successfully.\n"
-        f"Job ID: {job_id}\n\n"
-        f"Consult the output in the Jobs module using your Job ID and, if encrypted, password."
-    )
-
-    # Create a MIMEText object with the body of the email.
-    msg = MIMEText(body)
-    # Set the subject of the email.
-    msg["Subject"] = subject
-    # Set the sender's email.
-    msg["From"] = formataddr(("BioAutoML", sender))
-    # Join the list of recipients into a single string separated by commas.
-    msg["To"] = email
-
-    # Connect to Gmail's SMTP server using SSL.
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtp_server:
-        # Login to the SMTP server using the sender's credentials.
-        smtp_server.starttls()  # Secure the connection
-        smtp_server.login(sender, password)
-        # Send the email. The sendmail function requires the sender's email, the list of recipients, and the email message as a string.
-        smtp_server.sendmail(sender, email, msg.as_string())
-    # Print a message to console after successfully sending the email.
-    print(f"Email sent to {email}.")
+from rq import get_current_job
+from utils.tasks import manager
+from utils.db import TaskResultManager, TaskStatus
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -254,8 +218,16 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def submit_job(train_files, test_files, job_path, data_type, task, training, testing, classifier, imbalance, email=None):
+def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, classifier, imbalance, email=None):
     """Process a single job - modified to be thread-safe."""
+
+    job = get_current_job()
+    job_id = job.get_id()
+    manager.store_result(job_id, TaskStatus.RUNNING)
+
+    job_path = os.path.join(predict_path, job_id)
+    os.makedirs(job_path, exist_ok=True)
+
     try:
         if training == "Training set":
             train_path = os.path.join(job_path, "train")
@@ -555,13 +527,6 @@ def submit_job(train_files, test_files, job_path, data_type, task, training, tes
             command.extend(["--output", job_path])
 
             subprocess.run(command, cwd="..")
-
-        try:
-            if email:
-                job_id = job_path.split('/')[-1]
-                send_job_finished_email(email=email, job_id=job_id)
-        except Exception as e:
-            print(f"Failed to send completion email to {email}: {e}")
     except Exception as e:
         print(f"Error in job processing: {e}")
 
@@ -610,8 +575,8 @@ def runUI():
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
                                 help="Whether to use a labeled testing set to evaluate the model, or alternatively, an unlabeled prediction set.")
-        data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein", "Structured data"], 
-                                help="Only sequences without ambiguous nucleotides or amino acids are supported, as well as structured data with categorical variables.")
+        data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein"], # "Structured data" (TO BE DONE)
+                                help="Any sequence that includes ambiguous nucleotides or amino acids will be preprocessed, with all ambiguous characters removed.")
     
     if training == "Training set":
         checkcol1, checkcol2 = st.columns(2)
@@ -768,11 +733,6 @@ def runUI():
                 st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
             st.stop()
 
-        job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-        job_path = os.path.join(predict_path, job_id)
-
-        os.makedirs(job_path)
-
         if training == "Load model":
             classifier, imbalance = False, False
         elif training == "Training set" and data_type != "Structured data":
@@ -780,6 +740,25 @@ def runUI():
 
         if testing == "No test set":
             test_files = None
+
+        fn_kwargs = {
+            "train_files": train_files,
+            "test_files": test_files,
+            "predict_path":  predict_path,
+            "data_type": data_type,
+            "task":      task,
+            "training":  training,
+            "testing":   testing,
+            "classifier":classifier,
+            "imbalance": imbalance,
+            "email":     email,
+        }
+
+        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
+
+        # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
+        job_path = os.path.join(predict_path, job_id)
+        os.makedirs(job_path, exist_ok=True)
 
         job_data = {
             "data_type": [data_type],
@@ -796,22 +775,6 @@ def runUI():
 
         with queue_info:
             st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
-
-        fn_kwargs = {
-            "train_files": train_files,
-            "test_files": test_files,
-            "job_path":  job_path,
-            "data_type": data_type,
-            "task":      task,
-            "training":  training,
-            "testing":   testing,
-            "classifier":classifier,
-            "imbalance": imbalance,
-            "email":     email,
-        }
-
-        job_id_new = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs, user_id=job_id)
-        st.markdown(job_id_new)
 
 # Run the Streamlit app
 if __name__ == "__main__":

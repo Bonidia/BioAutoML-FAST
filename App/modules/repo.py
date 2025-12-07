@@ -660,6 +660,12 @@ def runUI():
 
             # Add job to the queue
             submit_job(dataset_path, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection)
+
+        #             job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
+
+        # # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
+        # job_path = os.path.join(predict_path, job_id)
+        # os.makedirs(job_path, exist_ok=True)
             
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
