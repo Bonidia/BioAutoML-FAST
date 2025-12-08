@@ -7,7 +7,6 @@ import subprocess
 from subprocess import Popen
 import streamlit.components.v1 as components
 import os
-from secrets import choice
 import string
 import utils
 import base64
@@ -21,6 +20,13 @@ from utils import tasks
 from rq import get_current_job
 from utils.tasks import manager
 from utils.db import TaskResultManager, TaskStatus
+import tarfile
+import io
+import secrets
+import base64
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -218,7 +224,69 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, classifier, imbalance, email=None):
+# Derive a URL-safe Base64 key for Fernet from a password + salt
+def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
+    password_bytes = password.encode("utf-8")
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=iterations,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+    return key
+
+# Create a tar archive in memory from a directory path and return bytes
+def make_tar_bytes_from_dir(folder_path: str) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        # Add all files and subdirectories
+        tar.add(folder_path, arcname=".")
+    buf.seek(0)
+    return buf.read()
+
+# Encrypt the entire job folder into job_archive.enc and save salt (job_salt.bin).
+# Removes the original files once encrypted.
+def encrypt_job_folder(job_path: str, password: str) -> None:
+    # 1) Create tar.gz bytes of folder
+    tar_bytes = make_tar_bytes_from_dir(job_path)
+
+    # 2) Generate salt and derive key
+    salt = secrets.token_bytes(16)
+    key = derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+
+    # 3) Encrypt the tar bytes
+    encrypted = fernet.encrypt(tar_bytes)
+
+    # 4) Write encrypted archive and salt into job_path
+    enc_path = os.path.join(job_path, "job_archive.enc")
+    salt_path = os.path.join(job_path, "job_salt.bin")
+
+    with open(enc_path, "wb") as f:
+        f.write(encrypted)
+    with open(salt_path, "wb") as f:
+        f.write(salt)
+
+    # 5) Remove everything else in job_path except the newly created files
+    for root, dirs, files in os.walk(job_path):
+        for name in files:
+            full = os.path.join(root, name)
+            if full not in {enc_path, salt_path}:
+                try:
+                    os.remove(full)
+                except Exception:
+                    pass
+        # remove empty directories (except the top job_path)
+        for d in dirs:
+            dirfull = os.path.join(root, d)
+            try:
+                # attempt rmdir (will only remove if empty)
+                os.rmdir(dirfull)
+            except Exception:
+                pass
+
+def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, classifier, imbalance, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -527,6 +595,11 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
             command.extend(["--output", job_path])
 
             subprocess.run(command, cwd="..")
+        try:
+            if password:
+                encrypt_job_folder(job_path, password)
+        except Exception as e:
+            print(f"Error encrypting job {job_id}: {e}")
     except Exception as e:
         print(f"Error in job processing: {e}")
 
@@ -579,25 +652,34 @@ def runUI():
                                 help="Any sequence that includes ambiguous nucleotides or amino acids will be preprocessed, with all ambiguous characters removed.")
     
     if training == "Training set":
-        checkcol1, checkcol2 = st.columns(2)
+        checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
             imbalance = st.checkbox("Oversampling/Undersampling", help="Whether to use imbalanced techniques for the datasets.")
             
         with checkcol2:
-            email = st.text_input("Email to notify when job finishes (Optional)", value="", help="We will send a completion notification to this address.")
+            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
             # Simple validation (not strict): show warning if looks invalid
             if email:
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
-    elif training == "Load model":
-        email = st.text_input("Email to notify when job finishes (Optional)", value="", help="We will send a completion notification to this address.")
 
-        # Simple validation (not strict): show warning if looks invalid
-        if email:
-            if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-                st.warning("That doesn't look like a valid email address.")
+        with checkcol3:
+            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+    elif training == "Load model":
+        checkcol1, checkcol2 = st.columns(2)
+
+        with checkcol1:
+            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+
+            # Simple validation (not strict): show warning if looks invalid
+            if email:
+                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                    st.warning("That doesn't look like a valid email address.")
+        
+        with checkcol2:
+            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
 
     if training == "Training set" and data_type == "Structured data":
         # Show algorithm choices depending on the selected task
@@ -752,11 +834,11 @@ def runUI():
             "classifier":classifier,
             "imbalance": imbalance,
             "email":     email,
+            "password":  password
         }
 
         job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
 
-        # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
         job_path = os.path.join(predict_path, job_id)
         os.makedirs(job_path, exist_ok=True)
 
@@ -776,6 +858,7 @@ def runUI():
         with queue_info:
             st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
 
-# Run the Streamlit app
 if __name__ == "__main__":
     runUI()
+
+        # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])

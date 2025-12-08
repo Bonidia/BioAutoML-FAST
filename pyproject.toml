@@ -8,6 +8,7 @@ dependencies = [
     "bibtexparser>=1.4.3",
     "biopython>=1.85",
     "catboost>=1.2.7",
+    "cryptography>=46.0.3",
     "fastexcel>=0.14.0",
     "hyperopt>=0.2.7",
     "igraph>=0.11.8",

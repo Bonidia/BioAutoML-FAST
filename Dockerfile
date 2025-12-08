@@ -30,8 +30,8 @@ ENV PATH="/home/user/BioAutoML-FAST/.venv/bin:${PATH}"
 # Switch to the non-root user
 USER user
 
-# Expose the port
-EXPOSE 8501
+# Install dependencies
+RUN uv sync
 
-# Default command
-CMD ["bash", "-c", "uv sync && cd App && streamlit run app.py"]
+# Default command (just streamlit, others will run in separate containers)
+CMD ["bash", "-c", "cd App && streamlit run app.py --server.port 8501 --server.address 0.0.0.0"]

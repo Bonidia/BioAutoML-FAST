@@ -18,6 +18,24 @@ from sklearn import tree
 from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
 from utils.tasks import manager
+import tarfile
+import io
+import secrets
+import base64
+import tempfile
+import shutil
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet
+
+def _cleanup_previous_temp():
+    prev = st.session_state.get("temp_extract_path")
+    if prev and os.path.exists(prev):
+        try:
+            shutil.rmtree(prev)
+        except Exception:
+            pass
+        del st.session_state["temp_extract_path"]
 
 @st.cache_data
 def load_reduction_data(job_path, evaluation):
@@ -779,9 +797,48 @@ def model_information():
                     """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 1 after 1-gap;  \n"""
                 )
 
+def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
+    password_bytes = password.encode("utf-8")
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=iterations,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+    
+    return key
+
+def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) -> bool:
+    enc_path = os.path.join(job_path, "job_archive.enc")
+    salt_path = os.path.join(job_path, "job_salt.bin")
+
+    with open(salt_path, "rb") as f:
+        salt = f.read()
+
+    key = derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+
+    with open(enc_path, "rb") as f:
+        encrypted = f.read()
+    try:
+        decrypted = fernet.decrypt(encrypted)
+    except Exception:
+        # Bad password or corrupted archive
+        return False
+
+    # Write tar bytes to memory and extract
+    buf = io.BytesIO(decrypted)
+    with tarfile.open(fileobj=buf, mode="r:gz") as tar:
+        # Ensure target directory exists
+        os.makedirs(target_extract_path, exist_ok=True)
+        tar.extractall(path=target_extract_path)
+
+    return True
+
 def runUI():
     
-    st.markdown("This page ...", help="")
+    # st.markdown("This page ...", help="")
 
     with st.expander("Job queue"):
         col1, col2 = st.columns(2)
@@ -797,16 +854,23 @@ def runUI():
             st.dataframe(df, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "SuKEVriL0frtqHPU"
+        st.session_state["job_input"] = "c3c5ce3e-1811-47a2-8424-7609a0f11c9d"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
 
         with col2:
-            example_job = st.button("Example", use_container_width=True, on_click=get_job_example)
+            st.button("Example", use_container_width=True, on_click=get_job_example)
 
         with st.form("jobs_submit", border=False):
-            job_id = st.text_input("Enter Job ID", key="job_input")
+
+            textcol1, textcol2 = st.columns(2)
+
+            with textcol1:
+                job_id = st.text_input("Enter Job ID", key="job_input")
+
+            with textcol2:
+                password = st.text_input("Password to decrypt submission (if encrypted)", type='password', help="If submission was encrypted, provide the password for decryption.")
 
             submitted = st.form_submit_button("Submit", use_container_width=True,  type="primary")
 
@@ -824,7 +888,29 @@ def runUI():
 
             if job:
                 if job["status"] == "success":
-                    st.session_state["job_path"] = job_path
+                    _cleanup_previous_temp()
+
+                    enc_path = os.path.join(job_path, "job_archive.enc")
+                    salt_path = os.path.join(job_path, "job_salt.bin")
+
+                    if os.path.exists(enc_path) and os.path.exists(salt_path):
+                        if password:
+                            temp_dir = tempfile.mkdtemp(prefix=f"extracted_job_{job_id}_")
+                            succeeded = decrypt_job_archive(job_path, password, temp_dir)
+
+                            if succeeded:
+                                st.session_state["job_path"] = temp_dir
+                            else:
+                                st.error(f"Wrong password for descryption.")
+                                if "job_path" in st.session_state:
+                                    del st.session_state["job_path"]
+                        else:
+                            st.error("Please provide a password for decryption.")
+                            if "job_path" in st.session_state:
+                                del st.session_state["job_path"]
+                    else:
+                        st.session_state["job_path"] = job_path
+
                 elif job["status"] == "running" or job["status"] == "pending":
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]

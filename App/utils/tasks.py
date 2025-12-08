@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 redis_conn = Redis(host="localhost", port=6379)
-q = Queue(connection=redis_conn)
+q = Queue("bioautoml", connection=redis_conn)
 
 manager = TaskResultManager("task_results.db")
 

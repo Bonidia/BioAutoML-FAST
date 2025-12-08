@@ -12,6 +12,18 @@ import joblib
 import shutil
 import os
 import time
+from utils import tasks
+from rq import get_current_job
+from utils.tasks import manager
+from utils.db import TaskResultManager, TaskStatus
+import re
+import tarfile
+import io
+import secrets
+import base64
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -71,7 +83,7 @@ def test_extraction(job_path, test_data, model, data_type):
                         ["python", "MathFeature/methods/FickettScore.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
                                 "-seq", "1"],
-                        ["python", "other-methods/methods/EntropyClass.py", "-i",
+                        ["python", "other-methods/EntropyClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
                         ["python", "MathFeature/methods/FourierClass.py", "-i",
@@ -245,8 +257,76 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-def submit_job(dataset_path, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection):
+# Derive a URL-safe Base64 key for Fernet from a password + salt
+def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
+    password_bytes = password.encode("utf-8")
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=iterations,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+    return key
+
+# Create a tar archive in memory from a directory path and return bytes
+def make_tar_bytes_from_dir(folder_path: str) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        # Add all files and subdirectories
+        tar.add(folder_path, arcname=".")
+    buf.seek(0)
+    return buf.read()
+
+def encrypt_job_folder(job_path: str, password: str) -> None:
+    # 1) Create tar.gz bytes of folder
+    tar_bytes = make_tar_bytes_from_dir(job_path)
+
+    # 2) Generate salt and derive key
+    salt = secrets.token_bytes(16)
+    key = derive_key_from_password(password, salt)
+    fernet = Fernet(key)
+
+    # 3) Encrypt the tar bytes
+    encrypted = fernet.encrypt(tar_bytes)
+
+    # 4) Write encrypted archive and salt into job_path
+    enc_path = os.path.join(job_path, "job_archive.enc")
+    salt_path = os.path.join(job_path, "job_salt.bin")
+
+    with open(enc_path, "wb") as f:
+        f.write(encrypted)
+    with open(salt_path, "wb") as f:
+        f.write(salt)
+
+    # 5) Remove everything else in job_path except the newly created files
+    for root, dirs, files in os.walk(job_path):
+        for name in files:
+            full = os.path.join(root, name)
+            if full not in {enc_path, salt_path}:
+                try:
+                    os.remove(full)
+                except Exception:
+                    pass
+        # remove empty directories (except the top job_path)
+        for d in dirs:
+            dirfull = os.path.join(root, d)
+            try:
+                # attempt rmdir (will only remove if empty)
+                os.rmdir(dirfull)
+            except Exception:
+                pass
+
+def submit_job(dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
+
+    job = get_current_job()
+    job_id = job.get_id()
+    manager.store_result(job_id, TaskStatus.RUNNING)
+
+    job_path = os.path.join(predict_path, job_id)
+    os.makedirs(job_path, exist_ok=True)
+
     try:
         if training == "Load model":
             save_path = os.path.join(dataset_path, "trained_model.sav")
@@ -355,6 +435,11 @@ def submit_job(dataset_path, test_files, job_path, data_type, training, testing,
 
             shutil.copy(os.path.join(dataset_path, "best_descriptors/selected_descriptors.csv"), os.path.join(job_path, "best_descriptors"))
     
+        try:
+            if password:
+                encrypt_job_folder(job_path, password)
+        except Exception as e:
+            print(f"Error encrypting job {job_id}: {e}")
     except Exception as e:
         print(f"Error in job processing: {e}")
 
@@ -389,14 +474,14 @@ def runUI():
         "Model 1: antibody sequences",
         "Model 2: anticancer peptides",
         "Model 3: anticancer peptides",
-        "Model 4: anticancer peptides (alternative)",
-        "Model 5: anticancer peptides (main)",
+        "Model 4: anticancer peptides",
+        "Model 5: anticancer peptides",
         "Model 6: anti-coronavirus",
         "Model 7: anti-coronavirus and random non-secretory proteins",
         "Model 8: antifungal peptides",
         "Model 9: anti-hypertensive peptides",
-        "Model 10: antimalarial peptides (alternative)",
-        "Model 11: antimalarial peptides (main)",
+        "Model 10: antimalarial peptides",
+        "Model 11: antimalarial peptides",
         "Model 12: antimicrobial peptides",
         "Model 13: antimicrobial peptides",
         "Model 14: antimicrobial peptides",
@@ -617,6 +702,18 @@ def runUI():
                                     accept_multiple_files=False, 
                                     help="Single file for prediction (e.g. predict.fasta)")
 
+        col1, col2 = st.columns(2)
+    
+        with col1:
+            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+
+            # Simple validation (not strict): show warning if looks invalid
+            if email:
+                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                    st.warning("That doesn't look like a valid email address.")
+        with col2:
+            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+
         submitted = st.form_submit_button("Submit", 
                                     use_container_width=True, 
                                     type="primary")
@@ -628,45 +725,51 @@ def runUI():
             with queue_info:
                 st.error("Please upload the required prediction file.")
         else:
-            job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-            job_path = os.path.join(predict_path, job_id)
-            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
-
-            os.makedirs(job_path)
-
-            dtype_str = dataset_id.split('_')[-2]
-
             training = "Load model"
             testing = "Prediction set"
-            classifier, imbalance, fselection = False, False, False
+            classifier, imbalance = False, False
+
+            dtype_str = dataset_id.split('_')[-2]
 
             if dtype_str == "protein":
                 data_type = "Protein"
             elif dtype_str == "dnarna":
                 data_type = "DNA/RNA"
+            
+            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_6")
+
+            fn_kwargs = {
+                "dataset_path":  dataset_path,
+                "test_files": test_files,
+                "predict_path":  predict_path,
+                "data_type": data_type,
+                "training":  training,
+                "testing":   testing,
+                "email":     email,
+                "password":  password
+            }
+                
+            # Add job to the queue
+            job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
+            job_path = os.path.join(predict_path, job_id)
+
+            os.makedirs(job_path, exist_ok=True)
+
+            task = int(dataset_id.split('_')[-1])
 
             job_data = {
                 "data_type": [data_type],
+                "task": ["Classification" if task == 0 else "Regression"],
                 "training_set": [training == "Training set"],
                 "testing_set": [testing],
                 "classifier_selected": [classifier], 
-                "imbalance_methods": [imbalance],  
-                "feature_selection": [fselection],  
+                "imbalance_methods": [imbalance]
             }
 
             df_job_data = pl.DataFrame(job_data)
             tsv_path = os.path.join(job_path, "job_info.tsv")
             df_job_data.write_csv(tsv_path, separator='\t')
 
-            # Add job to the queue
-            submit_job(dataset_path, test_files, job_path, data_type, training, testing, classifier, imbalance, fselection)
-
-        #             job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
-
-        # # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])
-        # job_path = os.path.join(predict_path, job_id)
-        # os.makedirs(job_path, exist_ok=True)
-            
             with queue_info:
                 st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
 

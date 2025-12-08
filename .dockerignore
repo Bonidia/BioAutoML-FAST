@@ -1,1 +1,10 @@
 .venv
+.git
+__pycache__
+*.pyc
+
+# Ignore everything under runs
+App/datasets/*/runs/*
+
+# But re-include the specific run_6 directories
+!App/datasets/*/runs/run_6

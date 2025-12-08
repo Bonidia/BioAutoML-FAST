@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: .
+    command: rq worker bioautoml
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+
+  web:
+    build: .
+    ports:
+      - "8501:8501"
+    depends_on:
+      - redis
+      - worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    command: streamlit run App/app.py --server.port 8501 --server.address 0.0.0.0
