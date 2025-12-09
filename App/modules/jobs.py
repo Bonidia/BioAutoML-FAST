@@ -854,7 +854,7 @@ def runUI():
             st.dataframe(df, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "c3c5ce3e-1811-47a2-8424-7609a0f11c9d"
+        st.session_state["job_input"] = "c6966a1a-2e95-43e7-a496-65208e3cf261"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -881,8 +881,6 @@ def runUI():
             job_path = ""
             if os.path.exists(os.path.join(predict_path, job_id)):
                 job_path = os.path.join(predict_path, job_id)
-            elif os.path.exists(os.path.join(dataset_path, job_id)):
-                job_path = os.path.join(dataset_path, job_id, "runs", "run_1")
 
             job = manager.get_result(job_id)
 
@@ -909,20 +907,47 @@ def runUI():
                             if "job_path" in st.session_state:
                                 del st.session_state["job_path"]
                     else:
-                        st.session_state["job_path"] = job_path
+                        if os.path.exists(os.path.join(predict_path, job_id)):
+                            job_path = os.path.join(predict_path, job_id)
+                            st.session_state["job_path"] = job_path
+                        else:
+                            if "job_path" in st.session_state:
+                                del st.session_state["job_path"]
+                            st.error("Job does not exist!")
 
                 elif job["status"] == "running" or job["status"] == "pending":
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
                     st.info(f"Job is position #{manager.get_job_position(job_id)} in the queue. Come back later.")
+
                 elif job["status"] == "failure":
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
                     st.info("Job failed. Try again.")
             else:
-                if "job_path" in st.session_state:
-                    del st.session_state["job_path"]
-                st.error("Job does not exist!")
+                dataset_compressed_path = os.path.join(dataset_path, f"{job_id}.tar.gz")
+
+                if "tmp_dir" in st.session_state:
+                    st.session_state["tmp_dir"].cleanup()
+                    del st.session_state["tmp_dir"]
+
+                with st.spinner(f'Loading dataset...'):    
+                    if os.path.exists(dataset_compressed_path):
+                        tmp_dir = tempfile.TemporaryDirectory()
+                        st.session_state["tmp_dir"] = tmp_dir  # Store so we can clean later
+
+                        # Extract tar.gz into the tmp dir
+                        with tarfile.open(dataset_compressed_path, "r:gz") as tar:
+                            tar.extractall(path=tmp_dir.name)
+
+                        # Path to run_6 inside the extracted structure
+                        job_path = os.path.join(tmp_dir.name, "datasets", job_id, "runs", "run_6")
+
+                        st.session_state["job_path"] = job_path
+                    else:
+                        if "job_path" in st.session_state:
+                            del st.session_state["job_path"]
+                        st.error("Job does not exist!")
 
     if "job_path" in st.session_state:
         st.success("Job was completed with the following results")

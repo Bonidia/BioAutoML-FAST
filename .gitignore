@@ -3,7 +3,7 @@ experiments/
 .idea/
 catboost_info
 work
-.nextflow
+datasets
 runs
 DATA
 .venv

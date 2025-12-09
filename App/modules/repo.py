@@ -18,6 +18,7 @@ from utils.tasks import manager
 from utils.db import TaskResultManager, TaskStatus
 import re
 import tarfile
+import tempfile
 import io
 import secrets
 import base64
@@ -323,6 +324,20 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
     job = get_current_job()
     job_id = job.get_id()
     manager.store_result(job_id, TaskStatus.RUNNING)
+
+    if "tmp_dir" in st.session_state:
+        st.session_state["tmp_dir"].cleanup()
+        del st.session_state["tmp_dir"]
+
+    tmp_dir = tempfile.TemporaryDirectory()
+    st.session_state["tmp_dir"] = tmp_dir  # Store so we can clean later
+
+    # Extract tar.gz into the tmp dir
+    with tarfile.open(dataset_path, "r:gz") as tar:
+        tar.extractall(path=tmp_dir.name)
+
+    # Path to run_6 inside the extracted structure
+    dataset_path = os.path.join(tmp_dir.name, "datasets", dataset_path.split("/")[-1].split(".tar")[0], "runs", "run_6")
 
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
@@ -735,8 +750,8 @@ def runUI():
                 data_type = "Protein"
             elif dtype_str == "dnarna":
                 data_type = "DNA/RNA"
-            
-            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_6")
+
+            dataset_path = os.path.join("datasets", f"{dataset_id}.tar.gz")
 
             fn_kwargs = {
                 "dataset_path":  dataset_path,
