@@ -581,7 +581,7 @@ def load_feature_importance(job_path):
     if "model" in st.session_state:
         df_feat = st.session_state["model"]["feature_importance"]
     else:
-        df_feat = pd.read_csv(os.path.join(job_path, "feature_importance.csv"))
+        df_feat = pd.read_csv(os.path.join(job_path, "feature_importance.tsv"))
 
     return df_feat
 
@@ -810,7 +810,7 @@ def runUI():
             st.dataframe(df, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "c6966a1a-2e95-43e7-a496-65208e3cf261"
+        st.session_state["job_input"] = "70698bf1-a7f1-4597-bd68-5cd10f161000"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])

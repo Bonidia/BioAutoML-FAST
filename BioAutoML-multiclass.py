@@ -794,7 +794,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
     
     train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
     matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
-    importance_output = os.path.join(output, 'feature_importance.csv')
+    importance_output = os.path.join(output, 'feature_importance.tsv')
     model_output = os.path.join(output, 'trained_model.sav')
 
     if model:
