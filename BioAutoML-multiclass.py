@@ -705,54 +705,45 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
 
     """Choosing Classifier """
     
-    if not model:
-        print('Choosing Classifier...')
-        if classifier == 3:
-            print('Tuning: ' + str(bool(tuning)))
-            print('Classifier: XGBClassifier')
-            clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
-            if imbalance_data:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-                model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
-            if tuning:
-                print('Tuning not yet available for XGBClassifier')
-        elif classifier == 1:
-            print('Tuning: ' + str(bool(tuning)))
-            print('Classifier: Random Forest')
-            clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-            if imbalance_data:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-                model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
-            if tuning:
-                best_tuning, clf = tuning_rf_bayesian()
-                print('Finished Tuning')
-        elif classifier == 2:
-            print('Tuning: ' + str(bool(tuning)))
-            print('Classifier: LightGBM')
-            clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, verbosity=-1, random_state=63)
-            if imbalance_data:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-                model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
-            if tuning:
-                best_tuning, clf = tuning_lightgbm_bayesian()
-                print('Finished Tuning')
-        elif classifier == 0:
-            print('Tuning: ' + str(bool(tuning)))
-            print('Classifier: CatBoost')
-            clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                    logging_level='Silent', random_state=63)
-            if imbalance_data:
-                train, train_labels = imbalanced_function(clf, train, train_labels)
-                model_dict["train_imbalance"], model_dict["train_labels_imbalance"] = train, train_labels
-            if tuning:
-                best_tuning, clf = tuning_catboost_bayesian()
-                print('Finished Tuning')
-        else:
-            sys.exit('This classifier option does not exist - Try again')
+    print('Choosing Classifier...')
+    if classifier == 3:
+        print('Tuning: ' + str(bool(tuning)))
+        print('Classifier: XGBClassifier')
+        clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
+        if imbalance_data:
+            train, train_labels = imbalanced_function(clf, train, train_labels)
+        if tuning:
+            print('Tuning not yet available for XGBClassifier')
+    elif classifier == 1:
+        print('Tuning: ' + str(bool(tuning)))
+        print('Classifier: Random Forest')
+        clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
+        if imbalance_data:
+            train, train_labels = imbalanced_function(clf, train, train_labels)
+        if tuning:
+            best_tuning, clf = tuning_rf_bayesian()
+            print('Finished Tuning')
+    elif classifier == 2:
+        print('Tuning: ' + str(bool(tuning)))
+        print('Classifier: LightGBM')
+        clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, verbosity=-1, random_state=63)
+        if imbalance_data:
+            train, train_labels = imbalanced_function(clf, train, train_labels)
+        if tuning:
+            best_tuning, clf = tuning_lightgbm_bayesian()
+            print('Finished Tuning')
+    elif classifier == 0:
+        print('Tuning: ' + str(bool(tuning)))
+        print('Classifier: CatBoost')
+        clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
+                                logging_level='Silent', random_state=63)
+        if imbalance_data:
+            train, train_labels = imbalanced_function(clf, train, train_labels)
+        if tuning:
+            best_tuning, clf = tuning_catboost_bayesian()
+            print('Finished Tuning')
     else:
-        if "train_imbalance" in model:
-            print('Checking for imbalanced labels...')
-            train, train_labels = model["train_imbalance"], model["train_labels_imbalance"]
+        sys.exit('This classifier option does not exist - Try again')
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
     
@@ -893,7 +884,6 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
         print('Task completed - results generated in ' + output + '!')
         #  sys.stdout = tmp
         #  log_file.close()
-
 
 ##########################################################################
 ##########################################################################

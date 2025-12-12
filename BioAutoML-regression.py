@@ -272,6 +272,8 @@ def regression_pipeline(model, train, train_labels, train_nameseq, test, test_la
 
 		model_dict["feature_importance"] = pd.read_csv(importance_output, sep='\t')
 		model_dict["nameseq_train"] = train_nameseq
+		model_dict["cross_validation"] = pd.read_csv(train_output)
+		
 		joblib.dump(model_dict, model_output)
 	else:
 		clf = model["clf"]

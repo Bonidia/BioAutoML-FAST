@@ -37,20 +37,17 @@ def _cleanup_previous_temp():
             pass
         del st.session_state["temp_extract_path"]
 
-@st.cache_data
 def load_reduction_data(job_path, evaluation):
     """Load and cache data for dimensionality reduction"""
     if evaluation == "Training set":
-        path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
-        if os.path.exists(path_best_train):
-            features = pd.read_csv(path_best_train)
+        if "model" in st.session_state:
+            features = st.session_state["model"]["train"]
+            labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])["label"].tolist()
+            nameseqs = st.session_state["model"]["nameseq_train"]
+        else:
+            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
             labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))["label"].tolist()
             nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
-        else:
-            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-            features = model["train"]
-            labels = pd.DataFrame(model["train_labels"], columns=["label"])["label"].tolist()
-            nameseqs = model["nameseq_train"]
     else:
         if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
             features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
@@ -63,23 +60,17 @@ def load_reduction_data(job_path, evaluation):
     
     return features, labels, nameseqs
 
-@st.cache_data
 def scale_features(features):
     """Scale features with caching"""
 
-    if "imputer" in st.session_state:
-        imp = st.session_state["imputer"]
-        if imp:
-            features = imp.transform(features)
+    if "imputer" in st.session_state["model"]:
+        features = st.session_state["model"]["imputer"].transform(features)
 
-    if "scaler" in st.session_state:
-        sc = st.session_state["scaler"]
-        if sc:
-            features = sc.transform(features)
+    if "scaler" in st.session_state["model"]:
+        features = st.session_state["model"]["scaler"].transform(features)
 
     return features
 
-# @st.cache_data(show_spinner=False)
 def create_reduction_plot(reduced_data, labels, names_df, reduction_method):
     """
     reduced_data: numpy array shape (n_samples, 3)
@@ -204,28 +195,23 @@ def dimensionality_reduction():
                 fig = create_reduction_plot(reduced_data, labels, names, reduction)
                 st.plotly_chart(fig, use_container_width=True)
 
-@st.cache_data
 def load_features(job_path, evaluation):
     """Load and cache features based on evaluation set"""
     if evaluation == "Training set":
-        path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
-        if os.path.exists(path_best_train):
-            return pd.read_csv(path_best_train)
+        if "model" in st.session_state:
+            return st.session_state["model"]["train"]
         else:
-            model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-            return model["train"]
+            return pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv")) 
     else:
         if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
             return pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
         else:
             return pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
 
-@st.cache_data
 def compute_correlation_matrix(features, method):
     """Compute and cache correlation matrix"""
     return features.corr(method=method.lower())
 
-@st.cache_data
 def get_top_correlations(corr_matrix, top_n=100):
     """Get top correlated feature pairs and return matrix with features involved in top pairs"""
     # Create a copy and set diagonal to NaN to exclude self-correlations
@@ -249,7 +235,6 @@ def get_top_correlations(corr_matrix, top_n=100):
     
     return corr_matrix.loc[top_features, top_features]
 
-@st.cache_data
 def create_correlation_df(corr_matrix):
     """Create formatted correlation dataframe"""
     corr_df = pd.DataFrame(corr_matrix.stack(), columns=['Correlation coefficient'])
@@ -259,7 +244,6 @@ def create_correlation_df(corr_matrix):
            .sort_values('Correlation coefficient', ascending=False)\
            .reset_index(drop=True)
 
-@st.cache_data
 def create_correlation_heatmap(corr_matrix):
     """Create and cache correlation heatmap"""
     fig = px.imshow(
@@ -300,10 +284,8 @@ def feature_correlation():
     # Load features with caching
     features = load_features(st.session_state["job_path"], evaluation)
 
-    if "imputer" in st.session_state:
-        imp = st.session_state["imputer"]
-        if imp:
-            features = pd.DataFrame(imp.transform(features), columns=features.columns)
+    if "imputer" in st.session_state["model"]:
+        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     # Compute correlation matrix with caching
     with st.spinner('Computing correlations...'):
@@ -321,24 +303,20 @@ def feature_correlation():
             fig = create_correlation_heatmap(top_corr_matrix)
             st.plotly_chart(fig, use_container_width=True)
 
-@st.cache_data
 def load_training_data(job_path):
     """Load and cache training data"""
-    path_best_train = os.path.join(job_path, "best_descriptors/best_train.csv")
-    if os.path.exists(path_best_train):
-        features = pd.read_csv(path_best_train)
+
+    if "model" in st.session_state:
+        features = st.session_state["model"]["train"]
+        labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])
+        nameseqs = st.session_state["model"]["nameseq_train"]
+    else:
+        features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
         labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))
         nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
-    else:
-        model = joblib.load(os.path.join(job_path, "trained_model.sav"))
         
-        features = model["train"]
-
-        labels = pd.DataFrame(model["train_labels"], columns=["label"])
-        nameseqs = model["nameseq_train"]
     return features, labels, nameseqs
 
-@st.cache_data
 def load_test_data(job_path):
     """Load and cache test data"""
     if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
@@ -350,7 +328,6 @@ def load_test_data(job_path):
     nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
     return features, labels, nameseqs
 
-@st.cache_data(show_spinner=False)
 def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
     """Create and cache the distribution plot"""
     fig = ff.create_distplot(
@@ -390,17 +367,13 @@ def feature_distribution():
     if evaluation == "Training set":
         features, labels, nameseqs = load_training_data(st.session_state["job_path"])
 
-        if "imputer" in st.session_state:
-            imp = st.session_state["imputer"]
-            if imp:
-                features = pd.DataFrame(imp.transform(features), columns=features.columns)
+        if "imputer" in st.session_state["model"]:
+            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
     else:
         features, labels, nameseqs = load_test_data(st.session_state["job_path"])
 
-        if "imputer" in st.session_state:
-            imp = st.session_state["imputer"]
-            if imp:
-                features = pd.DataFrame(imp.transform(features), columns=features.columns)
+        if "imputer" in st.session_state["model"]:
+            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     col1, col2 = st.columns(2)
 
@@ -447,15 +420,6 @@ def feature_distribution():
         )
         st.plotly_chart(fig, use_container_width=True)
 
-@st.cache_data
-def load_data(path):
-    if path.endswith('.csv'):
-        return pd.read_csv(path)
-    elif path.endswith('.sav'):
-        return joblib.load(path)
-    return None
-
-@st.cache_data
 def create_confusion_matrix_figure(df):
     labels = df.columns[1:-1].tolist()
     values = df.iloc[0:-1, 1:-1].values.tolist()
@@ -519,12 +483,10 @@ def performance_metrics():
 
     with col1:
         if evaluation == "Training set":
-            path_kfold = os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv")
-            if os.path.exists(path_kfold):
-                df_cv = load_data(path_kfold)
+            if "model" in st.session_state:
+                df_cv = st.session_state["model"]["cross_validation"]
             else:
-                model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-                df_cv = model_data["cross_validation"]
+                df_cv = pd.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
 
             metrics = []
 
@@ -564,28 +526,25 @@ def performance_metrics():
                 st.markdown(metric)
 
         else:
-            df_report = load_data(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+            df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
             df_report = df_report.rename(columns={"Unnamed: 0": ""})
             st.dataframe(df_report, hide_index=True, use_container_width=True)
 
     if task == "Classification":
         with col2:
             if evaluation == "Training set":
-                path_matrix = os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv")
-                if os.path.exists(path_matrix):
-                    df = load_data(path_matrix)
+                if "model" in st.session_state:
+                    df = st.session_state["model"]["confusion_matrix"]
                 else:
-                    model_data = load_data(os.path.join(st.session_state["job_path"], "trained_model.sav"))
-                    df = model_data["confusion_matrix"]
+                    df = pd.read_csv(os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv"))
             else:
-                df = load_data(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+                df = pd.read_csv(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
 
             fig = create_confusion_matrix_figure(df)
 
             with st.spinner('Loading visualization...'):
                 st.plotly_chart(fig, use_container_width=True)
 
-@st.cache_data
 def load_predictions(job_path):
     """Load and preprocess predictions data with caching"""
     predictions = pd.read_csv(os.path.join(job_path, "test_predictions.csv"))
@@ -617,17 +576,15 @@ def show_predictions():
             use_container_width=True
         )
 
-@st.cache_data
 def load_feature_importance(job_path):
     """Load and cache feature importance data"""
-    path_feat = os.path.join(job_path, "feature_importance.csv")
-    if os.path.exists(path_feat):
-        return pd.read_csv(path_feat, sep='\t')
+    if "model" in st.session_state:
+        df_feat = st.session_state["model"]["feature_importance"]
     else:
-        model_data = joblib.load(os.path.join(job_path, "trained_model.sav"))
-        return model_data["feature_importance"]
+        df_feat = pd.read_csv(os.path.join(job_path, "feature_importance.csv"))
 
-@st.cache_data
+    return df_feat
+
 def create_feature_importance_figure(df):
     """Create and cache the feature importance plot"""
     fig = go.Figure(data=go.Bar(
@@ -667,7 +624,6 @@ def feature_importance():
 
 def model_information():
 
-    model = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))
     df_job_info = pd.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), sep='\t')
 
     col1, col2 = st.columns(2)
@@ -687,8 +643,8 @@ def model_information():
                         if k in params and params[k] is not None:
                             st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
 
-                clf_str = str(model["clf"])
-                params = model["clf"].get_params()
+                clf_str = str(st.session_state["model"]["clf"])
+                params = st.session_state["model"]["clf"].get_params()
 
                 if "RandomForest" in clf_str:
                     show_params(
@@ -731,11 +687,11 @@ def model_information():
                         help="SAV file can be loaded into the application"
                     )
 
-                if "RandomForest" in str(model["clf"]):
+                if "RandomForest" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/rf.png", use_container_width=True)
-                elif "XGB" in str(model["clf"]):
+                elif "XGB" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/xgboost.png", use_container_width=True)
-                elif "LGBM" in str(model["clf"]):
+                elif "LGBM" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
     with col2:
@@ -925,38 +881,20 @@ def runUI():
                         del st.session_state["job_path"]
                     st.info("Job failed. Try again.")
             else:
-                dataset_compressed_path = os.path.join(dataset_path, f"{job_id}.tar.gz")
+                job_path = os.path.join(dataset_path, job_id,  "runs", "run_6")
 
-                if "tmp_dir" in st.session_state:
-                    st.session_state["tmp_dir"].cleanup()
-                    del st.session_state["tmp_dir"]
-
-                with st.spinner(f'Loading dataset...'):    
-                    if os.path.exists(dataset_compressed_path):
-                        tmp_dir = tempfile.TemporaryDirectory()
-                        st.session_state["tmp_dir"] = tmp_dir  # Store so we can clean later
-
-                        # Extract tar.gz into the tmp dir
-                        with tarfile.open(dataset_compressed_path, "r:gz") as tar:
-                            tar.extractall(path=tmp_dir.name)
-
-                        # Path to run_6 inside the extracted structure
-                        job_path = os.path.join(tmp_dir.name, "datasets", job_id, "runs", "run_6")
-
-                        st.session_state["job_path"] = job_path
-                    else:
-                        if "job_path" in st.session_state:
-                            del st.session_state["job_path"]
-                        st.error("Job does not exist!")
+                if os.path.exists(job_path):
+                    st.session_state["job_path"] = job_path
+                else:
+                    if "job_path" in st.session_state:
+                        del st.session_state["job_path"]
+                    st.error("Job does not exist!")
 
     if "job_path" in st.session_state:
         st.success("Job was completed with the following results")
 
-        if "imputer" in st.session_state:
-            del st.session_state["imputer"]
-        
-        if "scaler" in st.session_state:
-            del st.session_state["scaler"]
+        if "model" in st.session_state:
+            del st.session_state["model"]
 
         if "reducer" in st.session_state:
             del st.session_state["reducer"]
@@ -1003,13 +941,18 @@ def runUI():
             """, unsafe_allow_html=True)
                 
             st.markdown("**Training set**")
-
-            path_stats = os.path.join(st.session_state["job_path"], "train_stats.csv")
-            if os.path.exists(path_stats):
-                train_stats = pd.read_csv(path_stats)
-            else:
-                train_stats = joblib.load(os.path.join(st.session_state["job_path"], "trained_model.sav"))["train_stats"]
+        
+            path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
             
+            if os.path.exists(path_model):
+                if "model" not in st.session_state:
+                    with st.spinner("Loading trained model..."):
+                        st.session_state["model"] = joblib.load(path_model, mmap_mode='r')
+
+                    train_stats = st.session_state["model"]["train_stats"]
+            else:
+                train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
+
             train_stats_formatted = train_stats.style.format(thousands=",")
             st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
@@ -1020,22 +963,11 @@ def runUI():
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
         features_train, _, _ = load_training_data(st.session_state["job_path"])
-        if "imputer" not in st.session_state:
-            missing = features_train.isnull().values.any()
-            inf = features_train.isin([np.inf, -np.inf]).values.any()
-            if missing or inf:
-                features_train.replace([np.inf, -np.inf], np.nan, inplace=True)
-                imp = SimpleImputer(strategy='mean')
-                st.session_state["imputer"] = imp.fit(features_train)
-
-        if "scaler" not in st.session_state:
-            sc = StandardScaler()
-            st.session_state["scaler"] = sc.fit(features_train)
 
         tabs = {}
 
         if df_job_info["testing_set"].item() != "No test set":
-            if max(train_stats["num_seqs"].to_list()) > 2000 or max(test_stats["num_seqs"].to_list()) > 2000:
+            if max(train_stats["num_seqs"].to_list()) > 2_000 or max(test_stats["num_seqs"].to_list()) > 2_000:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance", "Feature Distribution"]
             else:
@@ -1043,7 +975,7 @@ def runUI():
                             "Feature Importance", "Feature Distribution",
                             "Feature Correlation", "Dimensionality Reduction"]
         else:
-            if max(train_stats["num_seqs"].to_list()) > 2000:
+            if max(train_stats["num_seqs"].to_list()) > 2_000:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance", "Feature Distribution"]
             else:

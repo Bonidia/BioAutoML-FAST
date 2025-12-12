@@ -1,0 +1,75 @@
+14:06:22 Worker 8742372f9c824016a0b06c9bbefc7556: started with PID 2750198, version 2.6.1
+14:06:22 Worker 8742372f9c824016a0b06c9bbefc7556: subscribing to channel rq:pubsub:8742372f9c824016a0b06c9bbefc7556
+14:06:22 *** Listening on default...
+14:06:22 Worker 8742372f9c824016a0b06c9bbefc7556: cleaning registries for queue: default
+14:06:40 default: modules.home.submit_job(classifier=False, data_type='DNA/RNA', email='brenoslivio@pm.me', imbalance=False, job_path='/mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/EShxUaDjohI4f3du', task='Classification', test_files=None, testing='No test set', train_files=[UploadedFile(file_id='c7bec9cb-a0dc-461c-8cfd-c1c15523bcf7', name='tRNA.fa..., training='Training set') (1dcebef2-e791-45d3-97a0-21e9b3191912)
+2025-12-07 14:06:42.479 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.546 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.549 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.550 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.550 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.551 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.552 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.552 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.553 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.554 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.554 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.555 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.555 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.557 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.557 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:06:50.558 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+Error in job processing: Task exceeded maximum timeout value (30 seconds)
+Would send email to brenoslivio@pm.me: Job 1dcebef2-e791-45d3-97a0-21e9b3191912 finished
+Your job (1dcebef2-e791-45d3-97a0-21e9b3191912) finished successfully.
+14:07:11 Successfully completed modules.home.submit_job(classifier=False, data_type='DNA/RNA', email='brenoslivio@pm.me', imbalance=False, job_path='/mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/EShxUaDjohI4f3du', task='Classification', test_files=None, testing='No test set', train_files=[UploadedFile(file_id='c7bec9cb-a0dc-461c-8cfd-c1c15523bcf7', name='tRNA.fa..., training='Training set') job in 0:00:30.106584s on worker 8742372f9c824016a0b06c9bbefc7556
+14:07:11 default: Job OK (1dcebef2-e791-45d3-97a0-21e9b3191912)
+14:07:11 Result is kept for 500 seconds
+14:07:11 default: modules.home.submit_job(classifier=False, data_type='DNA/RNA', email='brenoslivio@pm.me', imbalance=False, job_path='/mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/f8HoFJQvQY3edin9', task='Classification', test_files=None, testing='No test set', train_files=[UploadedFile(file_id='a9db1db3-356b-4544-9e77-4acffde18085', name='tRNA.fa..., training='Training set') (09057401-2e6f-41c2-ac7b-64659bdb13cd)
+2025-12-07 14:07:13.766 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.342 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.345 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.346 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.346 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.347 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.348 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.348 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.349 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.349 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.350 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.351 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.351 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.352 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.353 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2025-12-07 14:07:22.353 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+
+####################################################################################################
+####################################################################################################
+##  ____   _                        _          __  __  _           ______         _____  _______  ##
+## |  _ \ (_)          /\          | |        |  \/  || |         |  ____|/\     / ____||__   __| ##
+## | |_) | _   ___    /  \   _   _ | |_  ___  | \  / || |  ______ | |__  /  \   | (___     | |    ##
+## |  _ < | | / _ \  / /\ \ | | | || __|/ _ \ | |\/| || | |______||  __|/ /\ \   \___ \    | |    ##
+## | |_) || || (_) |/ ____ \| |_| || |_| (_) || |  | || |____     | |  / ____ \  ____) |   | |    ##
+## |____/ |_| \___//_/    \_\\__,_| \__|\___/ |_|  |_||______|    |_| /_/    \_\|_____/    |_|    ##
+##                                                                                                ##
+##                         Empowering Researchers with Machine Learning                           ##
+##                                                                                                ##
+##                                      DNA/RNA module                                            ##
+##                                                                                                ##
+####################################################################################################
+####################################################################################################
+    
+Train - /mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/f8HoFJQvQY3edin9/train/rRNA.fasta: Found File
+Train - /mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/f8HoFJQvQY3edin9/train/sRNA.fasta: Found File
+Train - /mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/f8HoFJQvQY3edin9/train/tRNA.fasta: Found File
+Extracting features...
+Automated Feature Engineering - Bayesian Optimization
+[I 2025-12-07 14:07:41,605] A new study created in memory with name: no-name-1c1dd1e3-b351-44e3-b19b-1d6d479e5ae9
+  0%|          | 0/50 [00:00<?, ?it/s]Error in job processing: Task exceeded maximum timeout value (30 seconds)
+Would send email to brenoslivio@pm.me: Job 09057401-2e6f-41c2-ac7b-64659bdb13cd finished
+Your job (09057401-2e6f-41c2-ac7b-64659bdb13cd) finished successfully.
+14:07:42 Successfully completed modules.home.submit_job(classifier=False, data_type='DNA/RNA', email='brenoslivio@pm.me', imbalance=False, job_path='/mnt/UFZ_data_2/breno/BioAutoML-Fast/App/jobs/f8HoFJQvQY3edin9', task='Classification', test_files=None, testing='No test set', train_files=[UploadedFile(file_id='a9db1db3-356b-4544-9e77-4acffde18085', name='tRNA.fa..., training='Training set') job in 0:00:30.199930s on worker 8742372f9c824016a0b06c9bbefc7556
+14:07:42 default: Job OK (09057401-2e6f-41c2-ac7b-64659bdb13cd)
+14:07:42 Result is kept for 500 seconds
+14:18:40 Worker 8742372f9c824016a0b06c9bbefc7556 [PID 2750198]: warm shut down requested
+14:18:40 Worker 8742372f9c824016a0b06c9bbefc7556: unsubscribing from channel rq:pubsub:8742372f9c824016a0b06c9bbefc7556

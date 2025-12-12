@@ -1,0 +1,2 @@
+class,num_seqs,min_length,max_length,avg_length,std_length,sum_length,Q1,Q2,Q3,N50,gc_content
+Predicted,8,116,2904,1848.125,894.3144633600645,14785,1532.0,1535.0,2771.25,2727,55.42396019746712
