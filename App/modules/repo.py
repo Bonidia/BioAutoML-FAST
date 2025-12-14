@@ -44,7 +44,7 @@ def test_extraction(job_path, test_data, model, data_type):
         for label in test_data:
             subprocess.run(["python", "other-methods/preprocessing.py",
             "-i", test_data[label],
-            "--data", data_type,
+            "-d", data_type,
             "-o", os.path.join(path, f"pre_{label}.fasta")],
             cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
             )
@@ -106,7 +106,7 @@ def test_extraction(job_path, test_data, model, data_type):
         for label in test_data:
             subprocess.run(["python", "other-methods/preprocessing.py",
             "-i", test_data[label],
-            "--data", data_type,
+            "-d", data_type,
             "-o", os.path.join(path, f"pre_{label}.fasta")],
             cwd="..", stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
             )
@@ -470,8 +470,18 @@ def bibtex_to_dict(bib_file="references.bib"):
     return citation_dict
 
 def runUI():
-    """Main Streamlit UI function with thread management."""
-    
+
+    with st.expander("Predicting new data"):
+        st.info("""
+            Here you can **apply one of 60 curated, pretrained models** to perform **classification or regression** on biological sequences, without training a model from scratch.  
+            These models cover a wide range of tasks, including peptide activity prediction, RNA annotation, protein function identification, and regulatory sequence analysis.
+
+            Simply select a model from the repository and upload a **FASTA file for prediction**. Each model is linked to a **published dataset**, and the corresponding references are shown to ensure transparency and reproducibility.
+
+            Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
+            """
+        )
+
     citation_dict = bibtex_to_dict()
 
     models = [

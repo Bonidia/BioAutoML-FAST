@@ -143,8 +143,17 @@ def dimensionality_reduction():
             key="reduction"
         )
 
-        # Load data with caching
-        features, labels, nameseqs = load_reduction_data(st.session_state["job_path"], evaluation)
+        if evaluation == "Training set":
+            features, labels, nameseqs = load_features(st.session_state["job_path"], True)
+        else:
+            features, labels, nameseqs = load_features(st.session_state["job_path"], False)
+            nameseqs = nameseqs["nameseq"].tolist()
+
+        if "label_encoder" not in st.session_state["model"]:
+            class_label = st.session_state["model"]["train_stats"]["class"].item()
+            labels["label"] = class_label
+            
+        labels = labels["label"].tolist()
 
         names = pd.DataFrame(list(zip(labels, nameseqs)), columns=["label", "nameseq"])
         
@@ -182,31 +191,18 @@ def dimensionality_reduction():
             with st.spinner(f'Computing {reduction}...'):
                 # Compute reduction with caching
 
-                if "reducer" not in st.session_state:
-                    if evaluation == "Training set":
-                        st.session_state["reducer"] = reducer.fit(scaled_data)
-                        reduced_data = reducer.transform(scaled_data)
-                else:
-                    reduced_data = st.session_state["reducer"].transform(scaled_data)
+                # if "reducer" not in st.session_state:
+                #     if evaluation == "Training set":
+                #         st.session_state["reducer"] = reducer.fit(scaled_data)
+                #         reduced_data = reducer.transform(scaled_data)
+                # else:
+                #     reduced_data = st.session_state["reducer"].transform(scaled_data)
 
                 reduced_data = reducer.fit_transform(scaled_data)
 
                 # Create plot with caching
                 fig = create_reduction_plot(reduced_data, labels, names, reduction)
                 st.plotly_chart(fig, use_container_width=True)
-
-def load_features(job_path, evaluation):
-    """Load and cache features based on evaluation set"""
-    if evaluation == "Training set":
-        if "model" in st.session_state:
-            return st.session_state["model"]["train"]
-        else:
-            return pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv")) 
-    else:
-        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
-            return pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
-        else:
-            return pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
 
 def compute_correlation_matrix(features, method):
     """Compute and cache correlation matrix"""
@@ -282,7 +278,10 @@ def feature_correlation():
         )
 
     # Load features with caching
-    features = load_features(st.session_state["job_path"], evaluation)
+    if evaluation == "Training set":
+        features, _, _ = load_features(st.session_state["job_path"], True)
+    else:
+        features, _, _ = load_features(st.session_state["job_path"], False)
 
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
@@ -303,29 +302,26 @@ def feature_correlation():
             fig = create_correlation_heatmap(top_corr_matrix)
             st.plotly_chart(fig, use_container_width=True)
 
-def load_training_data(job_path):
-    """Load and cache training data"""
+def load_features(job_path, training):
 
-    if "model" in st.session_state:
-        features = st.session_state["model"]["train"]
-        labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])
-        nameseqs = st.session_state["model"]["nameseq_train"]
+    if training:
+        if "model" in st.session_state:
+            features = st.session_state["model"]["train"]
+            labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])
+            nameseqs = st.session_state["model"]["nameseq_train"]
+        else:
+            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))
+            nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
     else:
-        features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
-        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))
-        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
+        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
+            features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))
+        else:
+            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))
+        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
         
-    return features, labels, nameseqs
-
-def load_test_data(job_path):
-    """Load and cache test data"""
-    if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
-        features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
-        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))
-    else:
-        features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
-        labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))
-    nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
     return features, labels, nameseqs
 
 def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
@@ -363,17 +359,13 @@ def feature_distribution():
         key="distribution"
     )
 
-    # Load appropriate dataset with caching
     if evaluation == "Training set":
-        features, labels, nameseqs = load_training_data(st.session_state["job_path"])
-
-        if "imputer" in st.session_state["model"]:
-            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
+        features, labels, nameseqs = load_features(st.session_state["job_path"], True)
     else:
-        features, labels, nameseqs = load_test_data(st.session_state["job_path"])
+        features, labels, nameseqs = load_features(st.session_state["job_path"], False)
 
-        if "imputer" in st.session_state["model"]:
-            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
+    if "imputer" in st.session_state["model"]:
+        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     col1, col2 = st.columns(2)
 
@@ -384,6 +376,10 @@ def feature_distribution():
                              help="Toggle to show/hide individual data points along the axis")
 
     # Get unique labels and assign colors
+    if "label_encoder" not in st.session_state["model"]:
+        class_label = st.session_state["model"]["train_stats"]["class"].item()
+        labels["label"] = class_label
+    
     unique_labels = labels["label"].unique()
     color_map = utils.get_colors(len(unique_labels))[:len(unique_labels)]
 
@@ -461,7 +457,7 @@ def create_confusion_matrix_figure(df):
     
     return fig
 
-def performance_metrics():
+def performance_metrics(task):
     df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
     has_test_set = True if df_job_info["testing_set"].item() == "Test set" else False
@@ -472,8 +468,6 @@ def performance_metrics():
         evaluation_options,
         help="Training set evaluated with 10-fold cross-validation"
     )
-
-    task = df_job_info["task"].item()
 
     if task == "Classification":
         col1, col2 = st.columns(2)
@@ -622,9 +616,7 @@ def feature_importance():
     with col2:
         st.dataframe(df, hide_index=True)
 
-def model_information():
-
-    df_job_info = pd.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), sep='\t')
+def model_information(data_type, task):
 
     col1, col2 = st.columns(2)
 
@@ -635,7 +627,7 @@ def model_information():
             with cont1:
                 st.markdown("**Model**")
 
-                st.markdown(f"**Task:** {df_job_info['task'].item()}")
+                st.markdown(f"**Task:** {task}")
 
                 def show_params(title, params, keys):
                     st.markdown(f"**Algorithm:** {title}")
@@ -697,9 +689,11 @@ def model_information():
     with col2:
         st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
 
-        path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
-
-        df_descriptors = pd.read_csv(path_descriptors)
+        if "model" in st.session_state:
+            df_descriptors = st.session_state["model"]["descriptors"]
+        else:
+            path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
+            df_descriptors = pd.read_csv(path_descriptors)
 
         # Replace values
         pd.set_option('future.no_silent_downcasting', True)
@@ -707,8 +701,6 @@ def model_information():
 
         # Show in Streamlit
         st.dataframe(df_descriptors.sort_index(axis=1), hide_index=True)
-        
-        data_type = df_job_info["data_type"].item()
         
         with st.expander("**Descriptors information**"):
             if data_type == "DNA/RNA":
@@ -794,35 +786,36 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
 
 def runUI():
 
-    st.info(
-        """
-        The **Jobs module** provides access to the results of training and prediction jobs.
+    with st.expander("Viewing your submission"):
+        st.info(
+            """
+            The **Jobs module** provides access to the results of training and prediction jobs.
 
-        **Accessing results:**
-        * **Home:** Training a model from scratch generates a *Job ID*, which can be used here to track progress and view results.
-        * **Model Repository:** Running predictions with a trained model also generates a *Job ID*, allowing access to prediction outputs.
+            **Accessing results:**
+            * **Home:** Training a model from scratch generates a *Job ID*, which can be used here to track progress and view results.
+            * **Model Repository:** Running predictions with a trained model also generates a *Job ID*, allowing access to prediction outputs.
 
-        **Job handling:**
-        * **Pending / Running:** Displays queue position and progress.
-        * **Success:** Loads all results and visualizations.
-        * **Failure:** Indicates unsuccessful execution.
+            **Job handling:**
+            * **Pending / Running:** Displays queue position and progress.
+            * **Success:** Loads all results and visualizations.
+            * **Failure:** Indicates unsuccessful execution.
 
-        Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
-        """
-    )
+            Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
+            """
+        )
 
-    with st.expander("Job queue"):
-        col1, col2 = st.columns(2)
+    # with st.expander("Job queue"):
+    jobcol1, jobcol2 = st.columns(2)
 
-        with col1:
-            st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
-            df = manager.get_pending_jobs()
-            st.dataframe(df, hide_index=True)
+    with jobcol1:
+        st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
+        df = manager.get_pending_jobs()
+        st.dataframe(df, hide_index=True)
 
-        with col2:
-            st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
-            df = manager.get_recent_completed_jobs()
-            st.dataframe(df, hide_index=True)
+    with jobcol2:
+        st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
+        df = manager.get_recent_completed_jobs()
+        st.dataframe(df, hide_index=True)
 
     def get_job_example():
         st.session_state["job_input"] = "70698bf1-a7f1-4597-bd68-5cd10f161000"
@@ -914,6 +907,32 @@ def runUI():
         if "reducer" in st.session_state:
             del st.session_state["reducer"]
 
+        path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
+        
+        if os.path.exists(path_model):
+            if "model" not in st.session_state:
+                with st.spinner("Loading trained model..."):
+                    st.session_state["model"] = joblib.load(path_model, mmap_mode='r')
+
+                train_stats = st.session_state["model"]["train_stats"]
+        else:
+            train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
+
+        if "label_encoder" in st.session_state["model"]:
+            task = "Classification"
+        else:
+            task = "Regression"
+
+        data_type = "Structured data"
+
+        if "descriptors" in st.session_state["model"]:
+            df_descriptors = st.session_state["model"]["descriptors"]
+
+            if "NAC" in df_descriptors.columns:
+                data_type = "DNA/RNA"
+            else:
+                data_type = "Protein"
+
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
         with st.expander("Summary Statistics"):
@@ -938,10 +957,10 @@ def runUI():
             characters in the set of sequences;
             """
 
-            if df_job_info["data_type"].item() == "Structured data":
+            if data_type == "Structured data":
                 tooltip_text = "<strong>num_samples</strong>: Number of samples;"
             else:
-                tooltip_text += str_type[df_job_info["data_type"].item()][0]
+                tooltip_text += str_type[data_type][0]
 
             st.markdown(f"""
             <div style="display: flex; justify-content: flex-end">
@@ -957,17 +976,6 @@ def runUI():
                 
             st.markdown("**Training set**")
         
-            path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
-            
-            if os.path.exists(path_model):
-                if "model" not in st.session_state:
-                    with st.spinner("Loading trained model..."):
-                        st.session_state["model"] = joblib.load(path_model, mmap_mode='r')
-
-                    train_stats = st.session_state["model"]["train_stats"]
-            else:
-                train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
-
             train_stats_formatted = train_stats.style.format(thousands=",")
             st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
@@ -977,14 +985,12 @@ def runUI():
                 test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
-        features_train, _, _ = load_training_data(st.session_state["job_path"])
-
         tabs = {}
 
         if df_job_info["testing_set"].item() != "No test set":
             if max(train_stats["num_seqs"].to_list()) > 2_000 or max(test_stats["num_seqs"].to_list()) > 2_000:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                            "Feature Importance", "Feature Distribution"]
+                            "Feature Importance"]
             else:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance", "Feature Distribution",
@@ -992,7 +998,7 @@ def runUI():
         else:
             if max(train_stats["num_seqs"].to_list()) > 2_000:
                 tab_list = ["Model Information", "Performance Metrics",
-                            "Feature Importance", "Feature Distribution"]
+                            "Feature Importance"]
             else:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance", "Feature Distribution",
@@ -1005,10 +1011,10 @@ def runUI():
         tabs = {name: tab for name, tab in zip(tab_list, streamlit_tabs)}
 
         with tabs["Model Information"]:
-            model_information()
+            model_information(data_type, task)
 
         with tabs["Performance Metrics"]:
-            performance_metrics()
+            performance_metrics(task)
 
         if "Predictions" in tabs:
             with tabs["Predictions"]:
@@ -1017,8 +1023,9 @@ def runUI():
         with tabs["Feature Importance"]:
             feature_importance()
 
-        with tabs["Feature Distribution"]:
-            feature_distribution()
+        if "Feature Distribution" in tabs:
+            with tabs["Feature Distribution"]:
+                feature_distribution()
 
         if "Feature Correlation" in tabs:
             with tabs["Feature Correlation"]:

@@ -671,22 +671,41 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
     """Preprocessing:  Missing Values"""
 
     print('Checking missing values...')
-    missing = train.isnull().values.any()
-    inf = train.isin([np.inf, -np.inf]).values.any()
-    missing_test = False
-    inf_test = False
-    if os.path.exists(ftest) is True:
-        missing_test = test.isnull().values.any()
-        inf_test = test.isin([np.inf, -np.inf]).values.any()
-    if missing or inf or missing_test or inf_test:
-        print('There are missing values...')
-        print('Applying SimpleImputer - strategy (mean)...')
-        imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-        train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
-        if os.path.exists(ftest) is True:
-            test = pd.DataFrame(imp.transform(test), columns=column_test)
+
+    if model:
+        if "imputer" in model:
+            imp = model["imputer"]
+            print('There are missing values...')
+            print('Applying SimpleImputer - strategy (mean)...')
+            train.replace([np.inf, -np.inf], np.nan, inplace=True)
+            train = pd.DataFrame(imp.transform(train), columns=column_train)
+            if os.path.exists(ftest):
+                test.replace([np.inf, -np.inf], np.nan, inplace=True)
+                test = pd.DataFrame(imp.transform(test), columns=column_test)
+            else:
+                pass
     else:
-        print('There are no missing values...')
+        missing = train.isnull().values.any()
+        inf = train.isin([np.inf, -np.inf]).values.any()
+        missing_test = False
+        inf_test = False
+        if os.path.exists(ftest) is True:
+            missing_test = test.isnull().values.any()
+            inf_test = test.isin([np.inf, -np.inf]).values.any()
+        if missing or inf or missing_test or inf_test:
+            print('There are missing values...')
+            print('Applying SimpleImputer - strategy (mean)...')
+            train.replace([np.inf, -np.inf], np.nan, inplace=True)
+            imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+            train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
+            model_dict["imputer"] = imp
+            if os.path.exists(ftest) is True:
+                test.replace([np.inf, -np.inf], np.nan, inplace=True)
+                test = pd.DataFrame(imp.transform(test), columns=column_test)
+            else:
+                pass
+        else:
+            print('There are no missing values...')
 
     """Preprocessing: StandardScaler()"""
 
@@ -795,6 +814,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
     train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
     matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
     importance_output = os.path.join(output, 'feature_importance.tsv')
+    descriptors_output = os.path.join(output, 'best_descriptors/selected_descriptors.csv')
     model_output = os.path.join(output, 'trained_model.sav')
 
     if model:
@@ -808,6 +828,8 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
         model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
+        if os.path.exists(descriptors_output):    
+            model_dict["descriptors"] = pd.read_csv(descriptors_output)
         model_dict["nameseq_train"] = train_nameseq
         
         print('Saving results in ' + train_output + '...')

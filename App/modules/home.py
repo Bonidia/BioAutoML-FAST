@@ -44,8 +44,9 @@ def test_extraction(job_path, test_data, model, data_type):
 
     if data_type == "DNA/RNA":
         for label in test_data:
-            subprocess.run(["python", "MathFeature/preprocessing/preprocessing.py",
-                        "-i", test_data[label], 
+            subprocess.run(["python", "other-methods/preprocessing.py",
+                        "-d", "DNA/RNA",
+                        "-i", test_data[label],
                         "-o", os.path.join(path, f"pre_{label}.fasta")],
                         cwd="..",
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -106,6 +107,7 @@ def test_extraction(job_path, test_data, model, data_type):
     elif data_type == "Protein":
         for label in test_data:
             subprocess.run(["python", "other-methods/preprocessing.py",
+            "-d", "Protein",
             "-i", test_data[label], 
             "-o", os.path.join(path, f"pre_{label}.fasta")],
             cwd="..",
@@ -331,8 +333,6 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command = [
                     "python",
                     "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
-                    "--task",
-                    "1" if task == "Regression" else "0",
                     "--imbalance",
                     "1" if imbalance else "0",
                     "--train", os.path.join(feat_path, "train.csv"),
@@ -482,16 +482,16 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
             model = joblib.load(save_path)
 
-            if task == "Classification":
+            if "label_encoder" in model:
+                task = "Classification"
                 command = [
                     "python",
                     "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-                    "--task",
-                    "1" if task == "Regression" else "0",
                     "-path_model", save_path,
                     "-nf", "True",
                 ]
-            elif task == "Regression":
+            else:
+                task = "Regression"
                 command = [
                     "python",
                     "BioAutoML-regression.py",
@@ -500,6 +500,16 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 ]
 
             if test_files:
+                data_type = "Structured data"
+
+                if "descriptors" in model:
+                    df_descriptors = model["descriptors"]
+
+                    if "NAC" in df_descriptors.columns:
+                        data_type = "DNA/RNA"
+                    else:
+                        data_type = "Protein"
+
                 if data_type == "Structured data":
                     test_path = os.path.join(job_path, "test")
                     os.makedirs(test_path)
@@ -563,9 +573,13 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                                 with open(save_path, mode="wb") as f:
                                     f.write(file.getvalue())
                         elif task == "Regression":
-                            save_path = os.path.join(test_path, test_files.name)
-                            with open(save_path, mode="wb") as f:
-                                f.write(test_files.getvalue())
+                            for file in test_files:
+                                save_path = os.path.join(test_path, file.name)
+                                with open(save_path, mode="wb") as f:
+                                    f.write(file.getvalue())
+                            # save_path = os.path.join(test_path, test_files.name)
+                            # with open(save_path, mode="wb") as f:
+                            #     f.write(test_files.getvalue())
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
@@ -626,17 +640,16 @@ def runUI():
 
     st.divider()
 
-    st.markdown("""##### Prediction""", unsafe_allow_html=True)
+    with st.expander("Preparing your submission"):
+        st.info("""
+            Here you can **train a new model or load an existing model** to perform **classification or regression** on biological sequences.  
+            You may optionally evaluate the model using a **labeled test set** or apply it to **unlabeled data for prediction**.
 
-    st.info("""
-        Here you can **train a new model or load an existing model** to perform **classification or regression** on biological sequences.  
-        You may optionally evaluate the model using a **labeled test set** or apply it to **unlabeled data for prediction**.
+            Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**. The **Examples button** provides concrete submission examples to help you get started.
 
-        Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**. The Example button provides concrete submission examples to help you get started.
-
-        Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
-        """
-    )
+            Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
+            """
+        )
 
     queue_info = st.container()
 
@@ -646,7 +659,7 @@ def runUI():
         zip_path = "app.py"
         with open(zip_path, "rb") as f:
             st.download_button(
-                label="Example",
+                label="Examples",
                 data=f,
                 file_name="results.zip",
                 mime="application/zip",
@@ -658,15 +671,30 @@ def runUI():
     with col1:
         training = st.selectbox(":brain: Training", ["Training set", "Load model"],
                                 help="Training set evaluated with 10-fold cross-validation.")
-        task = st.selectbox(":hammer_and_wrench: Task", ["Classification", "Regression"],
+
+        if training == "Training set":
+            task = st.selectbox(":hammer_and_wrench: Task", ["Classification", "Regression"],
                                 help="Choose your machine learning predictive task.")
+        else:
+            task = None
+
+    data_type_map = {
+        "Nucleotide": "DNA/RNA",
+        "Amino acid": "Protein",
+    }
 
     with col2:
         testing = st.selectbox(":mag_right: Testing", ["No test set", "Test set", "Prediction set"],
                                 help="Whether to use a labeled testing set to evaluate the model, or alternatively, an unlabeled prediction set.")
-        data_type = st.selectbox(":dna: Data type", ["DNA/RNA", "Protein"], # "Structured data" (TO BE DONE)
-                                help="Any sequence that includes ambiguous nucleotides or amino acids will be preprocessed, with all ambiguous characters removed.")
-    
+        
+        if training == "Training set":
+            data_type_label = st.selectbox(":dna: Data type", list(data_type_map.keys()), # "Structured data" (TO BE DONE)
+                                    help="Any sequence that includes ambiguous nucleotides or amino acids will be preprocessed, with all ambiguous characters removed.")
+
+            data_type = data_type_map[data_type_label]
+        else:
+            data_type = None
+
     if training == "Training set":
         checkcol1, checkcol2, checkcol3 = st.columns(3)
 
@@ -774,25 +802,16 @@ def runUI():
                 with set1:
                     train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
                 with set2:
-                    if data_type == "Structured data":
-                        test_files = st.file_uploader("Test set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
-                    else:
-                        if task == "Classification":
-                            test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, 
-                                                        help="Separated by class (e.g. sRNA.fasta, tRNA.fasta). Upload one FASTA file per class.")
-                        elif task == "Regression":
-                            test_files = st.file_uploader("Test set FASTA file", accept_multiple_files=False, 
-                                                        help="Single FASTA file with continuous target values provided sequence headers.")
+                    test_files = st.file_uploader("Test set files", accept_multiple_files=True, 
+                                                    help="Files accordingly to the loaded model (e.g., files separated by class if classification).")
             elif testing == "Prediction set":
                 set1, set2 = st.columns(2)
 
                 with set1:
                     train_files = st.file_uploader("Trained model file", accept_multiple_files=False, help="Only models generated by BioAutoML-FAST are accepted (e.g. trained_model.sav)")
                 with set2:
-                    if data_type == "Structured data":
-                        test_files = st.file_uploader("CSV file for prediction", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
-                    else:
-                        test_files = st.file_uploader("FASTA file for prediction", accept_multiple_files=False, help="Single file for prediction (e.g. predict.fasta)")
+                    test_files = st.file_uploader("Test set files", accept_multiple_files=False, 
+                                                    help="File accordingly to the loaded model (e.g., continuous numerical value appended to the end of the header after the | character).")
 
         submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
@@ -800,17 +819,32 @@ def runUI():
 
     if submitted:
         # For non-structured sequence classification, require >= 2 class files
-        if training == "Training set" and data_type != "Structured data" and task == "Classification":
-            if not train_files or len(train_files) < 2:
+        if task:
+            if training == "Training set" and task == "Classification":
+                if not train_files or len(train_files) < 2:
+                    with queue_info:
+                        st.error("Training set (classification) requires at least 2 classes (one FASTA per class).")
+                    st.stop()
+
+            # For non-structured sequence test set, require >= 2 class files for classification
+            if testing == "Test set" and task == "Classification":
+                if not test_files or len(test_files) < 2:
+                    with queue_info:
+                        st.error("Test set (classification) requires at least 2 classes (one FASTA per class).")
+                    st.stop()
+
+        if data_type:
+            # For structured data training, require a single CSV for both tasks
+            if training == "Training set" and data_type == "Structured data" and train_files is None:
                 with queue_info:
-                    st.error("Training set (classification) requires at least 2 classes (one FASTA per class).")
+                    st.error("Training set requires 1 file with the column for labels (or continuous target for regression).")
                 st.stop()
 
-        # For structured data training, require a single CSV for both tasks
-        if training == "Training set" and data_type == "Structured data" and train_files is None:
-            with queue_info:
-                st.error("Training set requires 1 file with the column for labels (or continuous target for regression).")
-            st.stop()
+            # For structured data test set, require single CSV
+            if testing == "Test set" and data_type == "Structured data" and test_files is None:
+                with queue_info:
+                    st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
+                st.stop()
 
         # Test/prediction files required unless "No test set"
         if testing != "No test set" and not test_files:
@@ -818,22 +852,9 @@ def runUI():
                 st.error("Please upload the required test or prediction file(s).")
             st.stop()
 
-        # For non-structured sequence test set, require >= 2 class files for classification
-        if testing == "Test set" and data_type != "Structured data" and task == "Classification":
-            if not test_files or len(test_files) < 2:
-                with queue_info:
-                    st.error("Test set (classification) requires at least 2 classes (one FASTA per class).")
-                st.stop()
-
-        # For structured data test set, require single CSV
-        if testing == "Test set" and data_type == "Structured data" and test_files is None:
-            with queue_info:
-                st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
-            st.stop()
-
         if training == "Load model":
             classifier, imbalance = False, False
-        elif training == "Training set" and data_type != "Structured data":
+        elif training == "Training set":
             classifier = False
 
         if testing == "No test set":
