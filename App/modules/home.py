@@ -617,25 +617,41 @@ def runUI():
         </div>
     """, unsafe_allow_html=True)
 
-    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is an advanced web server implementation of
-     BioAutoML, optimized for speed and enhanced functionality. It allows
-     users to input their sequences or structured data for classification, 
-     generating models that can be saved for future use. The application 
-     features a repository of 60 trained models for various problems,
-     such as cancer, COVID-19, and other diseases. By automating feature extraction, 
-     selection, and algorithm tuning, BioAutoML-FAST makes powerful machine 
-     learning tools accessible to researchers, biologists, and physicians, 
-     even those with limited ML expertise. This user-friendly interface 
-     supports innovative solutions to critical health challenges, advancing 
-     the field of bioinformatics and enabling the scientific community to 
-     develop new treatments and interventions, ultimately improving health 
-     outcomes and benefiting society.""")
+    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is a platform that enables users to upload raw 
+            biological sequences and automatically build customised classification models for sequence annotation, or regression 
+            models to predict quantitative biological activity, such as expression strength and binding affinity, with optional 
+            external validation. The platform summarises datasets through statistical metrics and dimensionality-reduction 
+            visualisations. It also includes an extensive repository of 60 pretrained models spanning diverse biological problems, 
+            such as anticancer and antimicrobial peptide prediction, non-coding RNA classification, and even taste prediction.""")
 
     st.divider()
 
     st.markdown("""##### Prediction""", unsafe_allow_html=True)
 
+    st.info("""
+        Here you can **train a new model or load an existing model** to perform **classification or regression** on biological sequences.  
+        You may optionally evaluate the model using a **labeled test set** or apply it to **unlabeled data for prediction**.
+
+        Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**. The Example button provides concrete submission examples to help you get started.
+
+        Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
+        """
+    )
+
     queue_info = st.container()
+
+    _, excol2 = st.columns([9, 1])
+
+    with excol2:
+        zip_path = "app.py"
+        with open(zip_path, "rb") as f:
+            st.download_button(
+                label="Example",
+                data=f,
+                file_name="results.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
 
     col1, col2 = st.columns(2)
 

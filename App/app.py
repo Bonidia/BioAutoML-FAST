@@ -4,13 +4,10 @@ import utils, modules
 import subprocess, os, sys
 from utils.tasks import manager
 
-# def start_worker_subprocess():
-#     # Run worker in background, redirect logs to a file or leave them alone
-#     log = open(os.path.join(os.path.dirname(__file__), "rq_worker.log"), "a")
-
-#     p = subprocess.Popen(["rq", "worker"], stdout=log, stderr=log, close_fds=True)
-
-#     return p  
+def clear_cache():
+    keys = list(st.session_state.keys())
+    for key in keys:
+        st.session_state.pop(key)
 
 def runUI():
     st.set_page_config(page_title = "BioAutoML-FAST", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
@@ -25,20 +22,14 @@ def runUI():
 
     if page == "Home":
         modules.home.runUI()
-        if "job_path" in st.session_state:
-            del st.session_state["job_path"]
+        clear_cache()
     elif page == "Jobs":
         modules.jobs.runUI()
     elif page == "Model Repository":
         modules.repo.runUI()
-        if "job_path" in st.session_state:
-            del st.session_state["job_path"]
-    elif page == "Model Repository":
-        if "job_path" in st.session_state:
-            del st.session_state["job_path"]
+        clear_cache()
     elif page == "About":
-        if "job_path" in st.session_state:
-            del st.session_state["job_path"]
+        clear_cache()
 
     # Example usage when your app starts (guard to avoid spawning multiple workers):
     # if "worker_proc" not in st.session_state:

@@ -793,8 +793,23 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
     return True
 
 def runUI():
-    
-    # st.markdown("This page ...", help="")
+
+    st.info(
+        """
+        The **Jobs module** provides access to the results of training and prediction jobs.
+
+        **Accessing results:**
+        * **Home:** Training a model from scratch generates a *Job ID*, which can be used here to track progress and view results.
+        * **Model Repository:** Running predictions with a trained model also generates a *Job ID*, allowing access to prediction outputs.
+
+        **Job handling:**
+        * **Pending / Running:** Displays queue position and progress.
+        * **Success:** Loads all results and visualizations.
+        * **Failure:** Indicates unsuccessful execution.
+
+        Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
+        """
+    )
 
     with st.expander("Job queue"):
         col1, col2 = st.columns(2)
