@@ -695,7 +695,7 @@ def runUI():
         else:
             data_type = None
 
-    if training == "Training set":
+    if training == "Training set" and task == "Classification":
         checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
@@ -711,7 +711,9 @@ def runUI():
 
         with checkcol3:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-    elif training == "Load model":
+    elif training == "Load model" or task == "Regression":
+        imbalance = False
+
         checkcol1, checkcol2 = st.columns(2)
 
         with checkcol1:
@@ -852,9 +854,7 @@ def runUI():
                 st.error("Please upload the required test or prediction file(s).")
             st.stop()
 
-        if training == "Load model":
-            classifier, imbalance = False, False
-        elif training == "Training set":
+        if training == "Training set" or training == "Load model":
             classifier = False
 
         if testing == "No test set":
