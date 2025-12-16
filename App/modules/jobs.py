@@ -912,7 +912,7 @@ def runUI():
         if os.path.exists(path_model):
             if "model" not in st.session_state:
                 with st.spinner("Loading trained model..."):
-                    st.session_state["model"] = joblib.load(path_model, mmap_mode='r')
+                    st.session_state["model"] = joblib.load(path_model)
 
                 train_stats = st.session_state["model"]["train_stats"]
         else:

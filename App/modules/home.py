@@ -653,18 +653,18 @@ def runUI():
 
     queue_info = st.container()
 
-    _, excol2 = st.columns([9, 1])
+    # _, excol2 = st.columns([9, 1])
 
-    with excol2:
-        zip_path = "app.py"
-        with open(zip_path, "rb") as f:
-            st.download_button(
-                label="Examples",
-                data=f,
-                file_name="results.zip",
-                mime="application/zip",
-                use_container_width=True
-            )
+    # with excol2:
+    #     zip_path = "submission_examples"
+    #     with open(zip_path, "rb") as f:
+    #         st.download_button(
+    #             label="Examples",
+    #             data=f,
+    #             file_name="results.zip",
+    #             mime="application/zip",
+    #             use_container_width=True
+    #         )
 
     col1, col2 = st.columns(2)
 
@@ -897,5 +897,3 @@ def runUI():
 
 if __name__ == "__main__":
     runUI()
-
-        # job_id = ''.join([choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16)])

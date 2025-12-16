@@ -16,8 +16,8 @@ def runUI():
 
     manager._create_db()
 
-    page = option_menu(None, ["Home", "Jobs", "Model Repository", "About"], 
-    icons=["house", "gear-wide", "diagram-2", "info-circle"], 
+    page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "About"], 
+    icons=["house", "gear-wide", "diagram-2", "link", "info-circle"],
     menu_icon="cast", default_index=0, orientation="horizontal")
 
     if page == "Home":
@@ -27,6 +27,9 @@ def runUI():
         modules.jobs.runUI()
     elif page == "Model Repository":
         modules.repo.runUI()
+        clear_cache()
+    elif page == "Share":
+        modules.share.runUI()
         clear_cache()
     elif page == "About":
         clear_cache()
