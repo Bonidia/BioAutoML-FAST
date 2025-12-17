@@ -3,6 +3,7 @@ from streamlit_option_menu import option_menu
 import utils, modules
 import subprocess, os, sys
 from utils.tasks import manager
+from datetime import datetime
 
 def clear_cache():
     keys = list(st.session_state.keys())
@@ -34,9 +35,18 @@ def runUI():
     elif page == "About":
         clear_cache()
 
-    # Example usage when your app starts (guard to avoid spawning multiple workers):
-    # if "worker_proc" not in st.session_state:
-    #     st.session_state["worker_proc"] = start_worker_subprocess()
+    st.markdown(
+        f"""
+        <hr>
+        <div style="text-align:center; font-size: 0.9em;">
+        © {datetime.now().year} BioAutoML-FAST — Released under the 
+        <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>. 
+        Free for academic and commercial use.
+        </div>
+        <br>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     runUI()

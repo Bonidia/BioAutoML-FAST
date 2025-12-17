@@ -645,7 +645,9 @@ def runUI():
             Here you can **train a new model or load an existing model** to perform **classification or regression** on biological sequences.  
             You may optionally evaluate the model using a **labeled test set** or apply it to **unlabeled data for prediction**.
 
-            Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**. The **Examples button** provides concrete submission examples to help you get started.
+            Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**.
+                
+            The **Examples button** provides concrete submission examples to help you get started.
 
             Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
             """
@@ -653,18 +655,18 @@ def runUI():
 
     queue_info = st.container()
 
-    # _, excol2 = st.columns([9, 1])
+    _, excol2 = st.columns([9, 1])
 
-    # with excol2:
-    #     zip_path = "submission_examples"
-    #     with open(zip_path, "rb") as f:
-    #         st.download_button(
-    #             label="Examples",
-    #             data=f,
-    #             file_name="results.zip",
-    #             mime="application/zip",
-    #             use_container_width=True
-    #         )
+    with excol2:
+        zip_path = "home_examples.zip"
+        with open(zip_path, "rb") as f:
+            st.download_button(
+                label="Examples",
+                data=f,
+                file_name="home_examples.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
 
     col1, col2 = st.columns(2)
 

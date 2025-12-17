@@ -477,10 +477,25 @@ def runUI():
             These models cover a wide range of tasks, including peptide activity prediction, RNA annotation, protein function identification, and regulatory sequence analysis.
 
             Simply select a model from the repository and upload a **FASTA file for prediction**. Each model is linked to a **published dataset**, and the corresponding references are shown to ensure transparency and reproducibility.
+            
+            The **Examples button** provides concrete submission examples to help you get started.
 
             Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
             """
         )
+
+    _, excol2 = st.columns([9, 1])
+
+    with excol2:
+        zip_path = "repo_examples.zip"
+        with open(zip_path, "rb") as f:
+            st.download_button(
+                label="Examples",
+                data=f,
+                file_name="repo_examples.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
 
     citation_dict = bibtex_to_dict()
 

@@ -3,7 +3,6 @@ experiments/
 .idea/
 catboost_info
 work
-datasets
 runs
 DATA
 .venv

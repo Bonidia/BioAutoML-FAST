@@ -283,6 +283,9 @@ def feature_correlation():
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
+    if "mapper" in st.session_state:
+        features = features.rename(columns=st.session_state["mapper"])
+
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
@@ -363,6 +366,9 @@ def feature_distribution():
         features, labels, nameseqs = load_features(st.session_state["job_path"], True)
     else:
         features, labels, nameseqs = load_features(st.session_state["job_path"], False)
+
+    if "mapper" in st.session_state:
+        features = features.rename(columns=st.session_state["mapper"])
 
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
@@ -600,6 +606,9 @@ def feature_importance():
     # Load data with caching
     df = load_feature_importance(st.session_state["job_path"])
 
+    if "mapper" in st.session_state:
+        df["Feature"] = df["Feature"].replace(st.session_state["mapper"])
+
     col1, col2 = st.columns(2)
     
     with col1:
@@ -818,7 +827,7 @@ def runUI():
         st.dataframe(df, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "43ca5fea-255d-4955-817a-d4719093b2c9"
+        st.session_state["job_input"] = "941178f3-2131-45c6-8b2f-7fa72dc0cbd6"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -907,6 +916,9 @@ def runUI():
         if "reducer" in st.session_state:
             del st.session_state["reducer"]
 
+        if "mapper" in st.session_state:
+            del st.session_state["mapper"]
+
         path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
         
         if os.path.exists(path_model):
@@ -932,6 +944,12 @@ def runUI():
                 data_type = "DNA/RNA"
             else:
                 data_type = "Protein"
+
+        if "mapper" not in st.session_state:
+            if data_type == "DNA/RNA":
+                st.session_state["mapper"] = joblib.load("dict_nt.pkl")
+            else:
+                st.session_state["mapper"] = joblib.load("dict_aa.pkl")
 
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
