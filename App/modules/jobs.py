@@ -27,6 +27,7 @@ import shutil
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
+from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
 
 def _cleanup_previous_temp():
     prev = st.session_state.get("temp_extract_path")
@@ -129,6 +130,27 @@ def create_reduction_plot(reduced_data, labels, names_df, reduction_method):
     return fig
 
 def dimensionality_reduction():
+
+    with st.expander("What **Dimensionality Reduction** shows"):
+        st.info(
+            """
+            This tab provides a **low-dimensional visual representation of your data**, helping you explore 
+            overall structure and relationships between samples.
+
+            High-dimensional sequence features are projected into a **3-dimensional space**, where each point 
+            represents a sample. Samples that appear closer together have more similar feature profiles, while 
+            distant points are more dissimilar.
+
+            You can choose between different dimensionality reduction techniques. **PCA** summarizes the main 
+            sources of variation in the data, while **t-SNE** and **UMAP** emphasize local structure and are 
+            particularly useful for revealing clusters or group separation.
+
+            Coloring by class label allows visual assessment of how well samples separate based on their 
+            features. These visualizations are intended for **exploratory analysis and interpretation**, not 
+            for direct performance evaluation or quantitative conclusions.
+            """
+        )
+
     dim_col1, dim_col2 = st.columns(2)
 
     with dim_col1:
@@ -256,6 +278,27 @@ def create_correlation_heatmap(corr_matrix):
     return fig
 
 def feature_correlation():
+
+    with st.expander("What **Feature Correlation** shows"):
+        st.info(
+            """
+            This tab explores **how features relate to each other** across the dataset.
+
+            You can choose to compute correlations using either the **training set** or, when available, the 
+            **test set**, and select the correlation method used to quantify similarity between feature values. 
+            Pearson correlation highlights linear relationships, while Spearman correlation captures monotonic 
+            trends and is less sensitive to outliers.
+
+            The table lists pairs of features with the **strongest correlations**, sorted by their correlation 
+            strength. Highly correlated features often carry similar information and may be partially 
+            redundant.
+
+            The heatmap provides a visual summary of these relationships, making it easier to identify clusters 
+            of closely related features. Correlation analysis supports data exploration and interpretation, 
+            but does not imply biological or causal relationships.
+            """
+        )
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -350,6 +393,25 @@ def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text,
     return fig
 
 def feature_distribution():
+    
+    with st.expander("What **Feature Distribution** shows"):
+        st.info(
+            """
+            This tab shows how the values of a **single selected feature** are distributed across your data.
+
+            You can choose whether to view feature distributions from the **training set** or, when available, 
+            the **test set**. For classification tasks, distributions are shown separately for each class, 
+            allowing you to visually compare how well a feature distinguishes between groups.
+
+            The histogram illustrates the overall spread and frequency of feature values, while an optional 
+            rug plot displays individual samples along the axis for more detailed inspection. This can help 
+            identify overlap between classes, outliers, or characteristic value ranges.
+
+            Feature distribution plots provide intuitive insight into how individual sequence descriptors 
+            behave in the dataset and how they may contribute to the model’s predictions.
+            """
+        )
+
     # Determine evaluation set options
     df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
     
@@ -464,6 +526,31 @@ def create_confusion_matrix_figure(df):
     return fig
 
 def performance_metrics(task):
+
+    with st.expander("What **Performance Metrics** shows"):
+        st.info(
+            """
+            This tab summarizes **how well the trained model performs** when making predictions.
+
+            You can choose whether to view results from the **training set** or, when available, an **independent test set**.  
+            Training-set results are estimated using repeated internal validation, which helps assess how stable and reliable 
+            the model is. Test-set results reflect how the model performs on previously unseen data. Note that data
+            submitted to the Model Repository is considered unlabeled, so it does not show the test performance for this scenario.
+
+            For **classification tasks**, this tab reports commonly used performance measures such as accuracy, sensitivity, 
+            specificity, F1-score, and related statistics. These metrics indicate how correctly the model assigns sequences 
+            to their respective classes. When multiple classes are present, averaged metrics are shown to provide a fair 
+            overall evaluation.
+
+            For **regression tasks**, error-based metrics and correlation scores are displayed, describing how close the 
+            predicted values are to the true biological measurements.
+
+            When applicable, a **confusion matrix** is also shown. This visual summary helps you understand which classes are 
+            correctly predicted and where misclassifications occur, offering an intuitive view of model behavior beyond 
+            single-number scores.
+            """
+        )
+
     df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
     has_test_set = True if df_job_info["testing_set"].item() == "Test set" else False
@@ -493,33 +580,34 @@ def performance_metrics(task):
             if task == "Classification":
                 if "F1_micro" not in df_cv.columns:
                     metrics.extend([
-                        f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                        f"**Sensitivity:** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
-                        f"**Specificity:** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
-                        f"**F1-score:** {df_cv['F1'].item()} ± {df_cv['std_F1'].item()}",
-                        f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
-                        f"**Balanced accuracy:** {df_cv['balanced_ACC'].item()} ± {df_cv['std_balanced_ACC'].item()}",
-                        f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}",
-                        f"**G-mean:** {df_cv['gmean'].item()} ± {df_cv['std_gmean'].item()}"
+                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
+                        f"**Sensitivity:** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
+                        f"**Specificity:** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
+                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
+                        f"**AUC:** {df_cv['AUC'].item():.3f} ± {df_cv['std_AUC'].item():.3f}",
+                        f"**F1-score:** {df_cv['F1'].item():.3f} ± {df_cv['std_F1'].item():.3f}",
+                        f"**Balanced accuracy:** {df_cv['balanced_ACC'].item():.3f} ± {df_cv['std_balanced_ACC'].item():.3f}",
+                        f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}",
+                        f"**G-mean:** {df_cv['gmean'].item():.3f} ± {df_cv['std_gmean'].item():.3f}"
                     ])
                 else:
                     metrics.extend([
-                        f"**Accuracy:** {df_cv['ACC'].item()} ± {df_cv['std_ACC'].item()}",
-                        f"**Sensitivity (macro):** {df_cv['Sn'].item()} ± {df_cv['std_Sn'].item()}",
-                        f"**Specificity (macro):** {df_cv['Sp'].item()} ± {df_cv['std_Sp'].item()}",
-                        f"**F1-score (micro):** {df_cv['F1_micro'].item()} ± {df_cv['std_F1_micro'].item()}",
-                        f"**F1-score (macro):** {df_cv['F1_macro'].item()} ± {df_cv['std_F1_macro'].item()}",
-                        f"**F1-score (weighted):** {df_cv['F1_weighted'].item()} ± {df_cv['std_F1_weighted'].item()}",
-                        f"**MCC:** {df_cv['MCC'].item()} ± {df_cv['std_MCC'].item()}",
-                        f"**Kappa:** {df_cv['kappa'].item()} ± {df_cv['std_kappa'].item()}"
+                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
+                        f"**Sensitivity (macro avg.):** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
+                        f"**Specificity (macro avg.):** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
+                        f"**F1-score (micro avg.):** {df_cv['F1_micro'].item():.3f} ± {df_cv['std_F1_micro'].item():.3f}",
+                        f"**F1-score (macro avg.):** {df_cv['F1_macro'].item():.3f} ± {df_cv['std_F1_macro'].item():.3f}",
+                        f"**F1-score (weighted avg.):** {df_cv['F1_weighted'].item():.3f} ± {df_cv['std_F1_weighted'].item():.3f}",
+                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
+                        f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}"
                     ])
 
             elif task == "Regression":
                 metrics.extend([
-                    f"**Mean Absolute Error:** {df_cv['mean_absolute_error'].item()} ± {df_cv['std_mean_absolute_error'].item()}",
-                    f"**Mean Squared Error:** {df_cv['mean_squared_error'].item()} ± {df_cv['std_mean_squared_error'].item()}",
-                    f"**Root Mean Squared Error:** {df_cv['root_mean_squared_error'].item()} ± {df_cv['std_root_mean_squared_error'].item()}",
-                    f"**R2:** {df_cv['r2'].item()} ± {df_cv['std_r2'].item()}"
+                    f"**Mean Absolute Error:** {df_cv['mean_absolute_error'].item():.3f} ± {df_cv['std_mean_absolute_error'].item():.3f}",
+                    f"**Mean Squared Error:** {df_cv['mean_squared_error'].item():.3f} ± {df_cv['std_mean_squared_error'].item():.3f}",
+                    f"**Root Mean Squared Error:** {df_cv['root_mean_squared_error'].item():.3f} ± {df_cv['std_root_mean_squared_error'].item():.3f}",
+                    f"**R2:** {df_cv['r2'].item():.3f} ± {df_cv['std_r2'].item():.3f}"
                 ])
             
             for metric in metrics:
@@ -528,7 +616,24 @@ def performance_metrics(task):
         else:
             df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
             df_report = df_report.rename(columns={"Unnamed: 0": ""})
+
+            # Format numeric columns except "support"
+            for col in df_report.select_dtypes(include="number").columns:
+                if col != "support":
+                    df_report[col] = df_report[col].map(lambda x: f"{x:.3f}")
+
+            df_report["support"] = df_report["support"].map(lambda x: f"{int(x)}")
+
+            df_report.loc[df_report[""] == "accuracy", "support"] = ""
+
             st.dataframe(df_report, hide_index=True, use_container_width=True)
+
+            path_metrics_other = os.path.join(os.path.join(st.session_state["job_path"], "metrics_other.csv"))
+
+            if os.path.exists(path_metrics_other):
+                df_metrics_other = pd.read_csv(path_metrics_other)
+                auc_value = df_metrics_other[df_metrics_other["Metric"] == "AUC"]["Value"].item()
+                st.markdown(f"**AUC:** {auc_value:.3f}")
 
     if task == "Classification":
         with col2:
@@ -552,6 +657,26 @@ def load_predictions(job_path):
     return predictions
 
 def show_predictions():
+
+    with st.expander("What **Predictions** shows"):
+        st.info(
+            """
+            This tab displays the **predictions generated by the trained model** for each input sample.
+
+            Each row corresponds to a sequence or sample you submitted, while the columns show the model’s 
+            predicted confidence for each possible label or outcome. These values represent how strongly 
+            the model associates a given sample with each class.
+
+            The prediction scores are shown as percentages to make them easier to interpret. Higher values 
+            indicate greater confidence in a particular prediction, but they should be interpreted as 
+            probabilistic support rather than absolute certainty.
+
+            This table allows you to quickly compare predictions across samples, identify clear-cut cases, 
+            and highlight ambiguous predictions that may require further biological validation or expert 
+            review.
+            """
+        )
+
     # Load data with caching
     predictions = load_predictions(st.session_state["job_path"])
     labels = predictions.columns[1:-1]
@@ -603,6 +728,26 @@ def create_feature_importance_figure(df):
     return fig
 
 def feature_importance():
+
+    with st.expander("What **Feature Importance** shows"):
+        st.info(
+            """
+            This tab shows **which features most influenced the model’s predictions**.
+
+            Feature importance indicates how often and how effectively each feature was used by the model 
+            during training. All algorithms available in this platform (Random Forest, XGBoost, and LightGBM) 
+            are **tree-based models**, where predictions are made through a series of decision splits. A feature 
+            is considered important when it is repeatedly selected for these splits and helps improve 
+            prediction accuracy.
+
+            The plot highlights the **ten most influential features**, while the table provides a complete 
+            ranking. Each feature name is followed by the **descriptor group it originates from**, shown in 
+            parentheses, to help relate model behavior to specific biological sequence properties.
+
+            Feature importance supports model interpretation but does not imply biological causation.
+            """
+        )
+
     # Load data with caching
     df = load_feature_importance(st.session_state["job_path"])
 
@@ -626,6 +771,28 @@ def feature_importance():
         st.dataframe(df, hide_index=True)
 
 def model_information(data_type, task):
+
+    with st.expander("What **Model Information** shows"):
+        st.info(
+            """
+            This tab provides a complete overview of the trained machine-learning model used in your analysis.
+
+            On the left, you can see **which algorithm was selected**, the **type of task** being performed 
+            (classification or regression), and the **main model settings** that were automatically optimized 
+            during training. These settings control how the model learns patterns from your data, but you do 
+            not need to adjust them manually.
+
+            You can also **download the trained model file**, which allows you to reuse the model later in this 
+            application or share it with collaborators.
+
+            On the right, this tab lists the **descriptors (features)** that were selected as the most informative 
+            for building the model. Descriptors translate biological sequences into numerical values that the 
+            model can learn from.
+
+            An additional section explains the biological meaning of each descriptor group, helping you 
+            understand which sequence properties contributed to the final predictions.
+            """
+        )
 
     col1, col2 = st.columns(2)
 
@@ -804,27 +971,60 @@ def runUI():
             * **Home:** Training a model from scratch generates a *Job ID*, which can be used here to track progress and view results.
             * **Model Repository:** Running predictions with a trained model also generates a *Job ID*, allowing access to prediction outputs.
 
-            **Job handling:**
-            * **Pending / Running:** Displays queue position and progress.
-            * **Success:** Loads all results and visualizations.
-            * **Failure:** Indicates unsuccessful execution.
-
             Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
             """
         )
 
-    # with st.expander("Job queue"):
-    jobcol1, jobcol2 = st.columns(2)
+    # Uncomment to show queue
+    # jobcol1, jobcol2 = st.columns(2)
 
-    with jobcol1:
-        st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
-        df = manager.get_pending_jobs()
-        st.dataframe(df, hide_index=True)
+    # with jobcol1:
+    #     st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
+    #     df = manager.get_pending_jobs()
+    #     column_config = {
+    #         "Queue position": st.column_config.TextColumn(
+    #             "Queue position",
+    #             help="Position in the queue for each job"
+    #         ),
+    #         "Job ID": st.column_config.TextColumn(
+    #             "Job ID",
+    #             help="Unique identifier for the job run"
+    #         ),
+    #         "Start": st.column_config.DateColumn(
+    #             "Start",
+    #             format="h:mm A. MMMM D, YYYY",
+    #             help="Time when started"
+    #         ),
+    #         "Status": st.column_config.TextColumn(
+    #             "Status",
+    #             help="Job status: pending or running"
+    #         )
+    #     }
+    #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
-    with jobcol2:
-        st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
-        df = manager.get_recent_completed_jobs()
-        st.dataframe(df, hide_index=True)
+    # with jobcol2:
+    #     st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
+    #     df = manager.get_recent_completed_jobs()
+    #     column_config = {
+    #         "Job ID": st.column_config.TextColumn(
+    #             "Job ID",
+    #             help="Unique identifier for the job run"
+    #         ),
+    #         "End": st.column_config.DateColumn(
+    #             "End",
+    #             format="h:mm A. MMMM D, YYYY",
+    #             help="Time when finished"
+    #         ),
+    #         "Duration": st.column_config.TextColumn(
+    #             "Duration",
+    #             help="Total execution time (HH:MM:SS)"
+    #         ),
+    #         "Status": st.column_config.TextColumn(
+    #             "Status",
+    #             help="Job outcome: success or failed"
+    #         )
+    #     }
+    #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
     def get_job_example():
         st.session_state["job_input"] = "941178f3-2131-45c6-8b2f-7fa72dc0cbd6"
@@ -954,6 +1154,19 @@ def runUI():
         df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
         with st.expander("Summary Statistics"):
+            st.info(
+            """
+            This section summarizes the **basic characteristics of your dataset**.
+
+            Depending on the data type, it reports the number of samples or sequences, their length 
+            distribution, and relevant composition statistics (such as GC content). Results are shown 
+            separately for the **training set** and, when available, the **test set**.
+
+            These statistics help assess data quality and provide essential context for interpreting the 
+            downstream analyses.
+            """
+            )
+
             str_type = {
                 "DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
                 "Protein": ["", "Amino acid"],

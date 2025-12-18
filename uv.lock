@@ -113,6 +113,7 @@ dependencies = [
     { name = "sklearn-genetic" },
     { name = "sklearn-genetic-opt" },
     { name = "streamlit" },
+    { name = "streamlit-aggrid" },
     { name = "streamlit-option-menu" },
     { name = "tpot" },
     { name = "tqdm" },
@@ -149,6 +150,7 @@ requires-dist = [
     { name = "sklearn-genetic", specifier = ">=0.6.0" },
     { name = "sklearn-genetic-opt", specifier = ">=0.11.1" },
     { name = "streamlit", specifier = ">=1.44.1" },
+    { name = "streamlit-aggrid", specifier = ">=1.2.1" },
     { name = "streamlit-option-menu", specifier = ">=0.4.0" },
     { name = "tpot", specifier = ">=0.12.2" },
     { name = "tqdm", specifier = ">=4.67.1" },
@@ -1678,6 +1680,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-decouple"
+version = "3.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/97/373dcd5844ec0ea5893e13c39a2c67e7537987ad8de3842fe078db4582fa/python-decouple-3.8.tar.gz", hash = "sha256:ba6e2657d4f376ecc46f77a3a615e058d93ba5e465c01bbe57289bfb7cce680f", size = 9612 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/d4/9193206c4563ec771faf2ccf54815ca7918529fe81f6adb22ee6d0e06622/python_decouple-3.8-py3-none-any.whl", hash = "sha256:d0d45340815b25f4de59c974b855bb38d03151d81b037d9e3f463b0c9f8cbd66", size = 9947 },
+]
+
+[[package]]
 name = "pytz"
 version = "2025.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2207,6 +2218,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3e/c0/7286284567e5045f0c587c426d0c41aee5d10c0a2e360e627a83037e9f0c/streamlit-1.44.1.tar.gz", hash = "sha256:c6914ed6d5b76870b461510476806db370f36425ae0e6654d227c988288198d3", size = 9423685 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/17/fc425e1d4d86e31b2aaf0812a2ef2163763a0670d671720c7c36e8679323/streamlit-1.44.1-py3-none-any.whl", hash = "sha256:9fe355f58b11f4eb71e74f115ce1f38c4c9eaff2733e6bcffb510ac1298a5990", size = 9812242 },
+]
+
+[[package]]
+name = "streamlit-aggrid"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pandas" },
+    { name = "python-decouple" },
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/4d/4eee8055de97c1e12a8edb637c227119aea8e9e8dd0a462c547b7adc1815/streamlit_aggrid-1.2.1.tar.gz", hash = "sha256:3d4e9e7444e5d12f4577efce129c27933c499482d87d0a77bd331f6aa65f2709", size = 5669840 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/49/abfc53612c8592de5a0760eafad2fa5265d5135e9fa486b56f37cc7cfcda/streamlit_aggrid-1.2.1-py3-none-any.whl", hash = "sha256:507a52e44913564da828fbbc4ca01d8c81a30fb8f6cce97c9dab4a30ec1e462d", size = 5733174 },
 ]
 
 [[package]]

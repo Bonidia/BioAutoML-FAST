@@ -55,11 +55,9 @@ def runUI():
                 
                 if response.status_code == 200:
                     # Print a message to console after successfully sending the email.
-                    print(f"Email sent to administrator.")
+                    st.success("Email sent to administrator.")
                 else:
-                    print(f"Email failed to be sent to administrator.")
-
-
+                    st.error("Email failed to be sent to administrator.")
             else:
                 st.error("Please enter a valid Job ID.")
         else:

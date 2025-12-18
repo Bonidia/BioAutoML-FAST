@@ -17,8 +17,8 @@ def runUI():
 
     manager._create_db()
 
-    page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "About"], 
-    icons=["house", "gear-wide", "diagram-2", "link", "info-circle"],
+    page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "Tutorials", "About"], 
+    icons=["house", "gear-wide", "diagram-2", "link", "question", "info-circle"],
     menu_icon="cast", default_index=0, orientation="horizontal")
 
     if page == "Home":
@@ -32,7 +32,11 @@ def runUI():
     elif page == "Share":
         modules.share.runUI()
         clear_cache()
+    elif page == "Tutorials":
+        modules.tutorials.runUI()
+        clear_cache()
     elif page == "About":
+        modules.about.runUI()
         clear_cache()
 
     st.markdown(
