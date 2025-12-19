@@ -8,3 +8,4 @@ DATA
 .venv
 .fuse_hidden*
 secrets.toml
+task_results.db

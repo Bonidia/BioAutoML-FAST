@@ -25,7 +25,7 @@ def runUI():
             job_id = st.text_input("Enter Job ID", key="job_input", help="Job ID of a valid non-encrypted submission")
             
         with checkcol2:
-            email = st.text_input("Your email address", help="We may enter in contact if more details are required")
+            email = st.text_input("Your email address (Optional)", help="We may enter in contact if more details are required")
 
         text_area = st.text_area(
             "Provide a description of your data and the DOI of the paper we should reference",
@@ -34,7 +34,7 @@ def runUI():
         submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
     if submitted:
-        if job_id and email and text_area:
+        if job_id and text_area:
 
             job = manager.get_result(job_id)
 
@@ -43,7 +43,10 @@ def runUI():
 
                 subject = f"[BioAutoML-FAST] User wants to share their model"
 
-                body = f"""Dear administrator,\n\nUser ({email}) wants to share their model.\n\nJob ID: {job_id}\nText from the user:\n{text_area}\n\nPlease verify if the model is suitable to be used in the model repository."""
+                if email:
+                    body = f"""Dear administrator,\n\nUser ({email}) wants to share their model.\n\nJob ID: {job_id}\nText from the user:\n{text_area}\n\nPlease verify if the model is suitable to be used in the model repository."""
+                else:
+                    body = f"""Dear administrator,\n\nUser wants to share their model.\n\nJob ID: {job_id}\nText from the user:\n{text_area}\n\nPlease verify if the model is suitable to be used in the model repository."""
 
                 response =  requests.post(
                             "https://api.mailgun.net/v3/bioauto.inteligentehub.com.br/messages",

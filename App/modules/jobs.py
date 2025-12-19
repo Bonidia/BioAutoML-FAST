@@ -1027,7 +1027,7 @@ def runUI():
     #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "941178f3-2131-45c6-8b2f-7fa72dc0cbd6"
+        st.session_state["job_input"] = "b6b95131-5f8a-4f61-a371-0782b8d09344"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])

@@ -9,10 +9,10 @@ def runUI():
             brenoslivio@usp.br, bonidia@utfpr.edu.br, ulisses.rocha@ufz.de.
         """)
 
-    col1, col2, col3 = st.columns([2, 2, 2])
+    col1, col2, col3 = st.columns([2, 3, 2])
 
     with col2:
-        st.image("imgs/overview.png", caption="Overview of the platform with the four main modules.")
+        st.image("imgs/overview.webp", caption="Overview of the platform with the four main modules.")
 
     st.markdown("### Frequently Asked Questions")
 
@@ -116,7 +116,7 @@ def runUI():
         with video3col2:
             st.video("videos/case3_sub.mp4")
 
-    with st.expander("**Use case 4: Using pretrained models from the repository to predict unlabeled data**"):
+    with st.expander("**Use case 4: Using trained models from the repository to predict unlabeled data**"):
         video4col1, video4col2, video4col3 = st.columns([1, 3, 1])
 
         with video4col2:

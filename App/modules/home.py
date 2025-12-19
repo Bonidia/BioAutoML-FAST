@@ -617,6 +617,14 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     except Exception as e:
         print(f"Error in job processing: {e}")
 
+@st.dialog("Job submitted")
+def job_submitted_dialog(job_id):
+    st.success(
+        f'Job submitted to the queue.\n\n'
+        f'You can consult the results in **Jobs** using the following ID:\n\n'
+        f'**{job_id}**'
+    )
+
 def runUI():
     """Main Streamlit UI function with thread management."""
 
@@ -635,7 +643,7 @@ def runUI():
             biological sequences and automatically build customised classification models for sequence annotation, or regression 
             models to predict quantitative biological activity, such as expression strength and binding affinity, with optional 
             external validation. The platform summarises datasets through statistical metrics and dimensionality-reduction 
-            visualisations. It also includes an extensive repository of 60 pretrained models spanning diverse biological problems, 
+            visualisations. It also includes an extensive repository of 60 trained models spanning diverse biological problems, 
             such as anticancer and antimicrobial peptide prediction, non-coding RNA classification, and even taste prediction.""")
 
     st.divider()
@@ -701,7 +709,7 @@ def runUI():
         checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
-            imbalance = st.checkbox("Oversampling/Undersampling", help="Whether to use imbalanced techniques for the datasets.")
+            imbalance = st.checkbox("Oversampling/Undersampling", help="Whether to use imbalanced techniques for the datasets if the classes are not evenly distributed.")
             
         with checkcol2:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
@@ -752,7 +760,7 @@ def runUI():
                 else:
                     if task == "Classification":
                         train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, 
-                                                       help="Separated by class (e.g. sRNA.fasta, tRNA.fasta). Upload one FASTA file per class.")
+                                                       help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                     elif task == "Regression":
                         train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
                                                        help="Single FASTA file with continuous target values provided sequence headers.")
@@ -765,7 +773,7 @@ def runUI():
                     else:
                         if task == "Classification":
                             train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, 
-                                                        help="Separated by class (e.g. sRNA.fasta, tRNA.fasta). Upload one FASTA file per class.")
+                                                        help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
                                                         help="Single FASTA file with continuous target values provided sequence headers.")
@@ -775,7 +783,7 @@ def runUI():
                     else:
                         if task == "Classification":
                             test_files = st.file_uploader("Test set FASTA files", accept_multiple_files=True, 
-                                                        help="Separated by class (e.g. sRNA.fasta, tRNA.fasta). Upload one FASTA file per class.")
+                                                        help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             test_files = st.file_uploader("Test set FASTA file", accept_multiple_files=False, 
                                                         help="Single FASTA file with continuous target values provided sequence headers.")
@@ -788,7 +796,7 @@ def runUI():
                     else:
                         if task == "Classification":
                             train_files = st.file_uploader("Training set FASTA files", accept_multiple_files=True, 
-                                                        help="Separated by class (e.g. sRNA.fasta, tRNA.fasta). Upload one FASTA file per class.")
+                                                        help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
                                                         help="Single FASTA file with continuous target values provided sequence headers.")
@@ -849,6 +857,12 @@ def runUI():
                 with queue_info:
                     st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
                 st.stop()
+        
+        if training == "Load model":
+            if not train_files:
+                with queue_info:
+                    st.error("Please provide the trained model file.")
+                st.stop()
 
         # Test/prediction files required unless "No test set"
         if testing != "No test set" and not test_files:
@@ -894,8 +908,7 @@ def runUI():
         tsv_path = os.path.join(job_path, "job_info.tsv")
         df_job_data.write_csv(tsv_path, separator='\t')
 
-        with queue_info:
-            st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
+        job_submitted_dialog(job_id)
 
 if __name__ == "__main__":
     runUI()

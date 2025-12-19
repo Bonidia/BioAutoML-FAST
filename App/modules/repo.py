@@ -497,11 +497,19 @@ def bibtex_to_dict(bib_file="references.bib"):
 
     return citation_dict
 
+@st.dialog("Job submitted")
+def job_submitted_dialog(job_id):
+    st.success(
+        f'Job submitted to the queue.\n\n'
+        f'You can consult the results in **Jobs** using the following ID:\n\n'
+        f'**{job_id}**'
+    )
+
 def runUI():
 
     with st.expander("Predicting new data"):
         st.info("""
-            Here you can **apply one of 60 curated, pretrained models** to perform **classification or regression** on biological sequences, without training a model from scratch.  
+            Here you can **apply one of 60 curated, trained models** to perform **classification or regression** on biological sequences, without training a model from scratch.  
             These models cover a wide range of tasks, including peptide activity prediction, RNA annotation, protein function identification, and regulatory sequence analysis.
 
             Simply select a model from the repository and upload a **FASTA file for prediction**. Each model is linked to a **published dataset**, and the corresponding references are shown to ensure transparency and reproducibility.
@@ -727,7 +735,11 @@ def runUI():
     # Use mapping to set dataset_id and show info
     if model in model_map:
         dataset_id = model_map[model]["dataset"]
-        cite_key = model_map[model]["cite"] 
+        cite_key = model_map[model]["cite"]
+
+        df_train_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_6/train_stats.csv"))
+
+        task = int(dataset_id.split('_')[-1])
 
         # Split into individual cite keys
         keys = [k.strip() for k in cite_key.split(",")]
@@ -741,6 +753,12 @@ def runUI():
         st.info(
             f"""
             **Model chosen:** {model}
+
+            **Task:** {'Classification' if task == 0 else 'Regression'}
+  
+            **Data type:** {'Nucleotide' if "gc_content" in df_train_stats.columns else 'Amino acid'}
+
+            **Possible labels:** {", ".join(df_train_stats["class"].tolist())}
 
             **Dataset from the following paper(s):** {citation_text}
 
@@ -827,8 +845,7 @@ def runUI():
             tsv_path = os.path.join(job_path, "job_info.tsv")
             df_job_data.write_csv(tsv_path, separator='\t')
 
-            with queue_info:
-                st.success(f"Job submitted to the queue. You can consult the results in \"Jobs\" using the following ID: **{job_id}**")
+            job_submitted_dialog(job_id)
 
 # Run the Streamlit app
 if __name__ == "__main__":
