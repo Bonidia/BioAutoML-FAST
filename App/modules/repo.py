@@ -338,14 +338,35 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
             # Create symbolic link
             os.symlink(save_path, link_path)
 
-            command = [
-                "python",
-                "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-                "-path_model", save_path,
-                "-nf", "True",
-            ]
+            if "label_encoder" in model:
+                task = "Classification"
+                command = [
+                    "python",
+                    "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
+                    "-path_model", save_path,
+                    "-nf", "True",
+                ]
+            else:
+                task = "Regression"
+                command = [
+                    "python",
+                    "BioAutoML-regression.py",
+                    "-path_model", save_path,
+                    "-nf", "True",
+                ]
 
+            
             if test_files:
+                data_type = "Structured data"
+
+                if "descriptors" in model:
+                    df_descriptors = model["descriptors"]
+
+                    if "NAC" in df_descriptors.columns:
+                        data_type = "DNA/RNA"
+                    else:
+                        data_type = "Protein"
+
                 if data_type == "Structured data":
                     test_path = os.path.join(job_path, "test")
                     os.makedirs(test_path)
@@ -403,10 +424,19 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                     os.makedirs(test_path)
 
                     if testing == "Test set":
-                        for file in test_files:
-                            save_path = os.path.join(test_path, file.name)
-                            with open(save_path, mode="wb") as f:
-                                f.write(file.getvalue())
+                        if task == "Classification":
+                            for file in test_files:
+                                save_path = os.path.join(test_path, file.name)
+                                with open(save_path, mode="wb") as f:
+                                    f.write(file.getvalue())
+                        elif task == "Regression":
+                            for file in test_files:
+                                save_path = os.path.join(test_path, file.name)
+                                with open(save_path, mode="wb") as f:
+                                    f.write(file.getvalue())
+                            # save_path = os.path.join(test_path, test_files.name)
+                            # with open(save_path, mode="wb") as f:
+                            #     f.write(test_files.getvalue())
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
@@ -437,8 +467,6 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
 
             subprocess.run(command, cwd="..")
 
-            shutil.copy(os.path.join(dataset_path, "best_descriptors/selected_descriptors.csv"), os.path.join(job_path, "best_descriptors"))
-    
         try:
             if password:
                 encrypt_job_folder(job_path, password)

@@ -9,8 +9,14 @@ def runUI():
             brenoslivio@usp.br, bonidia@utfpr.edu.br, ulisses.rocha@ufz.de.
         """)
 
-    st.markdown("### Common Questions")
+    col1, col2, col3 = st.columns([2, 2, 2])
 
+    with col2:
+        st.image("imgs/overview.png", caption="Overview of the platform with the four main modules.")
+
+    st.markdown("### Frequently Asked Questions")
+
+    st.markdown("Here you can find the common questions users may have using the platform:")
     # , as well as structured tabular data for advanced use cases.
 
     with st.expander("**What kind of data can I submit to BioAutoML-FAST?**"):
@@ -90,10 +96,37 @@ def runUI():
 
     st.markdown("### Video Tutorials")
 
-    # Placeholder for videos – replace with your own URLs
-    st.video("https://www.youtube.com/watch?v=VIDEO_ID_1")
-    st.video("https://www.youtube.com/watch?v=VIDEO_ID_2")
+    st.markdown("Here you will find practical use-case video tutorials that guide you through the platform and demonstrate how to navigate and use its main features:")
 
+    with st.expander("**Use case 1: Training a classification model from scratch to predict labeled data**"):
+        videocol1, videocol2, videocol3 = st.columns([1, 3, 1])
+
+        with videocol2:
+            st.video("videos/case1_sub.mp4")
+
+    with st.expander("**Use case 2: Training a regression model from scratch to predict unlabeled data**"):
+        video2col1, video2col2, video2col3 = st.columns([1, 3, 1])
+
+        with video2col2:
+            st.video("videos/case2_sub.mp4")
+
+    with st.expander("**Use case 3: Reusing models trained within the platform**"):
+        video3col1, video3col2, video3col3 = st.columns([1, 3, 1])
+
+        with video3col2:
+            st.video("videos/case3_sub.mp4")
+
+    with st.expander("**Use case 4: Using pretrained models from the repository to predict unlabeled data**"):
+        video4col1, video4col2, video4col3 = st.columns([1, 3, 1])
+
+        with video4col2:
+            st.video("videos/case4_sub.mp4")
+
+    with st.expander("**Use case 5: Adding new models to the repository**"):
+        video5col1, video5col2, video5col3 = st.columns([1, 3, 1])
+
+        with video5col2:
+            st.video("videos/case5_sub.mp4")
 
 if __name__ == "__main__":
     runUI()

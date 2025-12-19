@@ -6,4 +6,5 @@ work
 runs
 DATA
 .venv
+.fuse_hidden*
 secrets.toml
