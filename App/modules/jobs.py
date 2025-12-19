@@ -1027,7 +1027,7 @@ def runUI():
     #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "b6b95131-5f8a-4f61-a371-0782b8d09344"
+        st.session_state["job_input"] = "adcfcc32-76a3-4e12-8e15-c913e95bf199"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1219,7 +1219,7 @@ def runUI():
         tabs = {}
 
         if df_job_info["testing_set"].item() != "No test set":
-            if max(train_stats["num_seqs"].to_list()) > 2_000 or max(test_stats["num_seqs"].to_list()) > 2_000:
+            if max(train_stats["num_seqs"].to_list()) > 5_000 or max(test_stats["num_seqs"].to_list()) > 5_000:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance"]
             else:
@@ -1227,7 +1227,7 @@ def runUI():
                             "Feature Importance", "Feature Distribution",
                             "Feature Correlation", "Dimensionality Reduction"]
         else:
-            if max(train_stats["num_seqs"].to_list()) > 2_000:
+            if max(train_stats["num_seqs"].to_list()) > 5_000:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance"]
             else:

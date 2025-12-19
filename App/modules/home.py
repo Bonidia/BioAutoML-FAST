@@ -625,6 +625,24 @@ def job_submitted_dialog(job_id):
         f'**{job_id}**'
     )
 
+def count_fasta_sequences(uploaded_files):
+    """Counts total FASTA records across one or more uploaded files."""
+    if not uploaded_files:
+        return 0
+
+    if not isinstance(uploaded_files, list):
+        uploaded_files = [uploaded_files]
+
+    total = 0
+    for f in uploaded_files:
+        f.seek(0)
+        for line in f:
+            if line.startswith(b">"):
+                total += 1
+        f.seek(0)
+
+    return total
+
 def runUI():
     """Main Streamlit UI function with thread management."""
 
@@ -653,6 +671,8 @@ def runUI():
             Here you can **train a new model or load an existing model** to perform **classification or regression** on biological sequences.  
             You may optionally evaluate the model using a **labeled test set** or apply it to **unlabeled data for prediction**.
 
+            **Important limits:** You can upload at most **5,000 training sequences** or **5,000 testing/prediction sequences** per job.
+
             Each option and file uploader includes a **tooltip** with instructions about the **required file formats, labels, and submission rules**.
                 
             The **Examples button** provides concrete submission examples to help you get started.
@@ -660,6 +680,8 @@ def runUI():
             Jobs are executed asynchronously and queued for processing. Once completed, results can be accessed in the **Jobs** module using the generated job ID. Optional email notification and submission encryption are available.
             """
         )
+
+    MAX_SEQS = 5_000
 
     queue_info = st.container()
 
@@ -875,6 +897,28 @@ def runUI():
 
         if testing == "No test set":
             test_files = None
+
+        # Only applies to FASTA-based sequence tasks
+        if training == "Training set" and data_type != "Structured data":
+
+            train_seq_count = count_fasta_sequences(train_files)
+            if train_seq_count > MAX_SEQS:
+                with queue_info:
+                    st.error(
+                        f"Training set exceeds the maximum allowed size "
+                        f"({train_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                    )
+                st.stop()
+
+        if testing in ["Test set", "Prediction set"] and test_files:
+            test_seq_count = count_fasta_sequences(test_files)
+            if test_seq_count > MAX_SEQS:
+                with queue_info:
+                    st.error(
+                        f"Testing/Prediction set exceeds the maximum allowed size "
+                        f"({test_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                    )
+                st.stop()
 
         fn_kwargs = {
             "train_files": train_files,

@@ -25,6 +25,8 @@ def runUI():
         - FASTA files for classification (multiple labeled files, one per class), or
         - FASTA files for regression (sequences associated with quantitative values, specified at the end of each header after the | character).
 
+        You can upload at most **5,000 training sequences** or **5,000 testing/prediction sequences** per job.
+
         Both training and test/prediction datasets are supported. When no test set is provided, BioAutoML-FAST automatically evaluates models using 10-fold cross-validation. 
         All feature extraction and preprocessing steps are handled automatically by the platform.
 
