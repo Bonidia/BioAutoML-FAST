@@ -29,12 +29,13 @@ def runUI():
             Breno L. S. de Almeida has been funded by the São Paulo Research Foundation (FAPESP), grant #2024/10958-1, and the 
             Google PhD Fellowship.
 
+            The authors thank the following individuals for their valuable suggestions and assistance with testing: Sanchita Kamath, Asaad Ataa, 
+            Faith Oni, Jamile Souza, Jana Schor, Matthias Bernt, and Bianca Pessa.
+
             We also acknowledge open-source libraries and tools that made this work possible.
             """
         )
 
-    # The authors would like to thank all people that contributed with this platform in some form. 
-    # These people include: 
 
     with st.container(border=True):
         st.markdown("**Data Availability**")

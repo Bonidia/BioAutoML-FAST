@@ -45,7 +45,7 @@ def runUI():
         <div style="text-align:center; font-size: 0.9em;">
         © {datetime.now().year} BioAutoML-FAST — Released under the 
         <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>. 
-        Free for academic and commercial use.
+        Free for academic and commercial use.<br>This website uses session cookies for essential functionality.
         </div>
         <br>
         """,
