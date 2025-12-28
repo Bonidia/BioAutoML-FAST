@@ -228,54 +228,52 @@ def dimensionality_reduction():
                 st.plotly_chart(fig, use_container_width=True)
 
 def compute_correlation_matrix(features, method):
-    """Compute and cache correlation matrix"""
+    """Compute correlation matrix for selected features"""
     return features.corr(method=method.lower())
 
-def get_top_correlations(corr_matrix, top_n=100):
-    """Get top correlated feature pairs and return matrix with features involved in top pairs"""
-    # Create a copy and set diagonal to NaN to exclude self-correlations
-    corr_matrix_copy = corr_matrix.copy()
-    np.fill_diagonal(corr_matrix_copy.values, np.nan)
-    
-    # Get upper triangle only (excluding diagonal and duplicates)
-    corr_pairs = corr_matrix_copy.unstack()
-    corr_pairs = corr_pairs.dropna()
-    
-    # Sort by absolute correlation but keep original values
-    sorted_pairs = corr_pairs.iloc[corr_pairs.abs().argsort()[::-1]].head(top_n)
-    
-    # Get all unique features from top pairs
-    top_features = set()
-    for idx in sorted_pairs.index:
-        top_features.add(idx[0])
-        top_features.add(idx[1])
-    
-    top_features = sorted(top_features)
-    
-    return corr_matrix.loc[top_features, top_features]
-
 def create_correlation_df(corr_matrix):
-    """Create formatted correlation dataframe"""
-    corr_df = pd.DataFrame(corr_matrix.stack(), columns=['Correlation coefficient'])
-    corr_df.reset_index(inplace=True)
-    corr_df.columns = ['Feature 1', 'Feature 2', 'Correlation coefficient']
-    return corr_df[corr_df['Feature 1'] != corr_df['Feature 2']]\
-           .sort_values('Correlation coefficient', ascending=False)\
-           .reset_index(drop=True)
+    """Create long-form correlation dataframe without redundant pairs"""
+    corr_df = corr_matrix.stack().reset_index()
+    corr_df.columns = ["Feature 1", "Feature 2", "Correlation coefficient"]
+
+    # Remove self-correlations
+    corr_df = corr_df[corr_df["Feature 1"] != corr_df["Feature 2"]]
+
+    # Remove redundant symmetric pairs (A,B) vs (B,A)
+    corr_df[["f_min", "f_max"]] = np.sort(
+        corr_df[["Feature 1", "Feature 2"]].values,
+        axis=1
+    )
+    corr_df = corr_df.drop_duplicates(subset=["f_min", "f_max"])
+    corr_df = corr_df.drop(columns=["f_min", "f_max"])
+
+    # Sort by absolute correlation
+    corr_df["abs_corr"] = corr_df["Correlation coefficient"].abs()
+    corr_df = corr_df.sort_values("abs_corr", ascending=False).drop(columns="abs_corr")
+
+    return corr_df.reset_index(drop=True)
 
 def create_correlation_heatmap(corr_matrix):
-    """Create and cache correlation heatmap"""
+    """Create correlation heatmap"""
     fig = px.imshow(
         corr_matrix,
         x=corr_matrix.columns,
         y=corr_matrix.columns,
-        color_continuous_scale='RdBu',
-        title='Correlation heatmap'
+        color_continuous_scale="RdBu",
+        zmin=-1,
+        zmax=1,
+        title="Feature correlation heatmap"
     )
+
     fig.update_traces(
-        hovertemplate='Feature 1 (x-axis): %{x}<br>Feature 2 (y-axis): %{y}<br>Correlation: %{z}<extra></extra>'
+        hovertemplate=(
+            "Feature 1: %{x}<br>"
+            "Feature 2: %{y}<br>"
+            "Correlation: %{z:.3f}<extra></extra>"
+        )
     )
-    fig.update_layout(height=500, margin=dict(t=30, b=50))
+
+    fig.update_layout(height=500, margin=dict(t=40, b=40))
     return fig
 
 def feature_correlation():
@@ -283,70 +281,90 @@ def feature_correlation():
     with st.expander("What **Feature Correlation** shows"):
         st.info(
             """
-            This tab explores **how features relate to each other** across the dataset.
+            This tab explores **how selected features relate to each other**.
 
-            You can choose to compute correlations using either the **training set** or, when available, the 
-            **test set**, and select the correlation method used to quantify similarity between feature values. 
-            Pearson correlation highlights linear relationships, while Spearman correlation captures monotonic 
-            trends and is less sensitive to outliers.
+            Choose a subset of features (between **2 and 100**) and a correlation method.
+            Pearson captures linear relationships, while Spearman captures monotonic trends
+            and is more robust to outliers.
 
-            The table lists pairs of features with the **strongest correlations**, sorted by their correlation 
-            strength. Highly correlated features often carry similar information and may be partially 
-            redundant.
-
-            The heatmap provides a visual summary of these relationships, making it easier to identify clusters 
-            of closely related features. Correlation analysis supports data exploration and interpretation, 
-            but does not imply biological or causal relationships.
+            The table lists all pairwise correlations among the selected features,
+            sorted by correlation strength, and the heatmap provides a visual overview.
             """
         )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        # Evaluation set selection
-        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
-    
-        has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
-    
+        df_job_info = pl.read_csv(
+            os.path.join(st.session_state["job_path"], "job_info.tsv"),
+            separator="\t"
+        )
+
+        has_test_set = df_job_info["testing_set"].item() != "No test set"
+
         evaluation = st.selectbox(
             ":mag_right: Evaluation set",
             ["Training set", "Test set"] if has_test_set else ["Training set"],
-            key="correlation"
+            key="correlation_eval"
         )
 
     with col2:
-        # Correlation method selection
         correlation_method = st.selectbox(
-            'Select correlation method:', 
-            ['Pearson', 'Spearman']
+            "Select correlation method:",
+            ["Pearson", "Spearman"]
         )
 
-    # Load features with caching
+    # Load features
     if evaluation == "Training set":
         features, _, _ = load_features(st.session_state["job_path"], True)
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
     if "imputer" in st.session_state["model"]:
-        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
+        features = pd.DataFrame(
+            st.session_state["model"]["imputer"].transform(features),
+            columns=features.columns
+        )
 
     if "mapper" in st.session_state:
         features = features.rename(columns=st.session_state["mapper"])
 
-    # Compute correlation matrix with caching
-    with st.spinner('Computing correlations...'):
-        corr_matrix = compute_correlation_matrix(features, correlation_method)
-        top_corr_matrix = get_top_correlations(corr_matrix)
+    feature_names = list(features.columns)
 
-    # Display results
+    selected_features = st.multiselect(
+        "Select features for correlation analysis",
+        options=feature_names,
+        default=feature_names[:10],
+        max_selections=100,
+        help="Select between 2 and 100 features"
+    )
+
+    # Validation
+    if len(selected_features) < 2:
+        st.warning("Please select at least **2 features** to compute correlations.")
+        return
+
+    # Subset features
+    selected_df = features[selected_features]
+
+    # Compute correlations
+    with st.spinner("Computing correlations..."):
+        corr_matrix = compute_correlation_matrix(selected_df, correlation_method)
+
+    col1, col2 = st.columns(2)
+
     with col1:
-        st.markdown("**Correlation between features sorted by the correlation coefficient**")
-        correlation_df = create_correlation_df(top_corr_matrix)
-        st.dataframe(correlation_df, hide_index=True, use_container_width=True)
+        st.markdown("**Pairwise feature correlations**", help="Sorted by absolute correlation coefficient")
+        correlation_df = create_correlation_df(corr_matrix)
+        st.dataframe(
+            correlation_df,
+            hide_index=True,
+            use_container_width=True
+        )
 
     with col2:
-        with st.spinner('Generating heatmap...'):
-            fig = create_correlation_heatmap(top_corr_matrix)
+        with st.spinner("Generating heatmap..."):
+            fig = create_correlation_heatmap(corr_matrix)
             st.plotly_chart(fig, use_container_width=True)
 
 def load_features(job_path, training):
@@ -1329,7 +1347,7 @@ def runUI():
         tabs = {}
 
         if df_job_info["testing_set"].item() != "No test set":
-            if max(train_stats["num_seqs"].to_list()) > 5_000 or max(test_stats["num_seqs"].to_list()) > 5_000:
+            if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance"]
             else:
@@ -1337,7 +1355,7 @@ def runUI():
                             "Feature Importance", "Feature Distribution",
                             "Feature Correlation", "Dimensionality Reduction"]
         else:
-            if max(train_stats["num_seqs"].to_list()) > 5_000:
+            if sum(train_stats["num_seqs"].to_list()) > 5_000:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance"]
             else:
