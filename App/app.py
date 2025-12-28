@@ -8,7 +8,20 @@ from datetime import datetime
 def clear_cache():
     keys = list(st.session_state.keys())
     for key in keys:
-        st.session_state.pop(key)
+        if key != "cookie":
+            st.session_state.pop(key)
+
+@st.dialog("🍪 Cookie notice", width="large")
+def cookie_dialog():
+    st.markdown(
+        """
+        This web server uses **session cookies solely** to ensure proper functionality.
+
+        No personal tracking or persistent cookies are employed.
+        """
+    )
+
+    st.session_state["cookie"] = True
 
 def runUI():
     st.set_page_config(page_title = "BioAutoML-FAST", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
@@ -39,13 +52,16 @@ def runUI():
         modules.about.runUI()
         clear_cache()
 
+    # Show dialog once per session
+    if "cookie" not in st.session_state:
+        cookie_dialog()
+
     st.markdown(
         f"""
         <hr>
         <div style="text-align:center; font-size: 0.9em;">
         © {datetime.now().year} BioAutoML-FAST — Released under the 
         <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>. 
-        Free for academic and commercial use.<br>This website uses session cookies for essential functionality.
         </div>
         <br>
         """,

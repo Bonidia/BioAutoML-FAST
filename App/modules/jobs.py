@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
+import shap
 
 def _cleanup_previous_temp():
     prev = st.session_state.get("temp_extract_path")
@@ -65,7 +66,7 @@ def scale_features(features):
     """Scale features with caching"""
 
     if "imputer" in st.session_state["model"]:
-        features = st.session_state["model"]["imputer"].transform(features)
+        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     if "scaler" in st.session_state["model"]:
         features = st.session_state["model"]["scaler"].transform(features)
@@ -326,11 +327,11 @@ def feature_correlation():
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
-    if "mapper" in st.session_state:
-        features = features.rename(columns=st.session_state["mapper"])
-
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
+
+    if "mapper" in st.session_state:
+        features = features.rename(columns=st.session_state["mapper"])
 
     # Compute correlation matrix with caching
     with st.spinner('Computing correlations...'):
@@ -429,11 +430,11 @@ def feature_distribution():
     else:
         features, labels, nameseqs = load_features(st.session_state["job_path"], False)
 
-    if "mapper" in st.session_state:
-        features = features.rename(columns=st.session_state["mapper"])
-
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
+
+    if "mapper" in st.session_state:
+        features = features.rename(columns=st.session_state["mapper"])
 
     col1, col2 = st.columns(2)
 
@@ -727,48 +728,155 @@ def create_feature_importance_figure(df):
     
     return fig
 
+def get_shap_data(max_samples=500):
+    """
+    Prepare background data for SHAP with subsampling.
+    """
+    X = st.session_state["model"]["train"]
+
+    if "imputer" in st.session_state["model"]:
+        X = pd.DataFrame(
+            st.session_state["model"]["imputer"].transform(X),
+            columns=X.columns
+        )
+
+    if "scaler" in st.session_state["model"]:
+        X = st.session_state["model"]["scaler"].transform(X)
+        X = pd.DataFrame(X, columns=st.session_state["model"]["train"].columns)
+
+    if "mapper" in st.session_state:
+        X = X.rename(columns=st.session_state["mapper"])
+
+    # Subsample for performance
+    if len(X) > max_samples:
+        X = X.sample(max_samples, random_state=42)
+
+    return X
+
+def compute_shap_values(model, X):
+    """
+    Compute SHAP values for tree-based models.
+    Ensures consistent shape:
+    - Binary / regression: (n_samples, n_features)
+    - Multiclass: (n_samples, n_features, n_classes)
+    """
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X)
+
+    # --- FIX multiclass output ---
+    if isinstance(shap_values, list):
+        # list[n_classes] of (n_samples, n_features)
+        shap_values = np.stack(shap_values, axis=2)
+
+    return explainer, shap_values
+
+def shap_global_importance(shap_values, X):
+    """
+    Return dataframe with mean absolute SHAP values (1D).
+    Works for binary, multiclass, and regression.
+    """
+
+    importance = np.mean(np.abs(shap_values), axis=0)
+
+    return (
+        pd.DataFrame({
+            "Feature": X.columns.to_list(),
+            "Mean |SHAP value|": importance
+        })
+        .sort_values("Mean |SHAP value|", ascending=False)
+    )
+
 def feature_importance():
 
     with st.expander("What **Feature Importance** shows"):
         st.info(
             """
-            This tab shows **which features most influenced the model’s predictions**.
+            This tab explains **which features most influenced the model’s predictions** and offers
+            two complementary perspectives on feature importance.
 
-            Feature importance indicates how often and how effectively each feature was used by the model 
-            during training. All algorithms available in this platform (Random Forest, XGBoost, and LightGBM) 
-            are **tree-based models**, where predictions are made through a series of decision splits. A feature 
-            is considered important when it is repeatedly selected for these splits and helps improve 
-            prediction accuracy.
+            **Tree-based importance** reflects how frequently and effectively each feature was used
+            to split decision nodes during model training. Since all models available in this platform
+            (Random Forest, XGBoost, and LightGBM) are tree-based, this metric summarizes how much each
+            feature contributed to reducing prediction error across the ensemble. It provides a fast,
+            global overview of model behavior.
 
-            The plot highlights the **ten most influential features**, while the table provides a complete 
-            ranking. Each feature name is followed by the **descriptor group it originates from**, shown in 
-            parentheses, to help relate model behavior to specific biological sequence properties.
+            **SHAP (SHapley Additive exPlanations)** offers a model-agnostic, game-theoretic view of
+            feature importance. SHAP values quantify how much each feature contributes to pushing a
+            prediction away from the model’s average output for individual samples. In this tab, SHAP
+            values are computed on a random subset of up to 500 training samples for efficiency.
 
-            Feature importance supports model interpretation but does not imply biological causation.
+            For multiclass models, SHAP values are calculated separately for each class. You can select
+            a class to visualize how features influence predictions toward that specific label. Global
+            feature importance is then obtained by averaging the absolute SHAP values across samples
+            (and across classes when applicable), yielding a comparable ranking for binary, multiclass,
+            and regression models.
+
+            The **beeswarm plot** summarizes the distribution of SHAP values for the ten most impactful
+            features, while the accompanying table provides a complete ranked list based on mean
+            absolute SHAP values.
+
+            Feature importance helps interpret model behavior but does not imply biological causation.
             """
         )
 
-    # Load data with caching
-    df = load_feature_importance(st.session_state["job_path"])
+    feat_type = st.selectbox("Feature importance type", ["Tree-based", "SHAP (SHapley Additive exPlanations)"])
 
-    if "mapper" in st.session_state:
-        df["Feature"] = df["Feature"].replace(st.session_state["mapper"])
+    if feat_type == "Tree-based":
+        df = load_feature_importance(st.session_state["job_path"])
 
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Create plot with caching
-        fig = create_feature_importance_figure(df.iloc[:10, :])
+        if "mapper" in st.session_state:
+            df["Feature"] = df["Feature"].replace(st.session_state["mapper"])
+
+        col1, col2 = st.columns(2)
         
-        # Display with loading indicator
-        st.markdown("**Importance of features regarding model training**", 
-                help="Ten most important features.")
+        with col1:
+            # Create plot with caching
+            fig = create_feature_importance_figure(df.iloc[:10, :])
+            
+            # Display with loading indicator
+            st.markdown("**Importance of features regarding model training**", 
+                    help="Ten most important features.")
+            
+            with st.spinner('Rendering feature importance...'):
+                st.plotly_chart(fig, use_container_width=True)
         
-        with st.spinner('Rendering feature importance...'):
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.dataframe(df, hide_index=True)
+        with col2:
+            st.dataframe(df, hide_index=True)
+    elif feat_type == "SHAP (SHapley Additive exPlanations)":
+        with st.spinner("Computing SHAP values..."):
+            X_shap = get_shap_data(max_samples=500)
+
+            explainer, shap_values = compute_shap_values(
+                st.session_state["model"]["clf"],
+                X_shap
+            )
+
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                st.markdown("**SHAP summary (beeswarm) plot**", help="Ten most impactful features using 500 random samples.")
+
+                shap_values = np.asarray(shap_values)
+
+                if shap_values.ndim == 3:
+                    label_choice = st.selectbox("Feature contribution per class", st.session_state["model"]["label_encoder"].inverse_transform(st.session_state["model"]["clf"].classes_))
+
+                    shap_values = shap_values[:, :, st.session_state["model"]["label_encoder"].transform([label_choice])[0]]
+
+                plt.figure(figsize=(8, 6))
+
+                shap.summary_plot(
+                    shap_values,
+                    X_shap,
+                    max_display=10,
+                    show=False
+                )
+
+                st.pyplot(plt.gcf(), clear_figure=True)
+            with col2:
+                df_shap = shap_global_importance(shap_values, X_shap)
+
+                st.dataframe(df_shap, hide_index=True)
 
 def model_information(data_type, task):
 
@@ -972,7 +1080,9 @@ def runUI():
             * **Model Repository:** Running predictions with a trained model also generates a *Job ID*, allowing access to prediction outputs.
 
             Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
-            """
+            
+            **Note that models from the repository with more than 5,000 training or testing/prediction sequences may have limited visualizations.**
+	    """
         )
 
     # Uncomment to show queue
