@@ -761,6 +761,11 @@ def runUI():
 
         df_train_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_6/train_stats.csv"))
 
+        if os.path.exists(os.path.join("datasets", dataset_id, "runs/run_6/test_stats.csv")):
+            df_test_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_6/test_stats.csv"))
+        else:
+            df_test_stats = pd.DataFrame()
+
         task = int(dataset_id.split('_')[-1])
 
         # Split into individual cite keys
@@ -782,9 +787,13 @@ def runUI():
 
             **Possible labels:** {", ".join(df_train_stats["class"].tolist())}
 
+            **Training dataset composition:** {', '.join([str(row['class']) + ": " + str(row['num_seqs']) for _, row in df_train_stats.iterrows()])}
+
+            **Test dataset composition:** {', '.join([str(row['class']) + ": " + str(row['num_seqs']) for _, row in df_test_stats.iterrows()]) if not df_test_stats.empty else "No test set"}
+            
             **Dataset from the following paper(s):** {citation_text}
 
-            You can consult experiments done with this dataset in "Jobs" using the following ID: **{dataset_id}**
+            You can consult experiments done with this dataset in **Jobs** using the following ID: **{dataset_id}**
             """
         )
     else:

@@ -29,6 +29,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
 import shap
+import csv
+import gzip
 
 def _cleanup_previous_temp():
     prev = st.session_state.get("temp_extract_path")
@@ -162,7 +164,7 @@ def dimensionality_reduction():
     
         evaluation = st.selectbox(
             ":mag_right: Evaluation set",
-            ["Training set", "Test set"] if has_test_set else ["Training set"],
+            ["Training set", "Test/Prediction set"] if has_test_set else ["Training set"],
             key="reduction"
         )
 
@@ -304,7 +306,7 @@ def feature_correlation():
 
         evaluation = st.selectbox(
             ":mag_right: Evaluation set",
-            ["Training set", "Test set"] if has_test_set else ["Training set"],
+            ["Training set", "Test/Prediction set"] if has_test_set else ["Training set"],
             key="correlation_eval"
         )
 
@@ -419,7 +421,7 @@ def feature_distribution():
             This tab shows how the values of a **single selected feature** are distributed across your data.
 
             You can choose whether to view feature distributions from the **training set** or, when available, 
-            the **test set**. For classification tasks, distributions are shown separately for each class, 
+            the **test/prediction set**. For classification tasks, distributions are shown separately for each class, 
             allowing you to visually compare how well a feature distinguishes between groups.
 
             The histogram illustrates the overall spread and frequency of feature values, while an optional 
@@ -438,7 +440,7 @@ def feature_distribution():
     
     evaluation = st.selectbox(
         ":mag_right: Evaluation set",
-        ["Training set", "Test set"] if has_test_set else ["Training set"],
+        ["Training set", "Test/Prediction set"] if has_test_set else ["Training set"],
         help="Training set evaluated with 10-fold cross-validation",
         key="distribution"
     )
@@ -911,14 +913,21 @@ def model_information(data_type, task):
             You can also **download the trained model file**, which allows you to reuse the model later in this 
             application or share it with collaborators.
 
-            On the right, this tab lists the **descriptors (features)** that were selected as the most informative 
-            for building the model. Descriptors translate biological sequences into numerical values that the 
-            model can learn from.
+            On the right, this tab shows the **extracted and selected features (descriptors)** used to build 
+            the model. Descriptors convert biological sequences into numerical values that the model can learn from.
+
+            You can **download the extracted feature datasets** (training and, when available, test or 
+            prediction sets) as compressed files. This allows you to inspect the data, perform custom analyses, 
+            or reuse the features in external tools and workflows.
 
             An additional section explains the biological meaning of each descriptor group, helping you 
             understand which sequence properties contributed to the final predictions.
             """
         )
+
+    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+
+    has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
 
     col1, col2 = st.columns(2)
 
@@ -989,6 +998,125 @@ def model_information(data_type, task):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
     with col2:
+        st.markdown("**Extracted features**", help="Here you can download the features extracted from the submitted datasets. Please note that for larger models from the repository, the process may take a little longer.")
+
+        if st.button("Prepare datasets for download", use_container_width=True):
+            if has_test_set:
+                download_col1, download_col2 = st.columns(2)
+            with st.spinner("Compressing datasets..."):
+                
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    suffix=".csv.gz"
+                ) as tmp:
+                    with gzip.open(tmp.name, mode="wt", newline="") as gz:
+                        writer = csv.writer(gz)
+
+                        renamed_columns = [
+                            st.session_state["mapper"].get(col, col)
+                            for col in st.session_state["model"]["train"].columns
+                        ]
+
+                        # Header
+                        writer.writerow(
+                            ["Sample name"]
+                            + renamed_columns
+                            + ["label"]
+                        )
+
+                        for name, row, label in zip(
+                            st.session_state["model"]["nameseq_train"],
+                            st.session_state["model"]["train"].itertuples(index=False),
+                            st.session_state["model"]["train_labels"],
+                        ):
+                            writer.writerow([name, *row, label])
+
+                    if has_test_set:
+                        test_fnameseq = os.path.join(
+                            st.session_state["job_path"],
+                            "feat_extraction/fnameseqtest.csv",
+                        )
+                        test_features = os.path.join(
+                            st.session_state["job_path"],
+                            "best_descriptors/best_test.csv",
+                        )
+                        test_labels = os.path.join(
+                            st.session_state["job_path"],
+                            "feat_extraction/flabeltest.csv",
+                        )
+
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb",
+                            suffix=".csv.gz"
+                        ) as tmp_test:
+                            with gzip.open(tmp_test.name, mode="wt", newline="") as gz:
+                                writer = csv.writer(gz)
+
+                                with (
+                                    open(test_fnameseq, newline="") as f_name,
+                                    open(test_features, newline="") as f_feat,
+                                    open(test_labels, newline="") as f_label,
+                                ):
+                                    reader_name = csv.reader(f_name)
+                                    reader_feat = csv.reader(f_feat)
+                                    reader_label = csv.reader(f_label)
+
+                                    # --- Read and rename test feature header ---
+                                    next(reader_name, None)
+                                    test_feature_header = next(reader_feat)
+                                    next(reader_label, None)
+
+                                    renamed_test_columns = [
+                                        st.session_state["mapper"].get(col, col)
+                                        for col in test_feature_header
+                                    ]
+
+                                    # Write final header
+                                    writer.writerow(
+                                        ["Sample name"]
+                                        + renamed_test_columns
+                                        + ["label"]
+                                    )
+
+                                    # Stream rows
+                                    for name_row, feat_row, label_row in zip(
+                                        reader_name, reader_feat, reader_label
+                                    ):
+                                        writer.writerow(
+                                            [name_row[0], *feat_row, label_row[0]]
+                                        )
+
+                            with download_col1:
+                                with open(tmp.name, "rb") as f:
+                                    st.download_button(
+                                        label="Download training set (.csv.gz)",
+                                        data=f,
+                                        file_name="train_dataset.csv.gz",
+                                        mime="application/gzip",
+                                        use_container_width=True
+                                    )
+
+                            with download_col2:
+                                with open(tmp_test.name, "rb") as f:
+                                    st.download_button(
+                                        label="Download test/prediction set (.csv.gz)",
+                                        data=f,
+                                        file_name="test_dataset.csv.gz",
+                                        mime="application/gzip",
+                                        use_container_width=True,
+                                    )
+                    else:
+                        with open(tmp.name, "rb") as f:
+                            st.download_button(
+                                label="Download training set (.csv.gz)",
+                                data=f,
+                                file_name="train_dataset.csv.gz",
+                                mime="application/gzip",
+                                use_container_width=True
+                            )
+                    
+                    st.success("Datasets compressed successfully!")
+
         st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
 
         if "model" in st.session_state:
@@ -1155,7 +1283,7 @@ def runUI():
     #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
     def get_job_example():
-        st.session_state["job_input"] = "adcfcc32-76a3-4e12-8e15-c913e95bf199"
+        st.session_state["job_input"] = "867473e7-0dbc-4e42-81fd-985b7d1f7e64"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1173,7 +1301,7 @@ def runUI():
             with textcol2:
                 password = st.text_input("Password to decrypt submission (if encrypted)", type='password', help="If submission was encrypted, provide the password for decryption.")
 
-            submitted = st.form_submit_button("Submit", use_container_width=True,  type="primary")
+            submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
     predict_path, dataset_path = "jobs", "datasets"
 
@@ -1288,7 +1416,7 @@ def runUI():
 
             Depending on the data type, it reports the number of samples or sequences, their length 
             distribution, and relevant composition statistics (such as GC content). Results are shown 
-            separately for the **training set** and, when available, the **test set**.
+            separately for the **training set** and, when available, the **test/prediction set**.
 
             These statistics help assess data quality and provide essential context for interpreting the 
             downstream analyses.
@@ -1339,7 +1467,7 @@ def runUI():
             st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
             if df_job_info["testing_set"].item() != "No test set":
-                st.markdown("**Test set**")
+                st.markdown("**Test/Prediction set**")
                 test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
                 test_stats_formatted = test_stats.style.format(thousands=",")
                 st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)

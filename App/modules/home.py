@@ -785,7 +785,7 @@ def runUI():
                                                        help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                     elif task == "Regression":
                         train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
-                                                       help="Single FASTA file with continuous target values provided sequence headers.")
+                                                       help="Single FASTA file with continuous target values appended to the end of the headers after the | character.")
             elif testing == "Test set":
                 set1, set2 = st.columns(2)
 
@@ -798,7 +798,7 @@ def runUI():
                                                         help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
-                                                        help="Single FASTA file with continuous target values provided sequence headers.")
+                                                        help="Single FASTA file with continuous target values appended to the end of the headers after the | character.")
                 with set2:
                     if data_type == "Structured data":
                         test_files = st.file_uploader("Test set CSV file", accept_multiple_files=False, help='CSV file with the column "label" to indicate the row labels.')
@@ -808,7 +808,7 @@ def runUI():
                                                         help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             test_files = st.file_uploader("Test set FASTA file", accept_multiple_files=False, 
-                                                        help="Single FASTA file with continuous target values provided sequence headers.")
+                                                        help="Single FASTA file with continuous target values appended to the end of the headers after the | character.")
             elif testing == "Prediction set":
                 set1, set2 = st.columns(2)
 
@@ -821,7 +821,7 @@ def runUI():
                                                         help="Separated by class (e.g. sRNA.fasta, rRNA.fasta, tRNA.fasta). Upload one FASTA file per class. If it is only two classes, name them as positive.fasta and negative.fasta.")
                         elif task == "Regression":
                             train_files = st.file_uploader("Training set FASTA file", accept_multiple_files=False, 
-                                                        help="Single FASTA file with continuous target values provided sequence headers.")
+                                                        help="Single FASTA file with continuous target values appended to the end of the headers after the | character.")
                 with set2:
                     if data_type == "Structured data":
                         test_files = st.file_uploader("CSV file for prediction", accept_multiple_files=False, help='CSV file without column to indicate row labels.')
