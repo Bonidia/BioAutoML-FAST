@@ -373,35 +373,48 @@ def tutorials():
 
     st.markdown("Here you will find practical use-case video tutorials that guide you through the platform and demonstrate how to navigate and use its main features:")
 
-    with st.expander("**Use case 1: Training a classification model from scratch to predict labeled data**"):
-        videocol1, videocol2, videocol3 = st.columns([1, 3, 1])
+    with st.expander("**Use case 1: Exploring results in the platform**"):
+        video1col1, video1col2, video1col3 = st.columns([1, 3, 1])
 
-        with videocol2:
-            st.video("videos/case1_sub.mp4")
+        with video1col2:
+            st.video("https://youtu.be/wUgqpv6yO0s")
 
-    with st.expander("**Use case 2: Training a regression model from scratch to predict unlabeled data**"):
+    with st.expander("**Use case 2: Training a classification model from scratch to predict labeled data**"):
         video2col1, video2col2, video2col3 = st.columns([1, 3, 1])
 
         with video2col2:
-            st.video("videos/case2_sub.mp4")
+            st.video("https://youtu.be/wkD0DRX391A")
 
-    with st.expander("**Use case 3: Reusing models trained within the platform**"):
+    with st.expander("**Use case 3: Training a regression model from scratch to predict unlabeled data**"):
         video3col1, video3col2, video3col3 = st.columns([1, 3, 1])
 
         with video3col2:
-            st.video("videos/case3_sub.mp4")
+            st.video("https://youtu.be/MGIRK_jBZgU")
 
-    with st.expander("**Use case 4: Using trained models from the repository to predict unlabeled data**"):
+    with st.expander("**Use case 4: Reusing models trained within the platform**"):
         video4col1, video4col2, video4col3 = st.columns([1, 3, 1])
 
         with video4col2:
-            st.video("videos/case4_sub.mp4")
+            st.video("https://youtu.be/9uqLkjyTa7E")
 
-    with st.expander("**Use case 5: Adding new models to the repository**"):
+    with st.expander("**Use case 5: Using trained models from the repository to predict unlabeled data**"):
         video5col1, video5col2, video5col3 = st.columns([1, 3, 1])
 
         with video5col2:
-            st.video("videos/case5_sub.mp4")
+            st.video("https://youtu.be/JcIF9Npj95c")
+
+    with st.expander("**Use case 6: Adding new models to the repository**"):
+        video6col1, video6col2, video6col3 = st.columns([1, 3, 1])
+
+        with video6col2:
+            st.video("https://youtu.be/jXicZETMxCY")
+
+    with st.expander("**Use case 7: Getting more help**"):
+        video7col1, video7col2, video7col3 = st.columns([1, 3, 1])
+
+        with video7col2:
+            st.video("https://youtu.be/2kfH4_Vfgyg")
+
 
 def runUI():
     with st.expander("Using the platform"):
