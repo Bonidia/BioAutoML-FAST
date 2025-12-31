@@ -1,0 +1,2 @@
+class,num_seqs,min_length,max_length,avg_length,std_length,sum_length,Q1,Q2,Q3,N50,gc_content
+toeholds,1000,59,59,59.0,0.0,59000,59.0,59.0,59.0,59,37.159322033898356

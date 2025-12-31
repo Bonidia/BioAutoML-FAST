@@ -214,15 +214,6 @@ def dimensionality_reduction():
     with dim_col2:
         if reducer:
             with st.spinner(f'Computing {reduction}...'):
-                # Compute reduction with caching
-
-                # if "reducer" not in st.session_state:
-                #     if evaluation == "Training set":
-                #         st.session_state["reducer"] = reducer.fit(scaled_data)
-                #         reduced_data = reducer.transform(scaled_data)
-                # else:
-                #     reduced_data = st.session_state["reducer"].transform(scaled_data)
-
                 reduced_data = reducer.fit_transform(scaled_data)
 
                 # Create plot with caching
@@ -546,6 +537,87 @@ def create_confusion_matrix_figure(df):
     
     return fig
 
+def calculate_metrics_from_confusion_matrix(matrix_path):
+    """
+    Calculates ACC, Sn, Sp, F1, and MCC from a binary or multiclass confusion matrix CSV.
+    Rows = true labels, Columns = predicted labels.
+    """
+    df = pd.read_csv(matrix_path, index_col=0)
+
+    # Normalize names
+    df.index = df.index.astype(str)
+    df.columns = df.columns.astype(str)
+
+    # Remove totals or metadata rows/columns
+    drop_labels = {"all", "total", "real"}
+    df = df.loc[~df.index.str.lower().isin(drop_labels)]
+    df = df.loc[:, ~df.columns.str.lower().isin(drop_labels)]
+
+    # 🔑 Enforce square confusion matrix
+    common_labels = df.index.intersection(df.columns)
+    df = df.loc[common_labels, common_labels]
+
+    C = df.values.astype(float)
+    n_classes = C.shape[0]
+    total = C.sum()
+
+    # ------------------ Binary case ------------------
+    if n_classes == 2:
+        TN, FP = C[0, 0], C[0, 1]
+        FN, TP = C[1, 0], C[1, 1]
+
+        ACC = (TP + TN) / total if total > 0 else 0
+        Sn = TP / (TP + FN) if (TP + FN) > 0 else 0
+        Sp = TN / (TN + FP) if (TN + FP) > 0 else 0
+
+        denom = (TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)
+        MCC = ((TP * TN) - (FP * FN)) / np.sqrt(denom) if denom > 0 else 0
+
+        return {
+            "ACC_test": ACC,
+            "Sn_test": Sn,
+            "Sp_test": Sp,
+            "MCC_test": MCC,
+        }
+
+    # ------------------ Multiclass case ------------------
+    TP = np.diag(C)
+    FP = C.sum(axis=0) - TP
+    FN = C.sum(axis=1) - TP
+    TN = total - (TP + FP + FN)
+
+    recall = np.divide(TP, TP + FN, out=np.zeros_like(TP), where=(TP + FN) > 0)
+    specificity = np.divide(TN, TN + FP, out=np.zeros_like(TN), where=(TN + FP) > 0)
+    precision = np.divide(TP, TP + FP, out=np.zeros_like(TP), where=(TP + FP) > 0)
+
+    f1 = np.divide(
+        2 * precision * recall,
+        precision + recall,
+        out=np.zeros_like(precision),
+        where=(precision + recall) > 0,
+    )
+
+    ACC = TP.sum() / total if total > 0 else 0
+    Sn_macro = recall.mean()
+    Sp_macro = specificity.mean()
+
+    # Multiclass MCC (Gorodkin / sklearn)
+    row_sum = C.sum(axis=1)
+    col_sum = C.sum(axis=0)
+    numerator = np.trace(C) * total - np.dot(row_sum, col_sum)
+    denominator = np.sqrt(
+        (total**2 - np.sum(col_sum**2)) *
+        (total**2 - np.sum(row_sum**2))
+    )
+    MCC = numerator / denominator if denominator > 0 else 0
+
+    return {
+        "ACC_test": ACC,
+        "Sn_macro_test": Sn_macro,
+        "Sp_macro_test": Sp_macro,
+        "MCC_macro_test": MCC
+    }
+
 def performance_metrics(task):
 
     with st.expander("What **Performance Metrics** shows"):
@@ -601,9 +673,9 @@ def performance_metrics(task):
             if task == "Classification":
                 if "F1_micro" not in df_cv.columns:
                     metrics.extend([
-                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
                         f"**Sensitivity:** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
                         f"**Specificity:** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
+                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
                         f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
                         f"**AUC:** {df_cv['AUC'].item():.3f} ± {df_cv['std_AUC'].item():.3f}",
                         f"**F1-score:** {df_cv['F1'].item():.3f} ± {df_cv['std_F1'].item():.3f}",
@@ -613,13 +685,13 @@ def performance_metrics(task):
                     ])
                 else:
                     metrics.extend([
-                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
                         f"**Sensitivity (macro avg.):** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
                         f"**Specificity (macro avg.):** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
+                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
+                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
                         f"**F1-score (micro avg.):** {df_cv['F1_micro'].item():.3f} ± {df_cv['std_F1_micro'].item():.3f}",
                         f"**F1-score (macro avg.):** {df_cv['F1_macro'].item():.3f} ± {df_cv['std_F1_macro'].item():.3f}",
                         f"**F1-score (weighted avg.):** {df_cv['F1_weighted'].item():.3f} ± {df_cv['std_F1_weighted'].item():.3f}",
-                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
                         f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}"
                     ])
 
@@ -635,26 +707,64 @@ def performance_metrics(task):
                 st.markdown(metric)
 
         else:
-            df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
-            df_report = df_report.rename(columns={"Unnamed: 0": ""})
+            if task == "Classification":
+                df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+                df_report = df_report.rename(columns={"Unnamed: 0": ""})
 
-            # Format numeric columns except "support"
-            for col in df_report.select_dtypes(include="number").columns:
-                if col != "support":
-                    df_report[col] = df_report[col].map(lambda x: f"{x:.3f}")
+                # Format numeric columns except "support"
+                for col in df_report.select_dtypes(include="number").columns:
+                    if col != "support":
+                        df_report[col] = df_report[col].map(lambda x: f"{x:.3f}")
 
-            df_report["support"] = df_report["support"].map(lambda x: f"{int(x)}")
+                df_report["support"] = df_report["support"].map(lambda x: f"{int(x)}")
 
-            df_report.loc[df_report[""] == "accuracy", "support"] = ""
+                df_report.loc[df_report[""] == "accuracy", "support"] = ""
 
-            st.dataframe(df_report, hide_index=True, use_container_width=True)
+                st.dataframe(df_report, hide_index=True, use_container_width=True)
 
-            path_metrics_other = os.path.join(os.path.join(st.session_state["job_path"], "metrics_other.csv"))
+                path_metrics_other = os.path.join(os.path.join(st.session_state["job_path"], "metrics_other.csv"))
 
-            if os.path.exists(path_metrics_other):
-                df_metrics_other = pd.read_csv(path_metrics_other)
-                auc_value = df_metrics_other[df_metrics_other["Metric"] == "AUC"]["Value"].item()
-                st.markdown(f"**AUC:** {auc_value:.3f}")
+                metric_dict = calculate_metrics_from_confusion_matrix(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+
+                metrics = []
+
+                if "Sn_macro_test" in metric_dict:
+                    metrics.extend([
+                        f"**Sensitivity (macro avg.):** {metric_dict['Sn_macro_test']:.3f}",
+                        f"**Specificity (macro avg.):** {metric_dict['Sp_macro_test']:.3f}",
+                        f"**Accuracy:** {metric_dict['ACC_test']:.3f}",
+                        f"**MCC:** {metric_dict['MCC_macro_test']:.3f}"
+                    ])
+                else:
+                    metrics.extend([
+                        f"**Sensitivity:** {metric_dict['Sn_test']:.3f}",
+                        f"**Specificity:** {metric_dict['Sp_test']:.3f}",
+                        f"**Accuracy:** {metric_dict['ACC_test']:.3f}",
+                        f"**MCC:** {metric_dict['MCC_test']:.3f}"
+                    ])
+
+                if os.path.exists(path_metrics_other):
+                    df_metrics_other = pd.read_csv(path_metrics_other)
+                    auc_value = df_metrics_other[df_metrics_other["Metric"] == "AUC"]["Value"].item()
+                    metrics.extend([f"**AUC:** {auc_value:.3f}"])
+
+                for metric in metrics:
+                    st.markdown(metric)
+
+            elif task == "Regression":
+                df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+
+                metrics = []
+
+                metrics.extend([
+                    f"**Mean Absolute Error:** {df_report.loc[df_report['Metric'] == 'MAE', 'Value'].iloc[0]:.3f}",
+                    f"**Mean Squared Error:** {df_report.loc[df_report['Metric'] == 'MSE', 'Value'].iloc[0]:.3f}",
+                    f"**Root Mean Squared Error:** {df_report.loc[df_report['Metric'] == 'RMSE', 'Value'].iloc[0]:.3f}",
+                    f"**R2:** {df_report.loc[df_report['Metric'] == 'R2', 'Value'].iloc[0]:.3f}"
+                ])
+                
+                for metric in metrics:
+                    st.markdown(metric)
 
     if task == "Classification":
         with col2:
