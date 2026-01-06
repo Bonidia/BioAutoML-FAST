@@ -1,0 +1,29 @@
+[Unit]
+Description=BioAutoML RQ Worker
+After=network.target
+Wants=network.target
+# Optional: Add Redis dependency if you have redis service
+# After=redis-server.service
+# Requires=redis-server.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/BioAutoML-Fast/App
+
+# Explicitly source the venv from parent directory
+ExecStart=/bin/bash -c 'source /root/BioAutoML-Fast/.venv/bin/activate && rq worker bioautoml'
+
+Restart=always
+RestartSec=10
+Environment="PYTHONUNBUFFERED=1"
+
+# Optional: Set Redis connection URL if not default
+# Environment="REDIS_URL=redis://localhost:6379/0"
+
+# Optional: Set log level
+# Environment="RQ_WORKER_LOG_LEVEL=INFO"
+
+[Install]
+WantedBy=multi-user.target

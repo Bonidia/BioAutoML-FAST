@@ -653,7 +653,7 @@ def runUI():
     st.markdown(f"""
         <div style='text-align: center;'>
             <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
-            <h5 style="color:gray">Empowering Researchers with Machine Learning</h5>
+            <h5 style="color:gray">Empowering Breakthroughs in Life Sciences with End-to-End Machine Learning</h5>
         </div>
     """, unsafe_allow_html=True)
 

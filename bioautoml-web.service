@@ -1,0 +1,19 @@
+[Unit]
+Description=BioAutoML Streamlit Web Interface
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/BioAutoML-Fast/App
+
+# Explicitly source the venv from parent directory
+ExecStart=/bin/bash -c 'source /root/BioAutoML-Fast/.venv/bin/activate && streamlit run app.py'
+
+Restart=always
+RestartSec=10
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

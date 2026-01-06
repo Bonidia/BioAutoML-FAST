@@ -11,13 +11,15 @@ def clear_cache():
         if key != "cookie":
             st.session_state.pop(key)
 
-@st.dialog("🍪 Cookie notice", width="large")
+@st.dialog("ℹ️ Use notice", width="large")
 def cookie_dialog():
     st.markdown(
         """
         This web server uses **session cookies solely** to ensure proper functionality.
 
         No personal tracking or persistent cookies are employed.
+
+        This platform is released under the [MIT license](https://opensource.org/licenses/MIT). **Free for academic and commercial use**.
         """
     )
 
@@ -61,7 +63,7 @@ def runUI():
         <hr>
         <div style="text-align:center; font-size: 0.9em;">
         © {datetime.now().year} BioAutoML-FAST — Released under the 
-        <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>. 
+        <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>. Free for academic and commercial use.
         </div>
         <br>
         """,
