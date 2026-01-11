@@ -10,12 +10,12 @@ def main():
     start_all = time.time()  # Start measuring total time of main()
 
     full_datasets_path = "App/datasets"
-    num_runs = 10  # Number of times to run each dataset
+    num_runs = 5  # Number of times to run each dataset
 
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
 
-    for dataset in datasets_list:
+    for dataset in ["dataset9_manavalan_protein_0"]:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         # Skip this dataset if it already has a "runs" folder
@@ -43,25 +43,27 @@ def main():
         # Create a runs folder for this dataset
         os.makedirs(experiments_folder, exist_ok=True)
 
-        for run_num in range(6, num_runs + 1):
+        for run_num in range(1, num_runs + 1):
             # Create a folder for this run inside the runs folder
             run_folder = os.path.join(experiments_folder, f"run_{run_num}")
             if not os.path.exists(run_folder):
                 os.makedirs(run_folder, exist_ok=True)
 
-                classifier, imbalance, fselection = False, True, False
+                classifier = False
 
                 command = [
                     "python",
-                    "BioAutoML-protein.py" if data_type == "Protein" else "BioAutoML-feature.py",
+                    "engineering.py",
+                    "--dtype",
+                    dtype_str,
                     "--estimations",
-                    "1000",
+                    "200",
+                    "--patience",
+                    "80",
+                    "--difference",
+                    "0.001",
                     "--task",
                     task,
-                    "--imbalance",
-                    "1" if imbalance else "0",
-                    "--fselection",
-                    "1" if fselection else "0",
                     "--fasta_train",
                 ]
 
@@ -83,17 +85,31 @@ def main():
                 command.extend(["--output", run_folder])  # Output to the run-specific folder
 
                 print(f"Running dataset {dataset}, iteration {run_num}")
+
+                # === START TIMING THIS RUN ===
+                start_run = time.time()
+
                 subprocess.run(command)
+
+                # === END TIMING THIS RUN ===
+                run_time_seconds = round(time.time() - start_run, 2)
+
+                # Save time spent for this run
+                df_time = pl.DataFrame({
+                    "dataset": [dataset],
+                    "run": [run_num],
+                    "time_seconds": [run_time_seconds],
+                })
+
+                time_csv_path = os.path.join(run_folder, "time_spent.csv")
+                df_time.write_csv(time_csv_path)
 
                 job_data = {
                     "data_type": [data_type],
                     "task": ["Classification" if task == "0" else "Regression"],
                     "training_set": ["Training set"],
                     "testing_set": ["Test set" if testing_set else "No test set"],
-                    "classifier_selected": [classifier], 
-                    "imbalance_methods": [imbalance],  
-                    "feature_selection": [fselection],  
-                    "run_number": [run_num],
+                    "classifier_selected": [classifier]
                 }
 
                 df_job_data = pl.DataFrame(job_data)
@@ -112,7 +128,7 @@ def main():
                     model = joblib.load(model_path)
                     model["train_stats"] = pd.read_csv(os.path.join(run_folder, "train_stats.csv"))
                     joblib.dump(model, model_path)
-    
+
     # End total time
     total_time = round(time.time() - start_all, 2)
     print(f"\n⏱ Total execution time for all datasets: {total_time} seconds")

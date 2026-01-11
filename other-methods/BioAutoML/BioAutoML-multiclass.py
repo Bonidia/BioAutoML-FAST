@@ -43,6 +43,7 @@ from sklearn.impute import SimpleImputer
 # from imblearn.metrics import geometric_mean_score
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from imblearn.pipeline import Pipeline
 from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
 from interpretability_report import Report, REPORT_MAIN_TITLE_MULTICLASS, REPORT_SHAP_PREAMBLE, \
@@ -676,7 +677,7 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
         if "imputer" in model:
             imp = model["imputer"]
             print('There are missing values...')
-            print('Applying SimpleImputer - strategy (mean)...')
+            print('Applying SimpleImputer - strategy (median)...')
             train.replace([np.inf, -np.inf], np.nan, inplace=True)
             train = pd.DataFrame(imp.transform(train), columns=column_train)
             if os.path.exists(ftest):
@@ -694,9 +695,9 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
             inf_test = test.isin([np.inf, -np.inf]).values.any()
         if missing or inf or missing_test or inf_test:
             print('There are missing values...')
-            print('Applying SimpleImputer - strategy (mean)...')
+            print('Applying SimpleImputer - strategy (median)...')
             train.replace([np.inf, -np.inf], np.nan, inplace=True)
-            imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+            imp = SimpleImputer(missing_values=np.nan, strategy='median')
             train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
             model_dict["imputer"] = imp
             if os.path.exists(ftest) is True:
@@ -723,46 +724,34 @@ def multiclass_pipeline(model, train, train_labels, train_nameseq, test, test_la
             test = pd.DataFrame(sc.transform(test), columns=column_test)
 
     """Choosing Classifier """
-    
-    print('Choosing Classifier...')
-    if classifier == 3:
-        print('Tuning: ' + str(bool(tuning)))
-        print('Classifier: XGBClassifier')
-        clf = xgb.XGBClassifier(eval_metric='mlogloss', n_jobs=n_cpu, random_state=63)
-        if imbalance_data:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning:
-            print('Tuning not yet available for XGBClassifier')
-    elif classifier == 1:
-        print('Tuning: ' + str(bool(tuning)))
+    if classifier == 0:
         print('Classifier: Random Forest')
-        clf = RandomForestClassifier(n_estimators=200, n_jobs=n_cpu, random_state=63)
-        if imbalance_data:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning:
-            best_tuning, clf = tuning_rf_bayesian()
-            print('Finished Tuning')
+
+        clf = RandomForestClassifier(
+				n_estimators=500,
+				random_state=63,
+			)
+    elif classifier == 1:
+        print('Classifier: XGBoost')
+
+        clf = xgb.XGBClassifier(
+				n_estimators=500,
+				eval_metric="mlogloss",
+				random_state=63,
+			)
     elif classifier == 2:
-        print('Tuning: ' + str(bool(tuning)))
         print('Classifier: LightGBM')
-        clf = lgb.LGBMClassifier(n_estimators=500, n_jobs=n_cpu, verbosity=-1, random_state=63)
-        if imbalance_data:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning:
-            best_tuning, clf = tuning_lightgbm_bayesian()
-            print('Finished Tuning')
-    elif classifier == 0:
-        print('Tuning: ' + str(bool(tuning)))
-        print('Classifier: CatBoost')
-        clf = CatBoostClassifier(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-                                logging_level='Silent', random_state=63)
-        if imbalance_data:
-            train, train_labels = imbalanced_function(clf, train, train_labels)
-        if tuning:
-            best_tuning, clf = tuning_catboost_bayesian()
-            print('Finished Tuning')
+
+        clf = lgb.LGBMClassifier(
+				n_estimators=500,
+				random_state=63,
+				verbosity=-1
+			)
     else:
         sys.exit('This classifier option does not exist - Try again')
+
+    if imbalance_data:
+        train, train_labels = imbalanced_function(clf, train, train_labels)
 
     """Preprocessing: Feature Importance-Based Feature Selection"""
     

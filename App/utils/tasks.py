@@ -3,7 +3,7 @@ import streamlit as st
 from enum import Enum
 from redis import Redis
 from rq import Queue
-from utils.db import TaskResultManager, TaskStatus
+from .db import TaskResultManager, TaskStatus
 import requests
 
 redis_conn = Redis(host="localhost", port=6379)

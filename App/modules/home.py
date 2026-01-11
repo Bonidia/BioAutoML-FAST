@@ -681,7 +681,7 @@ def runUI():
             """
         )
 
-    MAX_SEQS = 5_000
+    MAX_SEQS = 60_000
 
     queue_info = st.container()
 

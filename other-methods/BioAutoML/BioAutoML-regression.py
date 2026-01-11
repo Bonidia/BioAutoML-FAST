@@ -193,7 +193,7 @@ def regression_pipeline(model, train, train_labels, train_nameseq, test, test_la
 		if "imputer" in model:
 			imp = model["imputer"]
 			print('There are missing values...')
-			print('Applying SimpleImputer - strategy (mean)...')
+			print('Applying SimpleImputer - strategy (median)...')
 			train.replace([np.inf, -np.inf], np.nan, inplace=True)
 			train = pd.DataFrame(imp.transform(train), columns=column_train)
 			if os.path.exists(ftest):
@@ -211,9 +211,9 @@ def regression_pipeline(model, train, train_labels, train_nameseq, test, test_la
 			inf_test = test.isin([np.inf, -np.inf]).values.any()
 		if missing or inf or missing_test or inf_test:
 			print('There are missing values...')
-			print('Applying SimpleImputer - strategy (mean)...')
+			print('Applying SimpleImputer - strategy (median)...')
 			train.replace([np.inf, -np.inf], np.nan, inplace=True)
-			imp = SimpleImputer(strategy='mean')
+			imp = SimpleImputer(strategy='median')
 			train = pd.DataFrame(imp.fit_transform(train), columns=column_train)
 			model_dict["imputer"] = imp
 			if os.path.exists(ftest):
@@ -240,12 +240,33 @@ def regression_pipeline(model, train, train_labels, train_nameseq, test, test_la
 	"""Choosing Regressor"""
 	if not model:
 		if classifier == 0:
-			print('Regressor: CatBoostRegressor')
-			clf = CatBoostRegressor(n_estimators=500, thread_count=n_cpu, nan_mode='Max',
-									logging_level='Silent', random_state=63)
-		elif classifier == 1 or classifier == 2 or classifier == 3:
 			print('Regressor: LightGBM')
-			clf = lgb.LGBMRegressor(n_estimators=500, n_jobs=n_cpu, random_state=63, verbosity=-1)
+			clf = lgb.LGBMRegressor(
+				boosting_type='rf',
+				n_estimators=500,
+				bagging_freq=1,
+				bagging_fraction=0.8,
+				feature_fraction=0.8,
+				random_state=63,
+				verbosity=-1,
+				n_jobs=1
+			)
+		elif classifier == 1:
+			print('Regressor: LightGBM')
+			clf = lgb.LGBMRegressor(
+				boosting_type='gbdt',
+				n_estimators=500,
+				feature_fraction=0.7,
+				bagging_fraction=0.7,
+				bagging_freq=1,
+				min_data_in_leaf=20,
+				random_state=63,
+				verbosity=-1,
+				n_jobs=1
+			)
+		elif classifier == 2:
+			print('Regressor: LightGBM')
+			clf = lgb.LGBMRegressor(n_estimators=500, n_jobs=1, random_state=63, verbosity=-1)
 	else:
 		clf = model["clf"]
 

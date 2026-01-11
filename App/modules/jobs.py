@@ -893,7 +893,6 @@ def compute_shap_values(model, X):
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
 
-    # --- FIX multiclass output ---
     if isinstance(shap_values, list):
         # list[n_classes] of (n_samples, n_features)
         shap_values = np.stack(shap_values, axis=2)
@@ -1069,14 +1068,13 @@ def model_information(data_type, task):
                             "max_leaf_nodes", "min_impurity_decrease", "class_weight"
                         ]
                     )
-                elif "XGB" in clf_str:
+                elif "ExtraTrees" in clf_str:
                     show_params(
-                        "XGBoost",
+                        "Extremely Randomized Trees",
                         params,
                         keys=[
-                            "n_estimators", "learning_rate", "max_depth", "gamma",
-                            "subsample", "colsample_bytree", "reg_alpha", "reg_lambda",
-                            "min_child_weight", "objective"
+                            "n_estimators", "min_samples_split", "min_samples_leaf", "max_features",
+                            "bootstrap"
                         ]
                     )
                 elif "LGBM" in clf_str:
@@ -1102,8 +1100,8 @@ def model_information(data_type, task):
 
                 if "RandomForest" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/rf.png", use_container_width=True)
-                elif "XGB" in str(st.session_state["model"]["clf"]):
-                    st.image("imgs/models/xgboost.png", use_container_width=True)
+                elif "ExtraTrees" in str(st.session_state["model"]["clf"]):
+                    st.image("imgs/models/extra.png", use_container_width=True)
                 elif "LGBM" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 

@@ -15,19 +15,23 @@ import lightgbm as lgb
 import optuna
 import pygad
 # from genetic_selection import GeneticSelectionCV
-from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier, CatBoostRegressor
 from sklearn.metrics import balanced_accuracy_score
-# from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
-# from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import f1_score
-from sklearn.metrics import make_scorer, r2_score, mean_absolute_error
-# from sklearn_genetic import GAFeatureSelectionCV
-# from hyperopt import hp, fmin, tpe, STATUS_OK, Trials, SparkTrials, early_stop
-from catboost import CatBoostRegressor
+from sklearn.metrics import make_scorer, roc_auc_score, matthews_corrcoef, average_precision_score, root_mean_squared_error
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+from sklearn.ensemble import AdaBoostClassifier, AdaBoostRegressor
+from sklearn.ensemble import BaggingClassifier, BaggingRegressor
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.impute import SimpleImputer
 from subprocess import Popen
 from multiprocessing import Manager
 import numpy as np
@@ -39,13 +43,13 @@ def objective_ga_pygad(ga_instance, solution, solution_idx):
 	
 	index = list()
 	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
-				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+				   'TNC': list(range(20, 84)), 'kGap': list(range(84, 148)),
 				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
 				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
 				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
 				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
  
-	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
+	desc = ['NAC', 'DNC', 'TNC', 'kGap', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
          	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
 	for gene in range(0, len(solution)):
 		if int(solution[gene]) == 1:
@@ -120,14 +124,14 @@ def feature_engineering_pygad(task, estimations, train, train_labels, test, fout
 	
 	index = list()
 	descriptors = {'NAC': list(range(0, 4)), 'DNC': list(range(4, 20)),
-				   'TNC': list(range(20, 84)), 'kGap_di': list(range(84, 148)),
+				   'TNC': list(range(20, 84)), 'kGap': list(range(84, 148)),
 				   'kGap_tri': list(range(148, 404)), 'ORF': list(range(404, 414)),
 				   'Fickett': list(range(414, 416)), 'Shannon': list(range(416, 421)),
 				   'FourierBinary': list(range(421, 440)), 'FourierComplex': list(range(440, 459)),
 				   'Tsallis': list(range(459, 464)), 'repDNA': list(range(464, 734))}
 
 
-	desc = ['NAC', 'DNC', 'TNC', 'kGap_di', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
+	desc = ['NAC', 'DNC', 'TNC', 'kGap', 'kGap_tri', 'ORF', 'Fickett', 'Shannon', 
          	'FourierBinary', 'FourierComplex', 'Tsallis', 'repDNA']
  
 	for gene in range(0, len(best)-1):
@@ -151,109 +155,185 @@ def feature_engineering_pygad(task, estimations, train, train_labels, test, fout
 
 	return classifier, path_btrain, path_btest, btrain, btest
 
+class EarlyStoppingCallback:
+    def __init__(self, patience: int = 20, min_delta: float = 0.001):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best_value = None
+        self.no_improve_count = 0
+
+    def __call__(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial):
+        # Ignore pruned or failed trials
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            return
+
+        current_best = study.best_value
+
+        if self.best_value is None:
+            self.best_value = current_best
+            return
+
+        # Check if improvement is meaningful
+        if np.abs(current_best - self.best_value) >= self.min_delta:
+            self.best_value = current_best
+            self.no_improve_count = 0
+        else:
+            self.no_improve_count += 1
+
+        if self.no_improve_count >= self.patience:
+            print(
+                f"Early stopping triggered: "
+                f"no improvement ≥ {self.min_delta} "
+                f"in {self.patience} trials."
+            )
+            study.stop()
 
 def objective(trial, train, task, y):
 
 	"""Automated Feature Engineering - Optuna - Objective Function - Bayesian Optimization"""
- 
-	space = {'Shannon': trial.suggest_categorical('Shannon', [0, 1]),
-			 'Tsallis_23': trial.suggest_categorical('Tsallis_23', [0, 1]),
-			 'Tsallis_30': trial.suggest_categorical('Tsallis_30', [0, 1]),
-			 'Tsallis_40': trial.suggest_categorical('Tsallis_40', [0, 1]),
-			 'ComplexNetworks': trial.suggest_categorical('ComplexNetworks', [0, 1]),
-			 'kGap_di': trial.suggest_categorical('kGap_di', [0, 1]),
-			 'AAC': trial.suggest_categorical('AAC', [0, 1]),
-			 'DPC': trial.suggest_categorical('DPC', [0, 1]),
-			 'CKSAAP': trial.suggest_categorical('CKSAAP', [0, 1]),
-			 'DDE': trial.suggest_categorical('DDE', [0, 1]),
-			 'GAAC': trial.suggest_categorical('GAAC', [0, 1]),
-			 'CKSAAGP': trial.suggest_categorical('CKSAAGP', [0, 1]),
-			 'GDPC': trial.suggest_categorical('GDPC', [0, 1]),
-			 'GTPC': trial.suggest_categorical('GTPC', [0, 1]),
-			 'CTDC': trial.suggest_categorical('CTDC', [0, 1]),
-			 'CTDT': trial.suggest_categorical('CTDT', [0, 1]),
-			 'CTDD': trial.suggest_categorical('CTDD', [0, 1]),
-			 'CTriad': trial.suggest_categorical('CTriad', [0, 1]),
-			 'KSCTriad': trial.suggest_categorical('KSCTriad', [0, 1]),
-			 'Global': trial.suggest_categorical('Global', [0, 1]),
-			 'Peptide': trial.suggest_categorical('Peptide', [0, 1]),
-			 'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
-			 'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1]),
-			#  'EIIP': trial.suggest_categorical('EIIP', [0, 1]),
-			#  'AAAF': trial.suggest_categorical('AAAF', [0, 1]),
-			 'Classifier': trial.suggest_categorical('Classifier', [1, 2, 3])}
 
-	position = int((len(train.columns) - 5046) / 2)
-	index = list()
+	space = {'Shannon': trial.suggest_int('Shannon', 0, 1),
+			'Tsallis_23': trial.suggest_int('Tsallis_23', 0, 1),
+			'Tsallis_30': trial.suggest_int('Tsallis_30', 0, 1),
+			'Tsallis_40': trial.suggest_int('Tsallis_40', 0, 1),
+			'ComplexNetworks': trial.suggest_int('ComplexNetworks', 0, 1),
+			'kGap': trial.suggest_int('kGap', 0, 1),
+			'AAC': trial.suggest_int('AAC', 0, 1),
+			'DPC': trial.suggest_int('DPC', 0, 1),
+			'CKSAAP': trial.suggest_int('CKSAAP', 0, 1),
+			'DDE': trial.suggest_int('DDE', 0, 1),
+			'GAAC': trial.suggest_int('GAAC', 0, 1),
+			'CKSAAGP': trial.suggest_int('CKSAAGP', 0, 1),
+			'GDPC': trial.suggest_int('GDPC', 0, 1),
+			'GTPC': trial.suggest_int('GTPC', 0, 1),
+			'CTDC': trial.suggest_int('CTDC', 0, 1),
+			'CTDT': trial.suggest_int('CTDT', 0, 1),
+			'CTDD': trial.suggest_int('CTDD', 0, 1),
+			'CTriad': trial.suggest_int('CTriad', 0, 1),
+			'KSCTriad': trial.suggest_int('KSCTriad', 0, 1),
+			'Global': trial.suggest_int('Global', 0, 1),
+			'Peptide': trial.suggest_int('Peptide', 0, 1),
+			'Fourier_Integer': trial.suggest_int('Fourier_Integer', 0, 1),
+			'Fourier_EIIP': trial.suggest_int('Fourier_EIIP', 0, 1),
+			'Classifier': trial.suggest_int('Classifier', 0, 2)
+	}
+
 	descriptors = {'Shannon': list(range(0, 5)), 'Tsallis_23': list(range(5, 10)),
-				   'Tsallis_30': list(range(10, 15)), 'Tsallis_40': list(range(15, 20)),
-				   'ComplexNetworks': list(range(20, 98)), 'kGap_di': list(range(98, 498)),
-				   'AAC': list(range(498, 518)),
-				   'DPC': list(range(518, 918)),
-				   'CKSAAP': list(range(918, 3318)), 
-			 	   'DDE': list(range(3318, 3718)),
-			 	   'GAAC': list(range(3718, 3723)),
-			 	   'CKSAAGP': list(range(3723, 3873)),
-			 	   'GDPC': list(range(3873, 3898)),
-			 	   'GTPC': list(range(3898, 4023)),
-			 	   'CTDC': list(range(4023, 4062)),
-			 	   'CTDT': list(range(4062, 4101)),
-			 	   'CTDD': list(range(4101, 4296)),
-			 	   'CTriad': list(range(4296, 4639)),
-			 	   'KSCTriad': list(range(4639, 4982)), 
-				   'Global': list(range(4982, 4992)),
-				   'Peptide': list(range(4992, 5008)),
-				   'Fourier_Integer': list(range(5008, 5027)),
-				   'Fourier_EIIP': list(range(5027, 5046)),}
-				#    'EIIP': list(range(5046, (5046 + position))),
-				#    'AAAF': list(range((5046 + position), len(train.columns)))} 
- 
-	for descriptor, ind in descriptors.items():
-		if int(space[descriptor]) == 1:
-			index = index + ind
-	
-	# === Classification Task ===
+				'Tsallis_30': list(range(10, 15)), 'Tsallis_40': list(range(15, 20)),
+				'ComplexNetworks': list(range(20, 98)), 'kGap': list(range(98, 498)),
+				'AAC': list(range(498, 518)),
+				'DPC': list(range(518, 918)),
+				'CKSAAP': list(range(918, 3318)), 
+				'DDE': list(range(3318, 3718)),
+				'GAAC': list(range(3718, 3723)),
+				'CKSAAGP': list(range(3723, 3873)),
+				'GDPC': list(range(3873, 3898)),
+				'GTPC': list(range(3898, 4023)),
+				'CTDC': list(range(4023, 4062)),
+				'CTDT': list(range(4062, 4101)),
+				'CTDD': list(range(4101, 4296)),
+				'CTriad': list(range(4296, 4639)),
+				'KSCTriad': list(range(4639, 4982)), 
+				'Global': list(range(4982, 4992)),
+				'Peptide': list(range(4992, 5008)),
+				'Fourier_Integer': list(range(5008, 5027)),
+				'Fourier_EIIP': list(range(5027, 5046))
+	}
+
+	index = []
+	for d, inds in descriptors.items():
+		if space[d] == 1:
+			index.extend(inds)
+
+	if len(index) == 0:
+		raise optuna.TrialPruned()
+
+	# === Classification Models ===
+	classifiers = {
+		0: Pipeline([
+			# ("imputer", SimpleImputer(strategy="median")),
+			("clf", RandomForestClassifier(
+				random_state=63,
+			))
+		]),
+		1: Pipeline([
+			# ("imputer", SimpleImputer(strategy="median")),
+			("clf", xgb.XGBClassifier(
+				eval_metric="mlogloss",
+				random_state=63,
+			))
+		]),
+		2: Pipeline([
+			# ("imputer", SimpleImputer(strategy="median")),
+			("clf", lgb.LGBMClassifier(
+				random_state=63,
+				verbosity=-1
+			))
+		])
+	}
+
+	# === Regression Models ===
+	regressors = {
+		# Random Forest–style, scalable
+		0: Pipeline([
+			("imputer", SimpleImputer(strategy="median")),
+			("reg", lgb.LGBMRegressor(
+				boosting_type="rf",
+				bagging_freq=1,
+				bagging_fraction=0.8,
+				feature_fraction=0.8,
+				random_state=63,
+				verbosity=-1,
+			))
+		]),
+		# Extra Trees–like behavior (high randomness)
+		1: Pipeline([
+			("imputer", SimpleImputer(strategy="median")),
+			("reg", lgb.LGBMRegressor(
+				boosting_type="gbdt",
+				feature_fraction=0.7,
+				bagging_fraction=0.7,
+				bagging_freq=1,
+				min_data_in_leaf=20,
+				random_state=63,
+				verbosity=-1,
+			))
+		]),
+		# Standard LightGBM regressor
+		2: Pipeline([
+			("imputer", SimpleImputer(strategy="median")),
+			("reg", lgb.LGBMRegressor(
+				random_state=63,
+				verbosity=-1
+			))
+		])
+	}
+
+	# === Task Handling ===
 	if task == 0:
-		if space['Classifier'] == 0:
-			model = CatBoostClassifier(nan_mode='Max', logging_level='Silent', random_state=63)
-		elif space['Classifier'] == 1:
-			model = RandomForestClassifier(random_state=63)
-		elif space['Classifier'] == 2:
-			model = lgb.LGBMClassifier(random_state=63, verbosity=-1)
-		elif space['Classifier'] == 3:
-			model = xgb.XGBClassifier(eval_metric='mlogloss', random_state=63)
-
-		# Use weighted F1 for multiclass, balanced accuracy for binary
-		if len(np.unique(y)) > 2:
-			score = make_scorer(f1_score, average='weighted')
-		else:
-			score = make_scorer(balanced_accuracy_score)
-
-		kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
-
-	# === Regression Task ===
+		model = classifiers[space['Classifier']]
+		score = make_scorer(matthews_corrcoef)
+		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
 	elif task == 1:
-		if space['Classifier'] == 0:
-			model = CatBoostRegressor(nan_mode='Max', logging_level='Silent', random_state=63)
-		elif space['Classifier'] == 1 or space['Classifier'] == 2 or space['Classifier'] == 3:
-			model = lgb.LGBMRegressor(random_state=63, verbosity=-1)
-			# model = RandomForestRegressor(random_state=63)
-
-		score = make_scorer(r2_score)
-		kfold = KFold(n_splits=5, shuffle=True, random_state=63)
+		model = regressors[space['Classifier']]
+		score = make_scorer(root_mean_squared_error)
+		cv = KFold(n_splits=5, shuffle=True, random_state=63)
 	else:
-		raise ValueError("Invalid task type. Use 0 for classification or 1 for regression.")
+		raise ValueError("Invalid task. Use 0 (classification) or 1 (regression).")
 
-	# === Cross-validation ===
+	# === Cross-Validation ===
 	try:
 		metric = cross_val_score(
 			model,
 			train.iloc[:, index],
 			y,
-			cv=kfold,
-			scoring=score
+			cv=cv,
+			scoring=score,
+			n_jobs=1
 		).mean()
-	except Exception:
+	except Exception as e:
+		print("Trial failed with exception:")
+		print(type(e).__name__, str(e))
 		raise optuna.TrialPruned()
 		
 	return metric
@@ -276,7 +356,7 @@ def feature_engineering_optuna(task, estimations, train, train_labels, test, fou
 	param = {'Shannon': [0, 1], 'Tsallis_23': [0, 1],
 			 'Tsallis_30': [0, 1], 'Tsallis_40': [0, 1],
 			 'ComplexNetworks': [0, 1],
-			 'kGap_di': [0, 1],
+			 'kGap': [0, 1],
 			 'AAC': [0, 1], 'DPC': [0, 1],
 			 'CKSAAP': [0, 1],
 			 'DDE': [0, 1],
@@ -292,31 +372,46 @@ def feature_engineering_optuna(task, estimations, train, train_labels, test, fou
 			 'Global': [0, 1],
 			 'Peptide': [0, 1],
 			 'Fourier_Integer': [0, 1],
-		  	 'Fourier_EIIP': [0, 1], # 'EIIP': [0, 1],
-			#  'AAAF': [0, 1],
-			 'Classifier': [1, 2, 3]}
+		  	 'Fourier_EIIP': [0, 1],
+			 'Classifier': [0, 1, 2]}
  
 	if task == 0:
 		labels = pd.read_csv(train_labels)
 		le = LabelEncoder()
 		y = le.fit_transform(labels)
+		direction = "maximize"
 	elif task == 1:
 		y = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(fnameseqtrain)["nameseq"].to_list()]
+		direction = "minimize"
 
 	func = lambda trial: objective(trial, ns.df, task, y)
-	
-	results = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
-	results.optimize(func, n_trials=estimations, timeout=7200, n_jobs=n_cpu, show_progress_bar=True)
- 
+
+	early_stopping = EarlyStoppingCallback(
+		patience=patience,
+		min_delta=difference
+	)
+
+	results = optuna.create_study(
+		direction=direction,
+		sampler=optuna.samplers.TPESampler(n_startup_trials=30, multivariate=True, group=True, constant_liar=True)
+	)
+
+	results.optimize(
+		func,
+		n_trials=estimations,
+		timeout=7200,
+		show_progress_bar=True,
+		callbacks=[early_stopping],
+		n_jobs=8
+	)
+
 	best_tuning = results.best_params
- 
+
 	print(best_tuning)
 	
-	position = int((len(df_x.columns) - 5046) / 2)
-	index = list()
 	descriptors = {'Shannon': list(range(0, 5)), 'Tsallis_23': list(range(5, 10)),
 				   'Tsallis_30': list(range(10, 15)), 'Tsallis_40': list(range(15, 20)),
-				   'ComplexNetworks': list(range(20, 98)), 'kGap_di': list(range(98, 498)),
+				   'ComplexNetworks': list(range(20, 98)), 'kGap': list(range(98, 498)),
 				   'AAC': list(range(498, 518)),
 				   'DPC': list(range(518, 918)),
 				   'CKSAAP': list(range(918, 3318)), 
@@ -334,9 +429,9 @@ def feature_engineering_optuna(task, estimations, train, train_labels, test, fou
 				   'Peptide': list(range(4992, 5008)),
 				   'Fourier_Integer': list(range(5008, 5027)),
 				   'Fourier_EIIP': list(range(5027, 5046)),}
-				#    'EIIP': list(range(5046, (5046 + position))),
-				#    'AAAF': list(range((5046 + position), len(df_x.columns)))}
  
+	index = list()
+
 	# Determine which descriptors were selected
 	descriptor_presence = {}
 	for descriptor, ind in descriptors.items():
@@ -367,7 +462,6 @@ def feature_engineering_optuna(task, estimations, train, train_labels, test, fou
 		btest, path_btest = '', ''
 
 	return classifier, path_btrain, path_btest, btrain, btest
-
 
 def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 
@@ -404,7 +498,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 		'Tsallis_30.csv',
 		'Tsallis_40.csv',
 		'ComplexNetworks.csv',
-		'kGap_di.csv',
+		'kGap.csv',
 		'AAC.csv',
 		'DPC.csv',
 		'iFeature-features.csv',
@@ -459,7 +553,7 @@ def feature_extraction(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 				'-l', label_file, '-k', '3'],
 				
 				['python', 'MathFeature/methods/Kgap.py',
-				'-i', preprocessed_fasta, '-o', os.path.join(path, 'kGap_di.csv'),
+				'-i', preprocessed_fasta, '-o', os.path.join(path, 'kGap.csv'),
 				'-l', label_file, '-k', '1', '-bef', '1', '-aft', '1', '-seq', '3'],
 				
 				['python', 'other-methods/ExtractionTechniques-Protein.py',
@@ -646,7 +740,9 @@ if __name__ == '__main__':
 	parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
 	parser.add_argument('-imbalance', '--imbalance', default=0, help='Imbalanced data methods - 0: False, 1: True - Default: False')
 	parser.add_argument('-fselection', '--fselection', default=0, help='Feature selection - 0: False, 1: True - Default: False')
-	parser.add_argument('-estimations', '--estimations', default=50, help='number of estimations - BioAutoML - default = 50')
+	parser.add_argument('-estimations', '--estimations', default=200, help='number of estimations - BioAutoML - default = 200')
+	parser.add_argument('-patience', '--patience', default=50, help='number of trials before early stopping - default = 50')
+	parser.add_argument('-difference', '--difference', default=0.001, help='difference before early stopping - default = 0.001')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 
@@ -658,6 +754,8 @@ if __name__ == '__main__':
 	algo = int(args.algorithm)
 	task = int(args.task)
 	estimations = int(args.estimations)
+	patience = int(args.patience)
+	difference = float(args.difference)
 	imbalance_data = str(args.imbalance)
 	fs = str(args.fselection)
 	n_cpu = int(args.n_cpu)
@@ -747,4 +845,3 @@ if __name__ == '__main__':
 
 ##########################################################################
 ##########################################################################
-n_cpu
