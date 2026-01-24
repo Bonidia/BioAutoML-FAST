@@ -124,7 +124,7 @@ def objective_nucleotide(trial, train, task, y):
 		1: Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("clf", xgb.XGBClassifier(
-				eval_metric="mlogloss",
+				eval_metric="mlogloss" if len(np.unique(y)) > 2 else "logloss",
 				random_state=63,
 			))
 		]),
@@ -178,11 +178,11 @@ def objective_nucleotide(trial, train, task, y):
 	if task == 0:
 		model = classifiers[space['Classifier']]
 		score = make_scorer(matthews_corrcoef)
-		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+		cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=63)
 	elif task == 1:
 		model = regressors[space['Classifier']]
 		score = make_scorer(root_mean_squared_error)
-		cv = KFold(n_splits=5, shuffle=True, random_state=63)
+		cv = KFold(n_splits=3, shuffle=True, random_state=63)
 	else:
 		raise ValueError("Invalid task. Use 0 (classification) or 1 (regression).")
 
@@ -193,8 +193,7 @@ def objective_nucleotide(trial, train, task, y):
 			train.iloc[:, index],
 			y,
 			cv=cv,
-			scoring=score,
-			n_jobs=1
+			scoring=score
 		).mean()
 	except Exception:
 		raise optuna.TrialPruned()
@@ -256,7 +255,7 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 		timeout=7200,
 		show_progress_bar=True,
 		callbacks=[early_stopping],
-		n_jobs=8
+		n_jobs=32
 	)
 
 	best_tuning = results.best_params
@@ -378,7 +377,7 @@ def objective_aminoacid(trial, train, task, y):
 		1: Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("clf", xgb.XGBClassifier(
-				eval_metric="mlogloss",
+				eval_metric="mlogloss" if len(np.unique(y)) > 2 else "logloss",
 				random_state=63,
 			))
 		]),
@@ -432,11 +431,11 @@ def objective_aminoacid(trial, train, task, y):
 	if task == 0:
 		model = classifiers[space['Classifier']]
 		score = make_scorer(matthews_corrcoef)
-		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+		cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=63)
 	elif task == 1:
 		model = regressors[space['Classifier']]
 		score = make_scorer(root_mean_squared_error)
-		cv = KFold(n_splits=5, shuffle=True, random_state=63)
+		cv = KFold(n_splits=3, shuffle=True, random_state=63)
 	else:
 		raise ValueError("Invalid task. Use 0 (classification) or 1 (regression).")
 
@@ -447,8 +446,7 @@ def objective_aminoacid(trial, train, task, y):
 			train.iloc[:, index],
 			y,
 			cv=cv,
-			scoring=score,
-			n_jobs=1
+			scoring=score
 		).mean()
 
 	except Exception as e:
@@ -522,7 +520,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 		timeout=7200,
 		show_progress_bar=True,
 		callbacks=[early_stopping],
-		n_jobs=8
+		n_jobs=32
 	)
 
 	best_tuning = results.best_params
@@ -1005,6 +1003,7 @@ if __name__ == '__main__':
 	parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
 	parser.add_argument('-estimations', '--estimations', default=200, help='number of estimations - BioAutoML - default = 200')
 	parser.add_argument('-patience', '--patience', default=80, help='number of trials before early stopping - default = 80')
+	parser.add_argument('-tuning', '--tuning', default=50, help='number of trials for hyperparameter tuning - default = 50')
 	parser.add_argument('-difference', '--difference', default=0.001, help='difference before early stopping - default = 0.001')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -1018,6 +1017,7 @@ if __name__ == '__main__':
 	task = int(args.task)
 	estimations = int(args.estimations)
 	patience = int(args.patience)
+	tuning = int(args.tuning)
 	difference = float(args.difference)
 	n_cpu = int(args.n_cpu)
 	foutput = str(args.output)
@@ -1073,7 +1073,7 @@ if __name__ == '__main__':
 	cost = (time.time() - start_time) / 60
 	print('Computation time - Pipeline - Automated Feature Engineering: %s minutes' % cost)
 
-	subprocess.run(['python', 'generation.py', '-task', str(task), '-train', path_train,
+	subprocess.run(['python', 'generation.py', '-task', str(task), '-tuning', str(tuning), '-train', path_train,
 					'-train_label', ftrain_labels, '-test', path_test, 
 					'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
 					'-test_nameseq', fnameseqtest, '-classifier', str(classifier), '-n_cpu', str(n_cpu), '-output', foutput])

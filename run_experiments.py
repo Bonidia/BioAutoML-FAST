@@ -15,7 +15,7 @@ def main():
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
 
-    for dataset in ["dataset9_manavalan_protein_0"]:
+    for dataset in ["dataset11_charoenkwan_protein_0"]:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         # Skip this dataset if it already has a "runs" folder
@@ -57,9 +57,11 @@ def main():
                     "--dtype",
                     dtype_str,
                     "--estimations",
-                    "200",
+                    "300",
                     "--patience",
-                    "80",
+                    "100",
+                    "--tuning",
+                    "100",
                     "--difference",
                     "0.001",
                     "--task",
@@ -81,7 +83,7 @@ def main():
                     command.append("--fasta_label_test")
                     command.extend(test_labels)
 
-                command.extend(["--n_cpu", "60"])
+                command.extend(["--n_cpu", "8"])
                 command.extend(["--output", run_folder])  # Output to the run-specific folder
 
                 print(f"Running dataset {dataset}, iteration {run_num}")

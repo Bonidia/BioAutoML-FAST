@@ -35,7 +35,7 @@ from imblearn.under_sampling import CondensedNearestNeighbour
 from imblearn.combine import SMOTEENN
 from imblearn.combine import SMOTETomek
 from imblearn.under_sampling import ClusterCentroids
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.metrics import make_scorer, matthews_corrcoef, cohen_kappa_score, recall_score, f1_score
 from imblearn.metrics import geometric_mean_score
@@ -147,7 +147,7 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
                 'gmean': make_scorer(geometric_mean_score)
             }
 
-        kfold = StratifiedKFold(n_splits=10, shuffle=True)
+        kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=63)
         scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
 
         save_measures(output_cross, scores)
@@ -166,7 +166,7 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
             'RMSE': 'neg_root_mean_squared_error',
             'R2': 'r2'}
 
-        kfold = KFold(n_splits=5, shuffle=True)
+        kfold = KFold(n_splits=10, shuffle=True, random_state=63)
         scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
 
         save_measures(output_cross, scores)
@@ -223,7 +223,142 @@ def save_prediction(task, prediction, nameseqs, pred_output):
 
     preds_df.to_csv(pred_output, index=False)
 
-def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, test_labels, test_nameseq, classifier, output):
+def get_best_model_optuna(X, y, task, classifier_type, n_trials):
+    """
+    Runs Optuna optimization and returns the best configured pipeline.
+    task: 0 = Classification, 1 = Regression
+    classifier_type: 0 = RF, 1 = XGB, 2 = LGBM 
+    """
+    
+    def objective(trial):
+        # Define base pipeline components
+        imputer = SimpleImputer(strategy='mean')
+        
+        # --- CLASSIFICATION (Task 0) ---
+        if task == 0:
+            if classifier_type == 0: # Random Forest
+                params = {
+                    'n_estimators': trial.suggest_int('n_estimators', 50, 300),
+                    'max_depth': trial.suggest_int('max_depth', 3, 20),
+                    'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
+                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 5),
+                    'random_state': 63
+                }
+                model = RandomForestClassifier(**params)
+                
+            elif classifier_type == 1: # XGBoost
+                params = {
+                    'n_estimators': trial.suggest_int('n_estimators', 50, 300),
+                    'max_depth': trial.suggest_int('max_depth', 3, 10),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+                    'random_state': 63,
+                    'eval_metric': 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
+                }
+                model = xgb.XGBClassifier(**params)
+                
+            elif classifier_type == 2: # LightGBM
+                params = {
+                    'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                    'num_leaves': trial.suggest_int('num_leaves', 20, 100),
+                    'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 1.0),
+                    'bagging_fraction': trial.suggest_float('bagging_fraction', 0.4, 1.0),
+                    'bagging_freq': trial.suggest_int('bagging_freq', 1, 7),
+                    'random_state': 63,
+                    'verbosity': -1
+                }
+                model = lgb.LGBMClassifier(**params)
+
+            clf_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
+            cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=63)
+            score = make_scorer(matthews_corrcoef)
+            scores = cross_val_score(clf_pipeline, X, y, cv=cv, scoring=score)
+            return scores.mean()
+
+        # --- REGRESSION (Task 1) ---
+        elif task == 1:
+            common_lgb_params = {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
+                'num_leaves': trial.suggest_int('num_leaves', 20, 100),
+                'random_state': 63,
+                'verbosity': -1,
+                'n_jobs': 1
+            }
+
+            if classifier_type == 0: # LightGBM (RF Mode)
+                # Specific overrides for RF mode
+                params = common_lgb_params.copy()
+                params.update({
+                    'boosting_type': 'rf',
+                    'bagging_freq': trial.suggest_int('bagging_freq', 1, 5),
+                    'bagging_fraction': trial.suggest_float('bagging_fraction', 0.5, 0.9),
+                    'feature_fraction': trial.suggest_float('feature_fraction', 0.5, 0.9)
+                })
+                model = lgb.LGBMRegressor(**params)
+
+            elif classifier_type == 1: # LightGBM (Random Hist / GBDT)
+                params = common_lgb_params.copy()
+                params.update({
+                    'boosting_type': 'gbdt',
+                    'feature_fraction': trial.suggest_float('feature_fraction', 0.5, 1.0),
+                    'bagging_fraction': trial.suggest_float('bagging_fraction', 0.5, 1.0),
+                    'bagging_freq': trial.suggest_int('bagging_freq', 1, 5),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 10, 50)
+                })
+                model = lgb.LGBMRegressor(**params)
+                
+            elif classifier_type == 2: # LightGBM (Standard)
+                params = common_lgb_params.copy()
+                model = lgb.LGBMRegressor(**params)
+
+            # Metric: Negative RMSE for regression (Optuna maximizes return value)
+            reg_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
+            cv = KFold(n_splits=10, shuffle=True, random_state=63)
+            score = make_scorer(root_mean_squared_error)
+            scores = cross_val_score(reg_pipeline, X, y, cv=cv, scoring=score)
+            return scores.mean()
+
+    # Create Study
+    if task == 0:
+        direction = "maximize"
+    else:
+        direction = "minimize"
+
+    study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True))
+    study.optimize(objective, n_trials=n_trials, timeout=7200, show_progress_bar=True, n_jobs=32)
+    
+    print(f"Best Trial: {study.best_value:.4f}")
+    print("Best Params: ", study.best_params)
+
+    # Reconstruct the best model pipeline
+    best_params = study.best_params
+    imputer = SimpleImputer(strategy='mean')
+    
+    # Re-instantiate based on task/type with best params
+    if task == 0:
+        if classifier_type == 0:
+            final_model = RandomForestClassifier(random_state=63, **best_params)
+        elif classifier_type == 1:
+            # Handle xgboost eval_metric outside params if needed or ensure it's in best_params handling
+            metric = 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
+            final_model = xgb.XGBClassifier(random_state=63, eval_metric=metric, **best_params)
+        elif classifier_type == 2:
+            final_model = lgb.LGBMClassifier(random_state=63, verbosity=-1, **best_params)
+    else:
+        # For regression, ensure static params (like boosting_type) are re-added if not optimized
+        if classifier_type == 0:
+            final_model = lgb.LGBMRegressor(boosting_type='rf', random_state=63, verbosity=-1, n_jobs=1, **best_params)
+        elif classifier_type == 1:
+            final_model = lgb.LGBMRegressor(boosting_type='gbdt', random_state=63, verbosity=-1, n_jobs=1, **best_params)
+        elif classifier_type == 2:
+            final_model = lgb.LGBMRegressor(random_state=63, verbosity=-1, n_jobs=1, **best_params)
+
+    return Pipeline(steps=[("imputer", imputer), ("clf", final_model)])
+
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, classifier, output):
     
     global clf, lb_encoder, ord_encoder
 
@@ -241,25 +376,14 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
     
     column_test = ''
 
-    """Number of Samples and Features: Train and Test"""
+    """Basic Info"""
+    print(f'Number of samples (train): {len(train)}')
+    print(f'Number of features (train): {len(column_train)}')
 
-    print('Number of samples (train): ' + str(len(train)))
-    
-    print('Number of Labels (train):')
-    df_label = pd.DataFrame(train_labels)
-    print(str(pd.value_counts(df_label.values.flatten())))
-
-    if os.path.exists(ftest) is True:
+    if os.path.exists(ftest):
         column_test = test.columns
-        print('Number of samples (test): ' + str(len(test)))
-        print('Number of Labels (test):')
-        df_label = pd.DataFrame(test_labels)
-        print(str(pd.value_counts(df_label.values.flatten())))
-
-    print('Number of features (train): ' + str(len(column_train)))
-
-    if os.path.exists(ftest_labels) is True:
-        print('Number of features (test): ' + str(len(column_test)))
+        print(f'Number of samples (test): {len(test)}')
+        print(f'Number of features (test): {len(column_test)}')
 
     """Preprocessing:  Label Encoding"""
 
@@ -267,7 +391,8 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
         lb_encoder = model["label_encoder"]
         ord_encoder = model["ordinal_encoder"]
 
-        train_labels = lb_encoder.transform(train_labels)
+        if task == 0:
+            train_labels = lb_encoder.transform(train_labels)
 
         string_cols = train.select_dtypes(include=["object"]).columns
         if not string_cols.empty:
@@ -275,7 +400,8 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
     else:
         lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder()
 
-        train_labels = lb_encoder.fit_transform(train_labels)
+        if task == 0:
+            train_labels = lb_encoder.fit_transform(train_labels)
 
         string_cols = train.select_dtypes(include=["object"]).columns
         if not string_cols.empty:
@@ -286,7 +412,8 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
             if not string_cols.empty:
                 test[string_cols] = ord_encoder.transform(test[string_cols])
 
-        model_dict["label_encoder"] = lb_encoder
+        if task == 0:
+            model_dict["label_encoder"] = lb_encoder
         model_dict["ordinal_encoder"] = ord_encoder
     
     """Preprocessing:  Missing Values"""
@@ -319,90 +446,102 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
         sc = StandardScaler()
         model_dict["scaler"] = sc.fit(train)
 
+        print('--- Optimizing Hyperparameters with Optuna ---')
+        # We replace the hardcoded logic with the optimization function call
+        clf = get_best_model_optuna(train, train_labels, task, classifier, tuning)
+        print('--- Optimization Complete ---')
+        
+        # Mapping names for logging purposes
         if task == 0:
-            if classifier == 0:
-                print('Classifier: Random Forest')
+            names = ["Random Forest", "XGBoost", "LightGBM"]
+            print(f"Selected Classifier: {names[classifier]} (Optimized)")
+        else:
+            names = ["LightGBM (RF)", "LightGBM (Random Hist)", "LightGBM"]
+            print(f"Selected Regressor: {names[classifier]} (Optimized)")
+        # if task == 0:
+        #     if classifier == 0:
+        #         print('Classifier: Random Forest')
 
-                clf = Pipeline(steps=[
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("clf", RandomForestClassifier(
-                        n_estimators=200,
-                        random_state=63,
-                    ))
-                ])
+        #         clf = Pipeline(steps=[
+        #             ("imputer", SimpleImputer(strategy="mean")),
+        #             ("clf", RandomForestClassifier(
+        #                 n_estimators=200,
+        #                 random_state=63,
+        #             ))
+        #         ])
 
-            elif classifier == 1:
-                print('Classifier: XGBoost')
+        #     elif classifier == 1:
+        #         print('Classifier: XGBoost')
 
-                if len(np.unique(train_labels)) > 2:
-                    clf = Pipeline(steps=[
-                        ("imputer", SimpleImputer(strategy="mean")),
-                        ("clf", xgb.XGBClassifier(
-                            eval_metric="logloss",
-                            random_state=63,
-                        ))
-                    ])
-                else:
-                    clf = Pipeline(steps=[
-                        ("imputer", SimpleImputer(strategy="mean")),
-                        ("clf", xgb.XGBClassifier(
-                            eval_metric="mlogloss",
-                            random_state=63,
-                        ))
-                    ])  
-            elif classifier == 2:
-                print('Classifier: LightGBM')
+        #         if len(np.unique(train_labels)) > 2:
+        #             clf = Pipeline(steps=[
+        #                 ("imputer", SimpleImputer(strategy="mean")),
+        #                 ("clf", xgb.XGBClassifier(
+        #                     eval_metric="logloss",
+        #                     random_state=63,
+        #                 ))
+        #             ])
+        #         else:
+        #             clf = Pipeline(steps=[
+        #                 ("imputer", SimpleImputer(strategy="mean")),
+        #                 ("clf", xgb.XGBClassifier(
+        #                     eval_metric="mlogloss",
+        #                     random_state=63,
+        #                 ))
+        #             ])  
+        #     elif classifier == 2:
+        #         print('Classifier: LightGBM')
 
-                clf = Pipeline(steps=[
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("clf", lgb.LGBMClassifier(
-                        n_estimators=500,
-                        random_state=63,
-                        verbosity=-1
-                    ))
-                ])
-        elif task == 1:
-            if classifier == 0:
-                print('Regressor: LightGBM (RF)')
+        #         clf = Pipeline(steps=[
+        #             ("imputer", SimpleImputer(strategy="mean")),
+        #             ("clf", lgb.LGBMClassifier(
+        #                 n_estimators=500,
+        #                 random_state=63,
+        #                 verbosity=-1
+        #             ))
+        #         ])
+        # elif task == 1:
+        #     if classifier == 0:
+        #         print('Regressor: LightGBM (RF)')
 
-                clf = Pipeline(steps=[
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("clf", lgb.LGBMRegressor(
-                        boosting_type='rf',
-                        n_estimators=500,
-                        bagging_freq=1,
-                        bagging_fraction=0.8,
-                        feature_fraction=0.8,
-                        random_state=63,
-                        verbosity=-1,
-                        n_jobs=1
-                    ))
-                ])
+        #         clf = Pipeline(steps=[
+        #             ("imputer", SimpleImputer(strategy="mean")),
+        #             ("clf", lgb.LGBMRegressor(
+        #                 boosting_type='rf',
+        #                 n_estimators=500,
+        #                 bagging_freq=1,
+        #                 bagging_fraction=0.8,
+        #                 feature_fraction=0.8,
+        #                 random_state=63,
+        #                 verbosity=-1,
+        #                 n_jobs=1
+        #             ))
+        #         ])
 
-            elif classifier == 1:
-                print('Regressor: LightGBM (Random Hist)')
+        #     elif classifier == 1:
+        #         print('Regressor: LightGBM (Random Hist)')
 
-                clf = Pipeline(steps=[
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("clf", lgb.LGBMRegressor(
-                        boosting_type='gbdt',
-                        n_estimators=500,
-                        feature_fraction=0.7,
-                        bagging_fraction=0.7,
-                        bagging_freq=1,
-                        min_data_in_leaf=20,
-                        random_state=63,
-                        verbosity=-1,
-                        n_jobs=1
-                    ))
-                ])
-            elif classifier == 2:
-                print('Regressor: LightGBM')
+        #         clf = Pipeline(steps=[
+        #             ("imputer", SimpleImputer(strategy="mean")),
+        #             ("clf", lgb.LGBMRegressor(
+        #                 boosting_type='gbdt',
+        #                 n_estimators=500,
+        #                 feature_fraction=0.7,
+        #                 bagging_fraction=0.7,
+        #                 bagging_freq=1,
+        #                 min_data_in_leaf=20,
+        #                 random_state=63,
+        #                 verbosity=-1,
+        #                 n_jobs=1
+        #             ))
+        #         ])
+        #     elif classifier == 2:
+        #         print('Regressor: LightGBM')
 
-                clf = Pipeline(steps=[
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("clf", lgb.LGBMRegressor(n_estimators=500, n_jobs=1, random_state=63, verbosity=-1))
-                ])
+        #         clf = Pipeline(steps=[
+        #             ("imputer", SimpleImputer(strategy="mean")),
+        #             ("clf", lgb.LGBMRegressor(n_estimators=500, n_jobs=1, random_state=63, verbosity=-1))
+        #         ])
 
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
@@ -481,8 +620,7 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
                     balanced = balanced_accuracy_score(test_labels, preds)
                     gmean = geometric_mean_score(test_labels, preds)
                     mcc = matthews_corrcoef(test_labels, preds)
-                    matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
-
+                    
                     metrics = {
                         'Metric': ['Accuracy', 'AUC', 'Balanced ACC', 'G-mean', 'MCC'],
                         'Value': [accu, auc, balanced, gmean, mcc]
@@ -491,6 +629,7 @@ def predictive_pipeline(model, task, train, train_labels, train_nameseq, test, t
                     metrics_df = pd.DataFrame(metrics)
                     metrics_df.to_csv(metrics_other_output, index=False)
 
+                matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
                 matrix_output_test = os.path.join(output, "test_confusion_matrix.csv")
                 matrix_test.to_csv(matrix_output_test)
                 print('Saving confusion matrix in ' + matrix_output_test + '...')
@@ -537,6 +676,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
+    parser.add_argument('-tuning', '--tuning', default=50, help='number of trials for hyperparameter tuning - default = 50')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-train_nameseq', '--train_nameseq', default='', help='csv with sequence names')
@@ -550,6 +690,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     path_model = args.path_model
     task = int(args.task)
+    tuning = int(args.tuning)
     ftrain = str(args.train)
     ftrain_labels = str(args.train_label)
     nameseq_train = str(args.train_nameseq)
@@ -566,56 +707,72 @@ if __name__ == '__main__':
     if path_model:
         model = joblib.load(path_model)
     else:
-        if os.path.exists(ftrain) is True:
+        if os.path.exists(ftrain):
             train_read = pd.read_csv(ftrain)
             print('Train - %s: Found File' % ftrain)
         else:
             print('Train - %s: File not exists' % ftrain)
             sys.exit()
 
-        if os.path.exists(ftrain_labels) is True:
-            train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
-            print('Train_labels - %s: Found File' % ftrain_labels)
-        else:
-            print('Train_labels - %s: File not exists' % ftrain_labels)
-            sys.exit()
-
-        if os.path.exists(nameseq_train) is True:
+        if os.path.exists(nameseq_train):
             train_nameseq_read = pd.read_csv(nameseq_train).values.ravel()
             print('Train_nameseq - %s: Found File' % nameseq_train)
         else:
             print('Train_nameseq - %s: File not exists' % nameseq_train)
             sys.exit()
 
+        if task == 0:
+            if os.path.exists(ftrain_labels):
+                train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
+                print('Train_labels - %s: Found File' % ftrain_labels)
+            else:
+                print('Train_labels - %s: File not exists' % ftrain_labels)
+                sys.exit()
+        elif task == 1:
+            if os.path.exists(ftrain_labels):
+                train_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_train)["nameseq"].to_list()]
+                print('Train_labels - %s: Found File' % ftrain_labels)
+            else:
+                print('Train_labels - %s: File not exists' % ftrain_labels)
+                sys.exit()
+
     test_read = ''
     if ftest:
-        if os.path.exists(ftest) is True:
+        if os.path.exists(ftest):
             test_read = pd.read_csv(ftest)
             print('Test - %s: Found File' % ftest)
         else:
             print('Test - %s: File not exists' % ftest)
             sys.exit()
 
-    test_labels_read = ''
-    if ftest_labels:
-        if os.path.exists(ftest_labels) is True:
-            test_labels_read = pd.read_csv(ftest_labels).values.ravel()
-            print('Test_labels - %s: Found File' % ftest_labels)
-        else:
-            print('Test_labels - %s: File not exists' % ftest_labels)
-            sys.exit()
-
     test_nameseq_read = ''
     if nameseq_test:
-        if os.path.exists(nameseq_test) is True:
+        if os.path.exists(nameseq_test):
             test_nameseq_read = pd.read_csv(nameseq_test).values.ravel()
             print('Test_nameseq - %s: Found File' % nameseq_test)
         else:
             print('Test_nameseq - %s: File not exists' % nameseq_test)
             sys.exit()
 
+    test_labels_read = ''
+    if ftest_labels:
+        if task == 0:
+            if os.path.exists(ftest_labels):
+                test_labels_read = pd.read_csv(ftest_labels).values.ravel()
+                print('Test_labels - %s: Found File' % ftest_labels)
+            else:
+                print('Test_labels - %s: File not exists' % ftest_labels)
+                sys.exit()
+        elif task == 1:
+            if os.path.exists(ftest_labels):
+                test_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_test)["nameseq"].to_list()]
+                print('Test_labels - %s: Found File' % ftest_labels)
+            else:
+                print('Test_labels - %s: File not exists' % ftest_labels)
+                sys.exit()
+
     predictive_pipeline(
-        model, task, train_read, train_labels_read, train_nameseq_read, 
+        model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
         test_read, test_labels_read, test_nameseq_read, classifier, foutput
     )
 
