@@ -288,12 +288,12 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
-def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, classifier, imbalance, email=None, password=None):
+def submit_job(job_name, train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
     job_id = job.get_id()
-    manager.store_result(job_id, TaskStatus.RUNNING)
+    manager.store_start(job_id, TaskStatus.RUNNING)
 
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
@@ -333,8 +333,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command = [
                     "python",
                     "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
-                    "--imbalance",
-                    "1" if imbalance else "0",
+                    "--tuning",
+                    "1" if tuning else "0",
                     "--train", os.path.join(feat_path, "train.csv"),
                     "--train_label", os.path.join(feat_path, "train_labels.csv"),
                     "--train_nameseq", os.path.join(feat_path, "fnameseqtrain.csv"),
@@ -418,11 +418,13 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
             
                 command = [
                     "python",
-                    "BioAutoML-feature.py" if data_type == "DNA/RNA" else "BioAutoML-protein.py",
+                    "engineering.py",
+                    "--dtype", 
+                    data_type,
                     "--task",
                     "1" if task == "Regression" else "0",
-                    "--imbalance",
-                    "1" if imbalance else "0",
+                    "--tuning",
+                    "150" if tuning else "0",
                     "--fasta_train",
                 ]
 
@@ -482,22 +484,13 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
             model = joblib.load(save_path)
 
-            if "label_encoder" in model:
-                task = "Classification"
-                command = [
-                    "python",
-                    "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-                    "-path_model", save_path,
-                    "-nf", "True",
-                ]
-            else:
-                task = "Regression"
-                command = [
-                    "python",
-                    "BioAutoML-regression.py",
-                    "-path_model", save_path,
-                    "-nf", "True",
-                ]
+            command = [
+                "python",
+                "generation.py", 
+                "--task",
+                "0" if "label_encoder" in model else "1",
+                "-path_model", save_path,
+            ]
 
             if test_files:
                 data_type = "Structured data"
@@ -567,12 +560,12 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                     os.makedirs(test_path)
 
                     if testing == "Test set":
-                        if task == "Classification":
+                        if "label_encoder" in model:
                             for file in test_files:
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
                                     f.write(file.getvalue())
-                        elif task == "Regression":
+                        else:
                             for file in test_files:
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
@@ -618,11 +611,12 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
         print(f"Error in job processing: {e}")
 
 @st.dialog("Job submitted")
-def job_submitted_dialog(job_id):
+def job_submitted_dialog(job_id, job_name):
     st.success(
-        f'Job submitted to the queue.\n\n'
+        f'Job **{job_name}** submitted to the queue.\n\n'
         f'You can consult the results in **Jobs** using the following ID:\n\n'
-        f'**{job_id}**'
+        f'**{job_id}**\n\n'
+        f'Save this ID securely.'
     )
 
 def count_fasta_sequences(uploaded_files):
@@ -713,6 +707,7 @@ def runUI():
     data_type_map = {
         "Nucleotide": "DNA/RNA",
         "Amino acid": "Protein",
+        "Structured data": "Structured data",
     }
 
     with col2:
@@ -720,20 +715,23 @@ def runUI():
                                 help="Whether to use a labeled testing set to evaluate the model, or alternatively, an unlabeled prediction set.")
         
         if training == "Training set":
-            data_type_label = st.selectbox(":dna: Data type", list(data_type_map.keys()), # "Structured data" (TO BE DONE)
+            data_type_label = st.selectbox(":dna: Data type", list(data_type_map.keys()),
                                     help="Any sequence that includes ambiguous nucleotides or amino acids will be preprocessed, with all ambiguous characters removed.")
 
             data_type = data_type_map[data_type_label]
         else:
             data_type = None
 
-    if training == "Training set" and task == "Classification":
-        checkcol1, checkcol2, checkcol3 = st.columns(3)
+    if training == "Training set" and data_type != "Structured data":
+        checkcol1, checkcol2, checkcol3, checkcol4 = st.columns(4)
 
         with checkcol1:
-            imbalance = st.checkbox("Oversampling/Undersampling", help="Whether to use imbalanced techniques for the datasets if the classes are not evenly distributed.")
-            
+            tuning = st.checkbox("Hyperparameter tuning", help="Whether to use hyperparameter tuning for the model (this can make the training take longer).")
+        
         with checkcol2:
+            job_name = st.text_input("Name for your job submission", help="Name to help track your submission in the queue in Jobs.")
+
+        with checkcol3:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
             # Simple validation (not strict): show warning if looks invalid
@@ -741,14 +739,17 @@ def runUI():
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
 
-        with checkcol3:
+        with checkcol4:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-    elif training == "Load model" or task == "Regression":
-        imbalance = False
+    elif training == "Load model":
+        tuning = False
 
-        checkcol1, checkcol2 = st.columns(2)
+        checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
+            job_name = st.text_input("Name for your submission job", help="Name to help track your submission in the queue in Jobs.")
+
+        with checkcol2:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
             # Simple validation (not strict): show warning if looks invalid
@@ -756,23 +757,8 @@ def runUI():
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
         
-        with checkcol2:
+        with checkcol3:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-
-    if training == "Training set" and data_type == "Structured data":
-        # Show algorithm choices depending on the selected task
-        if task == "Classification":
-            classifier = st.selectbox(":wrench: Algorithm for structured data",
-                                      ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
-                                      help="Classification algorithms for structured data.")
-        elif task == "Regression":
-            classifier = st.selectbox(":wrench: Algorithm for structured data",
-                                      ["Random Forest Regressor", "XGBoost Regressor", "LightGBM Regressor", "CatBoost Regressor"],
-                                      help="Regression algorithms for structured data.")
-        else:
-            classifier = st.selectbox(":wrench: Algorithm for structured data",
-                                      ["Random Forest", "XGBoost", "LightGBM", "CatBoost"],
-                                      help="Choose algorithm.")
             
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
@@ -892,8 +878,10 @@ def runUI():
                 st.error("Please upload the required test or prediction file(s).")
             st.stop()
 
-        if training == "Training set" or training == "Load model":
-            classifier = False
+        if not job_name:
+            with queue_info:
+                st.error("Please provide a name for your submission job.")
+            st.stop()    
 
         if testing == "No test set":
             test_files = None
@@ -921,6 +909,7 @@ def runUI():
                 st.stop()
 
         fn_kwargs = {
+            "job_name": job_name,
             "train_files": train_files,
             "test_files": test_files,
             "predict_path":  predict_path,
@@ -928,8 +917,7 @@ def runUI():
             "task":      task,
             "training":  training,
             "testing":   testing,
-            "classifier":classifier,
-            "imbalance": imbalance,
+            "tuning": tuning,
             "email":     email,
             "password":  password
         }
@@ -944,15 +932,14 @@ def runUI():
             "task": [task],
             "training_set": [training == "Training set"],
             "testing_set": [testing],
-            "classifier_selected": [classifier], 
-            "imbalance_methods": [imbalance],
+            "tuning": [tuning],
         }
 
         df_job_data = pl.DataFrame(job_data)
         tsv_path = os.path.join(job_path, "job_info.tsv")
         df_job_data.write_csv(tsv_path, separator='\t')
 
-        job_submitted_dialog(job_id)
+        job_submitted_dialog(job_id, job_name)
 
 if __name__ == "__main__":
     runUI()

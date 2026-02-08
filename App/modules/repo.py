@@ -323,7 +323,7 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
 
     job = get_current_job()
     job_id = job.get_id()
-    manager.store_result(job_id, TaskStatus.RUNNING)
+    manager.store_start(job_id, TaskStatus.RUNNING)
 
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
@@ -338,23 +338,12 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
             # Create symbolic link
             os.symlink(save_path, link_path)
 
-            if "label_encoder" in model:
-                task = "Classification"
-                command = [
-                    "python",
-                    "BioAutoML-multiclass.py" if len(model["label_encoder"].classes_) > 2 else "BioAutoML-binary.py",
-                    "-path_model", save_path,
-                    "-nf", "True",
-                ]
-            else:
-                task = "Regression"
-                command = [
-                    "python",
-                    "BioAutoML-regression.py",
-                    "-path_model", save_path,
-                    "-nf", "True",
-                ]
-
+            command = [
+                "python",
+                "generation.py",
+                "--path_model", save_path,
+                "--task", "0" if "label_encoder" in model else "1"
+            ]
             
             if test_files:
                 data_type = "Structured data"
@@ -424,12 +413,12 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                     os.makedirs(test_path)
 
                     if testing == "Test set":
-                        if task == "Classification":
+                        if "label_encoder" in model:
                             for file in test_files:
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
                                     f.write(file.getvalue())
-                        elif task == "Regression":
+                        else:
                             for file in test_files:
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
@@ -759,10 +748,10 @@ def runUI():
         dataset_id = model_map[model]["dataset"]
         cite_key = model_map[model]["cite"]
 
-        df_train_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_6/train_stats.csv"))
+        df_train_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_1/train_stats.csv"))
 
-        if os.path.exists(os.path.join("datasets", dataset_id, "runs/run_6/test_stats.csv")):
-            df_test_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_6/test_stats.csv"))
+        if os.path.exists(os.path.join("datasets", dataset_id, "runs/run_1/test_stats.csv")):
+            df_test_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_1/test_stats.csv"))
         else:
             df_test_stats = pd.DataFrame()
 
@@ -851,7 +840,7 @@ def runUI():
             elif dtype_str == "dnarna":
                 data_type = "DNA/RNA"
 
-            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_6")
+            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
 
             fn_kwargs = {
                 "dataset_path":  dataset_path,

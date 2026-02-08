@@ -16,7 +16,6 @@ import shap
 import optuna
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import cross_val_predict
-from catboost import CatBoostClassifier
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_validate
@@ -27,23 +26,13 @@ from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import matthews_corrcoef, classification_report
 from sklearn.feature_selection import SelectFromModel
-from imblearn.over_sampling import SMOTE
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.under_sampling import NearMiss
-from imblearn.under_sampling import EditedNearestNeighbours
-from imblearn.under_sampling import CondensedNearestNeighbour
-from imblearn.combine import SMOTEENN
-from imblearn.combine import SMOTETomek
-from imblearn.under_sampling import ClusterCentroids
 from sklearn.model_selection import StratifiedKFold, KFold
-from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.metrics import make_scorer, matthews_corrcoef, cohen_kappa_score, recall_score, f1_score
 from imblearn.metrics import geometric_mean_score
 from imblearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
-from tpot import TPOTClassifier
 from numpy.random import default_rng
 from functools import partial
 from sklearn.metrics import mean_absolute_error, mean_squared_error, root_mean_squared_error
@@ -223,23 +212,28 @@ def save_prediction(task, prediction, nameseqs, pred_output):
 
     preds_df.to_csv(pred_output, index=False)
 
-def get_best_model_optuna(X, y, task, classifier_type, n_trials):
+def get_best_model_optuna(X, y, task, n_trials):
     """
     Runs Optuna optimization and returns the best configured pipeline.
     task: 0 = Classification, 1 = Regression
     classifier_type: 0 = RF, 1 = XGB, 2 = LGBM 
     """
+
+    if isinstance(y, list):
+	    y = np.array(y)
     
     def objective(trial):
         # Define base pipeline components
         imputer = SimpleImputer(strategy='mean')
         
+        classifier_type = trial.suggest_categorical('Classifier', [0, 1, 2])
+
         # --- CLASSIFICATION (Task 0) ---
         if task == 0:
             if classifier_type == 0: # Random Forest
                 params = {
                     'n_estimators': trial.suggest_int('n_estimators', 50, 300),
-                    'max_depth': trial.suggest_int('max_depth', 3, 20),
+                    'max_depth': trial.suggest_int('max_depth_rf', 3, 20),
                     'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
                     'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 5),
                     'random_state': 63
@@ -249,8 +243,8 @@ def get_best_model_optuna(X, y, task, classifier_type, n_trials):
             elif classifier_type == 1: # XGBoost
                 params = {
                     'n_estimators': trial.suggest_int('n_estimators', 50, 300),
-                    'max_depth': trial.suggest_int('max_depth', 3, 10),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                    'max_depth': trial.suggest_int('max_depth_xgb', 3, 10),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.3),
                     'subsample': trial.suggest_float('subsample', 0.5, 1.0),
                     'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
                     'random_state': 63,
@@ -261,7 +255,7 @@ def get_best_model_optuna(X, y, task, classifier_type, n_trials):
             elif classifier_type == 2: # LightGBM
                 params = {
                     'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.3),
                     'num_leaves': trial.suggest_int('num_leaves', 20, 100),
                     'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 1.0),
                     'bagging_fraction': trial.suggest_float('bagging_fraction', 0.4, 1.0),
@@ -272,10 +266,31 @@ def get_best_model_optuna(X, y, task, classifier_type, n_trials):
                 model = lgb.LGBMClassifier(**params)
 
             clf_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
-            cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=63)
-            score = make_scorer(matthews_corrcoef)
-            scores = cross_val_score(clf_pipeline, X, y, cv=cv, scoring=score)
-            return scores.mean()
+            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+
+            fold_scores = []
+            for step, (train_idx, val_idx) in enumerate(cv.split(X, y)):
+                # Split data
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y[train_idx], y[val_idx]
+                
+                # Fit and Predict
+                clf_pipeline.fit(X_train, y_train)
+                preds = clf_pipeline.predict(X_val)
+                
+                # Calculate Metric (MCC)
+                metric = matthews_corrcoef(y_val, preds)
+                fold_scores.append(metric)
+                
+                # Report intermediate mean score to Optuna
+                intermediate_value = np.mean(fold_scores)
+                trial.report(intermediate_value, step)
+                
+                # Prune if this trial is performing poorly compared to others at this step
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+
+            return np.mean(fold_scores)
 
         # --- REGRESSION (Task 1) ---
         elif task == 1:
@@ -316,10 +331,31 @@ def get_best_model_optuna(X, y, task, classifier_type, n_trials):
 
             # Metric: Negative RMSE for regression (Optuna maximizes return value)
             reg_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
-            cv = KFold(n_splits=10, shuffle=True, random_state=63)
-            score = make_scorer(root_mean_squared_error)
-            scores = cross_val_score(reg_pipeline, X, y, cv=cv, scoring=score)
-            return scores.mean()
+            cv = KFold(n_splits=5, shuffle=True, random_state=63)
+
+            fold_scores = []
+            for step, (train_idx, val_idx) in enumerate(cv.split(X, y)):
+                # Split data
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y[train_idx], y[val_idx]
+                
+                # Fit and Predict
+                reg_pipeline.fit(X_train, y_train)
+                preds = reg_pipeline.predict(X_val)
+                
+                # Calculate Metric (RMSE)
+                metric = root_mean_squared_error(y_val, preds)
+                fold_scores.append(metric)
+                
+                # Report intermediate mean score to Optuna
+                intermediate_value = np.mean(fold_scores)
+                trial.report(intermediate_value, step)
+                
+                # Prune if this trial is performing poorly compared to others at this step
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+
+            return np.mean(fold_scores)
 
     # Create Study
     if task == 0:
@@ -327,38 +363,54 @@ def get_best_model_optuna(X, y, task, classifier_type, n_trials):
     else:
         direction = "minimize"
 
-    study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True))
-    study.optimize(objective, n_trials=n_trials, timeout=7200, show_progress_bar=True, n_jobs=32)
-    
-    print(f"Best Trial: {study.best_value:.4f}")
-    print("Best Params: ", study.best_params)
+    if n_trials > 0:
+        study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True))
+        study.optimize(objective, n_trials=n_trials, timeout=10_800, show_progress_bar=True, n_jobs=16)
+        
+        print(f"Best Trial Score: {study.best_value:.4f}")
+        print("Best Params Raw:", study.best_params)
 
-    # Reconstruct the best model pipeline
-    best_params = study.best_params
-    imputer = SimpleImputer(strategy='mean')
-    
-    # Re-instantiate based on task/type with best params
-    if task == 0:
-        if classifier_type == 0:
-            final_model = RandomForestClassifier(random_state=63, **best_params)
-        elif classifier_type == 1:
-            # Handle xgboost eval_metric outside params if needed or ensure it's in best_params handling
-            metric = 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
-            final_model = xgb.XGBClassifier(random_state=63, eval_metric=metric, **best_params)
-        elif classifier_type == 2:
-            final_model = lgb.LGBMClassifier(random_state=63, verbosity=-1, **best_params)
+        # --- RECONSTRUCT BEST MODEL ---
+        best_params = study.best_params.copy()
+        
+        # 1. Extract and remove the classifier selector key
+        best_clf_type = best_params.pop('Classifier')
     else:
-        # For regression, ensure static params (like boosting_type) are re-added if not optimized
-        if classifier_type == 0:
-            final_model = lgb.LGBMRegressor(boosting_type='rf', random_state=63, verbosity=-1, n_jobs=1, **best_params)
-        elif classifier_type == 1:
-            final_model = lgb.LGBMRegressor(boosting_type='gbdt', random_state=63, verbosity=-1, n_jobs=1, **best_params)
-        elif classifier_type == 2:
-            final_model = lgb.LGBMRegressor(random_state=63, verbosity=-1, n_jobs=1, **best_params)
+        best_clf_type = 2
+    
+    final_model = None
+    
+    if task == 0:
+        if best_clf_type == 0: # Random Forest
+            if 'max_depth_rf' in best_params:
+                best_params['max_depth'] = best_params.pop('max_depth_rf')
+            final_model = RandomForestClassifier(random_state=63, **best_params if n_trials > 0 else {})
+            
+        elif best_clf_type == 1: # XGBoost
+            if 'max_depth_xgb' in best_params:
+                best_params['max_depth'] = best_params.pop('max_depth_xgb')
+            
+            metric = 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
+            final_model = xgb.XGBClassifier(random_state=63, eval_metric=metric, **best_params if n_trials > 0 else {})
+            
+        elif best_clf_type == 2: # LightGBM
+            final_model = lgb.LGBMClassifier(random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
 
-    return Pipeline(steps=[("imputer", imputer), ("clf", final_model)])
+    else: # Regression (Task 1)
+        if best_clf_type == 0: # LGBM (RF Mode)
+            final_model = lgb.LGBMRegressor(boosting_type='rf', random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            
+        elif best_clf_type == 1: # LGBM (GBDT Mode)
+            final_model = lgb.LGBMRegressor(boosting_type='gbdt', random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            
+        elif best_clf_type == 2: # LGBM (Standard)
+            final_model = lgb.LGBMRegressor(random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, classifier, output):
+    final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
+    
+    return final_pipeline, best_clf_type
+
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output):
     
     global clf, lb_encoder, ord_encoder
 
@@ -388,15 +440,15 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     """Preprocessing:  Label Encoding"""
 
     if model:
-        lb_encoder = model["label_encoder"]
-        ord_encoder = model["ordinal_encoder"]
-
-        if task == 0:
+        if "label_encoder" in model:
+            lb_encoder = model["label_encoder"]
             train_labels = lb_encoder.transform(train_labels)
 
-        string_cols = train.select_dtypes(include=["object"]).columns
-        if not string_cols.empty:
-            train[string_cols] = ord_encoder.transform(train[string_cols])
+        if "ordinal_encoder" in model:
+            ord_encoder = model["ordinal_encoder"]
+            string_cols = train.select_dtypes(include=["object"]).columns
+            if not string_cols.empty:
+                train[string_cols] = ord_encoder.transform(train[string_cols])
     else:
         lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder()
 
@@ -448,101 +500,19 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
-        clf = get_best_model_optuna(train, train_labels, task, classifier, tuning)
+        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning)
+
         print('--- Optimization Complete ---')
         
-        # Mapping names for logging purposes
         if task == 0:
-            names = ["Random Forest", "XGBoost", "LightGBM"]
-            print(f"Selected Classifier: {names[classifier]} (Optimized)")
+            names = {0: "Random Forest", 1: "XGBoost", 2: "LightGBM"}
+            print(f"Optuna Selected Classifier: {names[selected_type_id]}")
         else:
-            names = ["LightGBM (RF)", "LightGBM (Random Hist)", "LightGBM"]
-            print(f"Selected Regressor: {names[classifier]} (Optimized)")
-        # if task == 0:
-        #     if classifier == 0:
-        #         print('Classifier: Random Forest')
+            names = {0: "LightGBM (RF Mode)", 1: "LightGBM (Random Hist)", 2: "LightGBM (Standard)"}
+            print(f"Optuna Selected Regressor: {names[selected_type_id]}")
 
-        #         clf = Pipeline(steps=[
-        #             ("imputer", SimpleImputer(strategy="mean")),
-        #             ("clf", RandomForestClassifier(
-        #                 n_estimators=200,
-        #                 random_state=63,
-        #             ))
-        #         ])
-
-        #     elif classifier == 1:
-        #         print('Classifier: XGBoost')
-
-        #         if len(np.unique(train_labels)) > 2:
-        #             clf = Pipeline(steps=[
-        #                 ("imputer", SimpleImputer(strategy="mean")),
-        #                 ("clf", xgb.XGBClassifier(
-        #                     eval_metric="logloss",
-        #                     random_state=63,
-        #                 ))
-        #             ])
-        #         else:
-        #             clf = Pipeline(steps=[
-        #                 ("imputer", SimpleImputer(strategy="mean")),
-        #                 ("clf", xgb.XGBClassifier(
-        #                     eval_metric="mlogloss",
-        #                     random_state=63,
-        #                 ))
-        #             ])  
-        #     elif classifier == 2:
-        #         print('Classifier: LightGBM')
-
-        #         clf = Pipeline(steps=[
-        #             ("imputer", SimpleImputer(strategy="mean")),
-        #             ("clf", lgb.LGBMClassifier(
-        #                 n_estimators=500,
-        #                 random_state=63,
-        #                 verbosity=-1
-        #             ))
-        #         ])
-        # elif task == 1:
-        #     if classifier == 0:
-        #         print('Regressor: LightGBM (RF)')
-
-        #         clf = Pipeline(steps=[
-        #             ("imputer", SimpleImputer(strategy="mean")),
-        #             ("clf", lgb.LGBMRegressor(
-        #                 boosting_type='rf',
-        #                 n_estimators=500,
-        #                 bagging_freq=1,
-        #                 bagging_fraction=0.8,
-        #                 feature_fraction=0.8,
-        #                 random_state=63,
-        #                 verbosity=-1,
-        #                 n_jobs=1
-        #             ))
-        #         ])
-
-        #     elif classifier == 1:
-        #         print('Regressor: LightGBM (Random Hist)')
-
-        #         clf = Pipeline(steps=[
-        #             ("imputer", SimpleImputer(strategy="mean")),
-        #             ("clf", lgb.LGBMRegressor(
-        #                 boosting_type='gbdt',
-        #                 n_estimators=500,
-        #                 feature_fraction=0.7,
-        #                 bagging_fraction=0.7,
-        #                 bagging_freq=1,
-        #                 min_data_in_leaf=20,
-        #                 random_state=63,
-        #                 verbosity=-1,
-        #                 n_jobs=1
-        #             ))
-        #         ])
-        #     elif classifier == 2:
-        #         print('Regressor: LightGBM')
-
-        #         clf = Pipeline(steps=[
-        #             ("imputer", SimpleImputer(strategy="mean")),
-        #             ("clf", lgb.LGBMRegressor(n_estimators=500, n_jobs=1, random_state=63, verbosity=-1))
-        #         ])
-
+        print('--- Optimization Complete ---')
+        
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
     print('Training: StratifiedKFold (cross-validation = 10)...')
@@ -684,8 +654,6 @@ if __name__ == '__main__':
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = 1')
-    parser.add_argument('-classifier', '--classifier', default=0,
-                        help='Classifier - 0: Random Forest, 1: Random Forest, 2: XGBoost, 3: LightGBM')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
     args = parser.parse_args()
     path_model = args.path_model
@@ -698,7 +666,6 @@ if __name__ == '__main__':
     ftest_labels = str(args.test_label)
     nameseq_test = str(args.test_nameseq)
     n_cpu = int(args.n_cpu)
-    classifier = int(args.classifier)
     foutput = str(args.output)
     start_time = time.time()
 
@@ -773,7 +740,7 @@ if __name__ == '__main__':
 
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
-        test_read, test_labels_read, test_nameseq_read, classifier, foutput
+        test_read, test_labels_read, test_nameseq_read, foutput
     )
 
     cost = (time.time() - start_time) / 60

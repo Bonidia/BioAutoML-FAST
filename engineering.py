@@ -87,8 +87,7 @@ def objective_nucleotide(trial, train, task, y):
 		'DAC': trial.suggest_categorical('DAC', [0, 1]),
 		'TAC': trial.suggest_categorical('TAC', [0, 1]),
 		'TCC': trial.suggest_categorical('TCC', [0, 1]),
-		'TACC': trial.suggest_categorical('TACC', [0, 1]),
-		'Classifier': trial.suggest_int('Classifier', 0, 2)
+		'TACC': trial.suggest_categorical('TACC', [0, 1])
 	}
 
 	# Descriptor indices
@@ -113,89 +112,67 @@ def objective_nucleotide(trial, train, task, y):
 	if len(index) == 0:
 		raise optuna.TrialPruned()
 
-	# === Classification Models ===
-	classifiers = {
-		0: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("clf", RandomForestClassifier(
-				random_state=63,
-			))
-		]),
-		1: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("clf", xgb.XGBClassifier(
-				eval_metric="mlogloss" if len(np.unique(y)) > 2 else "logloss",
-				random_state=63,
-			))
-		]),
-		2: Pipeline([
+	# === Task Handling ===
+	if task == 0:
+		model = Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("clf", lgb.LGBMClassifier(
 				random_state=63,
 				verbosity=-1
 			))
 		])
-	}
-
-	# === Regression Models ===
-	regressors = {
-		# Random Forest–style, scalable
-		0: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("reg", lgb.LGBMRegressor(
-				boosting_type="rf",
-				bagging_freq=1,
-				bagging_fraction=0.8,
-				feature_fraction=0.8,
-				random_state=63,
-				verbosity=-1,
-			))
-		]),
-		# Extra Trees–like behavior (high randomness)
-		1: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("reg", lgb.LGBMRegressor(
-				boosting_type="gbdt",
-				feature_fraction=0.7,
-				bagging_fraction=0.7,
-				bagging_freq=1,
-				min_data_in_leaf=20,
-				random_state=63,
-				verbosity=-1,
-			))
-		]),
-		# Standard LightGBM regressor
-		2: Pipeline([
+		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+	elif task == 1:
+		model = Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("reg", lgb.LGBMRegressor(
 				random_state=63,
 				verbosity=-1
 			))
 		])
-	}
-
-	# === Task Handling ===
-	if task == 0:
-		model = classifiers[space['Classifier']]
-		score = make_scorer(matthews_corrcoef)
-		cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=63)
-	elif task == 1:
-		model = regressors[space['Classifier']]
-		score = make_scorer(root_mean_squared_error)
-		cv = KFold(n_splits=3, shuffle=True, random_state=63)
+		cv = KFold(n_splits=5, shuffle=True, random_state=63)
 	else:
 		raise ValueError("Invalid task. Use 0 (classification) or 1 (regression).")
 
+	if isinstance(y, list):
+		y = np.array(y)
+
 	# === Cross-Validation ===
+	fold_scores = []
+	X_subset = train.iloc[:, index]
+
 	try:
-		metric = cross_val_score(
-			model,
-			train.iloc[:, index],
-			y,
-			cv=cv,
-			scoring=score
-		).mean()
+		# Manual CV loop to enable pruning
+		for step, (train_idx, val_idx) in enumerate(cv.split(X_subset, y)):
+			X_train, X_val = X_subset.iloc[train_idx], X_subset.iloc[val_idx]
+			y_train, y_val = y[train_idx], y[val_idx]
+			
+			model.fit(X_train, y_train)
+			preds = model.predict(X_val)
+			
+			if task == 0:
+				# MCC for classification
+				val_score = matthews_corrcoef(y_val, preds)
+			else:
+				# RMSE for regression
+				val_score = root_mean_squared_error(y_val, preds)
+			
+			fold_scores.append(val_score)
+			
+			# Report the mean score so far to Optuna
+			intermediate_value = np.mean(fold_scores)
+			trial.report(intermediate_value, step)
+			
+			# Prune if this trial is performing poorly
+			if trial.should_prune():
+				raise optuna.TrialPruned()
+		
+		metric = np.mean(fold_scores)
+	except optuna.TrialPruned:
+		raise
 	except Exception:
+		rint("Trial failed with exception:")
+		print(type(e).__name__, str(e))
 		raise optuna.TrialPruned()
 
 	return metric
@@ -225,8 +202,7 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 			'SC-PseTNC': [0, 1], 
 			'DAC': [0, 1],
 			'TAC': [0, 1], 'TCC': [0, 1],
-			'TACC': [0, 1],
-			'Classifier': [0, 1, 2]}
+			'TACC': [0, 1]}
 	
 	if task == 0:
 		labels = pd.read_csv(train_labels)
@@ -252,10 +228,10 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 	results.optimize(
 		func,
 		n_trials=estimations,
-		timeout=7200,
+		timeout=10_800,
 		show_progress_bar=True,
 		callbacks=[early_stopping],
-		n_jobs=32
+		n_jobs=16
 	)
 
 	best_tuning = results.best_params
@@ -287,8 +263,6 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 	# Save presence/absence table
 	df_presence = pd.DataFrame([descriptor_presence])
 	df_presence.to_csv(os.path.join(path_bio, 'selected_descriptors.csv'), index=False)
-
-	classifier = best_tuning['Classifier']
 	
 	if test != '':
 		df_test = pd.read_csv(test)
@@ -304,36 +278,36 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 	else:
 		btest, path_btest = '', ''
 
-	return classifier, path_btrain, path_btest, btrain, btest
+	return path_btrain, path_btest, btrain, btest
 
 def objective_aminoacid(trial, train, task, y):
 
 	"""Automated Feature Engineering - Optuna - Objective Function - Bayesian Optimization"""
 
-	space = {'Shannon': trial.suggest_int('Shannon', 0, 1),
-			'Tsallis_23': trial.suggest_int('Tsallis_23', 0, 1),
-			'Tsallis_30': trial.suggest_int('Tsallis_30', 0, 1),
-			'Tsallis_40': trial.suggest_int('Tsallis_40', 0, 1),
-			'ComplexNetworks': trial.suggest_int('ComplexNetworks', 0, 1),
-			'kGap': trial.suggest_int('kGap', 0, 1),
-			'AAC': trial.suggest_int('AAC', 0, 1),
-			'DPC': trial.suggest_int('DPC', 0, 1),
-			'CKSAAP': trial.suggest_int('CKSAAP', 0, 1),
-			'DDE': trial.suggest_int('DDE', 0, 1),
-			'GAAC': trial.suggest_int('GAAC', 0, 1),
-			'CKSAAGP': trial.suggest_int('CKSAAGP', 0, 1),
-			'GDPC': trial.suggest_int('GDPC', 0, 1),
-			'GTPC': trial.suggest_int('GTPC', 0, 1),
-			'CTDC': trial.suggest_int('CTDC', 0, 1),
-			'CTDT': trial.suggest_int('CTDT', 0, 1),
-			'CTDD': trial.suggest_int('CTDD', 0, 1),
-			'CTriad': trial.suggest_int('CTriad', 0, 1),
-			'KSCTriad': trial.suggest_int('KSCTriad', 0, 1),
-			'Global': trial.suggest_int('Global', 0, 1),
-			'Peptide': trial.suggest_int('Peptide', 0, 1),
-			'Fourier_Integer': trial.suggest_int('Fourier_Integer', 0, 1),
-			'Fourier_EIIP': trial.suggest_int('Fourier_EIIP', 0, 1),
-			'Classifier': trial.suggest_int('Classifier', 0, 2)
+	space = {
+			'Shannon': trial.suggest_categorical('Shannon', [0, 1]),
+			'Tsallis_23': trial.suggest_categorical('Tsallis_23', [0, 1]),
+			'Tsallis_30': trial.suggest_categorical('Tsallis_30', [0, 1]),
+			'Tsallis_40': trial.suggest_categorical('Tsallis_40', [0, 1]),
+			'ComplexNetworks': trial.suggest_categorical('ComplexNetworks', [0, 1]),
+			'kGap': trial.suggest_categorical('kGap', [0, 1]),
+			'AAC': trial.suggest_categorical('AAC', [0, 1]),
+			'DPC': trial.suggest_categorical('DPC', [0, 1]),
+			'CKSAAP': trial.suggest_categorical('CKSAAP', [0, 1]),
+			'DDE': trial.suggest_categorical('DDE', [0, 1]),
+			'GAAC': trial.suggest_categorical('GAAC', [0, 1]),
+			'CKSAAGP': trial.suggest_categorical('CKSAAGP', [0, 1]),
+			'GDPC': trial.suggest_categorical('GDPC', [0, 1]),
+			'GTPC': trial.suggest_categorical('GTPC', [0, 1]),
+			'CTDC': trial.suggest_categorical('CTDC', [0, 1]),
+			'CTDT': trial.suggest_categorical('CTDT', [0, 1]),
+			'CTDD': trial.suggest_categorical('CTDD', [0, 1]),
+			'CTriad': trial.suggest_categorical('CTriad', [0, 1]),
+			'KSCTriad': trial.suggest_categorical('KSCTriad', [0, 1]),
+			'Global': trial.suggest_categorical('Global', [0, 1]),
+			'Peptide': trial.suggest_categorical('Peptide', [0, 1]),
+			'Fourier_Integer': trial.suggest_categorical('Fourier_Integer', [0, 1]),
+			'Fourier_EIIP': trial.suggest_categorical('Fourier_EIIP', [0, 1])
 	}
 
 	descriptors = {'Shannon': list(range(0, 5)), 'Tsallis_23': list(range(5, 10)),
@@ -366,89 +340,59 @@ def objective_aminoacid(trial, train, task, y):
 	if len(index) == 0:
 		raise optuna.TrialPruned()
 
-	# === Classification Models ===
-	classifiers = {
-		0: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("clf", RandomForestClassifier(
-				random_state=63,
-			))
-		]),
-		1: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("clf", xgb.XGBClassifier(
-				eval_metric="mlogloss" if len(np.unique(y)) > 2 else "logloss",
-				random_state=63,
-			))
-		]),
-		2: Pipeline([
+	# === Task Handling ===
+	if task == 0:
+		model = Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("clf", lgb.LGBMClassifier(
 				random_state=63,
 				verbosity=-1
 			))
 		])
-	}
-
-	# === Regression Models ===
-	regressors = {
-		# Random Forest–style, scalable
-		0: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("reg", lgb.LGBMRegressor(
-				boosting_type="rf",
-				bagging_freq=1,
-				bagging_fraction=0.8,
-				feature_fraction=0.8,
-				random_state=63,
-				verbosity=-1,
-			))
-		]),
-		# Extra Trees–like behavior (high randomness)
-		1: Pipeline([
-			("imputer", SimpleImputer(strategy="mean")),
-			("reg", lgb.LGBMRegressor(
-				boosting_type="gbdt",
-				feature_fraction=0.7,
-				bagging_fraction=0.7,
-				bagging_freq=1,
-				min_data_in_leaf=20,
-				random_state=63,
-				verbosity=-1,
-			))
-		]),
-		# Standard LightGBM regressor
-		2: Pipeline([
+		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+	elif task == 1:
+		model = Pipeline([
 			("imputer", SimpleImputer(strategy="mean")),
 			("reg", lgb.LGBMRegressor(
 				random_state=63,
 				verbosity=-1
 			))
 		])
-	}
-
-	# === Task Handling ===
-	if task == 0:
-		model = classifiers[space['Classifier']]
-		score = make_scorer(matthews_corrcoef)
-		cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=63)
-	elif task == 1:
-		model = regressors[space['Classifier']]
-		score = make_scorer(root_mean_squared_error)
-		cv = KFold(n_splits=3, shuffle=True, random_state=63)
+		cv = KFold(n_splits=5, shuffle=True, random_state=63)
 	else:
 		raise ValueError("Invalid task. Use 0 (classification) or 1 (regression).")
 
-	# === Cross-Validation ===
-	try:
-		metric = cross_val_score(
-			model,
-			train.iloc[:, index],
-			y,
-			cv=cv,
-			scoring=score
-		).mean()
+	if isinstance(y, list):
+		y = np.array(y)
+		
+	fold_scores = []
+	X_subset = train.iloc[:, index]
 
+	try:
+		for step, (train_idx, val_idx) in enumerate(cv.split(X_subset, y)):
+			X_train, X_val = X_subset.iloc[train_idx], X_subset.iloc[val_idx]
+			y_train, y_val = y[train_idx], y[val_idx]
+
+			model.fit(X_train, y_train)
+			preds = model.predict(X_val)
+
+			if task == 0:
+				val_score = matthews_corrcoef(y_val, preds)
+			else:
+				val_score = root_mean_squared_error(y_val, preds)
+			
+			fold_scores.append(val_score)
+
+			# Report mean to Optuna for pruning
+			trial.report(np.mean(fold_scores), step)
+
+			if trial.should_prune():
+				raise optuna.TrialPruned()
+		
+		metric = np.mean(fold_scores)
+
+	except optuna.TrialPruned:
+		raise
 	except Exception as e:
 		print("Trial failed with exception:")
 		print(type(e).__name__, str(e))
@@ -490,8 +434,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 			'Global': [0, 1],
 			'Peptide': [0, 1],
 			'Fourier_Integer': [0, 1],
-			'Fourier_EIIP': [0, 1],
-			'Classifier': [0, 1, 2]}
+			'Fourier_EIIP': [0, 1]}
 
 	if task == 0:
 		labels = pd.read_csv(train_labels)
@@ -520,7 +463,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 		timeout=7200,
 		show_progress_bar=True,
 		callbacks=[early_stopping],
-		n_jobs=32
+		n_jobs=16
 	)
 
 	best_tuning = results.best_params
@@ -561,7 +504,6 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 	# Save presence/absence summary CSV
 	df_presence = pd.DataFrame([descriptor_presence])
 	df_presence.to_csv(os.path.join(path_bio, 'selected_descriptors.csv'), index=False)
-	classifier = best_tuning['Classifier']
 
 	if test != '':
 		df_test = pd.read_csv(test)
@@ -577,7 +519,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 	else:
 		btest, path_btest = '', ''
 
-	return classifier, path_btrain, path_btest, btrain, btest
+	return path_btrain, path_btest, btrain, btest
 
 def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
 
@@ -1003,7 +945,7 @@ if __name__ == '__main__':
 	parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
 	parser.add_argument('-estimations', '--estimations', default=200, help='number of estimations - BioAutoML - default = 200')
 	parser.add_argument('-patience', '--patience', default=80, help='number of trials before early stopping - default = 80')
-	parser.add_argument('-tuning', '--tuning', default=50, help='number of trials for hyperparameter tuning - default = 50')
+	parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 50')
 	parser.add_argument('-difference', '--difference', default=0.001, help='difference before early stopping - default = 0.001')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
@@ -1042,11 +984,11 @@ if __name__ == '__main__':
 	folder_name = foutput.split("/")[-1]
 
 	if folder_name == "run_1" or "run" not in folder_name:
-		if dtype == "protein":
+		if dtype == "protein" or dtype == "Protein":
 			fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, \
 				ftest, ftest_labels = feature_extraction_aminoacid(fasta_train, fasta_label_train,
 																	fasta_test, fasta_label_test, foutput)
-		elif dtype == "dnarna":
+		elif dtype == "dnarna" or dtype == "DNA/RNA":
 			fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, \
 				ftest, ftest_labels = feature_extraction_nucleotide(fasta_train, fasta_label_train,
 																	fasta_test, fasta_label_test, foutput)
@@ -1063,11 +1005,11 @@ if __name__ == '__main__':
 			if os.path.exists(os.path.join(dataset_run1_feat, "ftest.csv")):
 				fnameseqtest, ftest, ftest_labels = os.path.join(dataset_run1_feat, "fnameseqtest.csv"), os.path.join(dataset_run1_feat, "ftest.csv"), os.path.join(dataset_run1_feat, "flabeltest.csv") 
 
-	if dtype == "protein":
-		classifier, path_train, path_test, train_best, test_best = \
+	if dtype == "protein" or dtype == "Protein":
+		path_train, path_test, train_best, test_best = \
 			feature_engineering_aminoacid(task, estimations, fnameseqtrain, ftrain, ftrain_labels, ftest, foutput)
-	elif dtype == "dnarna":
-		classifier, path_train, path_test, train_best, test_best = \
+	elif dtype == "dnarna" or dtype == "DNA/RNA":
+		path_train, path_test, train_best, test_best = \
 			feature_engineering_nucleotide(task, estimations, fnameseqtrain, ftrain, ftrain_labels, ftest, foutput)
 
 	cost = (time.time() - start_time) / 60
@@ -1076,7 +1018,7 @@ if __name__ == '__main__':
 	subprocess.run(['python', 'generation.py', '-task', str(task), '-tuning', str(tuning), '-train', path_train,
 					'-train_label', ftrain_labels, '-test', path_test, 
 					'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
-					'-test_nameseq', fnameseqtest, '-classifier', str(classifier), '-n_cpu', str(n_cpu), '-output', foutput])
+					'-test_nameseq', fnameseqtest, '-n_cpu', str(n_cpu), '-output', foutput])
 
 ##########################################################################
 ##########################################################################

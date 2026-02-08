@@ -15,7 +15,7 @@ def main():
     datasets_list = [item for item in os.listdir(full_datasets_path) 
                     if os.path.isdir(os.path.join(full_datasets_path, item))]
 
-    for dataset in ["dataset11_charoenkwan_protein_0"]:
+    for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
 
         # Skip this dataset if it already has a "runs" folder
@@ -57,11 +57,11 @@ def main():
                     "--dtype",
                     dtype_str,
                     "--estimations",
-                    "300",
+                    "200", # 200
                     "--patience",
-                    "100",
+                    "80",
                     "--tuning",
-                    "100",
+                    "150", # 150
                     "--difference",
                     "0.001",
                     "--task",

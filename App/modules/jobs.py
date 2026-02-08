@@ -214,6 +214,15 @@ def dimensionality_reduction():
     with dim_col2:
         if reducer:
             with st.spinner(f'Computing {reduction}...'):
+                # Compute reduction with caching
+
+                # if "reducer" not in st.session_state:
+                #     if evaluation == "Training set":
+                #         st.session_state["reducer"] = reducer.fit(scaled_data)
+                #         reduced_data = reducer.transform(scaled_data)
+                # else:
+                #     reduced_data = st.session_state["reducer"].transform(scaled_data)
+
                 reduced_data = reducer.fit_transform(scaled_data)
 
                 # Create plot with caching
@@ -679,7 +688,7 @@ def performance_metrics(task):
                         f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
                         f"**AUC:** {df_cv['AUC'].item():.3f} ± {df_cv['std_AUC'].item():.3f}",
                         f"**F1-score:** {df_cv['F1'].item():.3f} ± {df_cv['std_F1'].item():.3f}",
-                        f"**Balanced accuracy:** {df_cv['balanced_ACC'].item():.3f} ± {df_cv['std_balanced_ACC'].item():.3f}",
+                        f"**Balanced accuracy:** {df_cv['ACC_B'].item():.3f} ± {df_cv['std_ACC_B'].item():.3f}",
                         f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}",
                         f"**G-mean:** {df_cv['gmean'].item():.3f} ± {df_cv['std_gmean'].item():.3f}"
                     ])
@@ -697,10 +706,10 @@ def performance_metrics(task):
 
             elif task == "Regression":
                 metrics.extend([
-                    f"**Mean Absolute Error:** {df_cv['mean_absolute_error'].item():.3f} ± {df_cv['std_mean_absolute_error'].item():.3f}",
-                    f"**Mean Squared Error:** {df_cv['mean_squared_error'].item():.3f} ± {df_cv['std_mean_squared_error'].item():.3f}",
-                    f"**Root Mean Squared Error:** {df_cv['root_mean_squared_error'].item():.3f} ± {df_cv['std_root_mean_squared_error'].item():.3f}",
-                    f"**R2:** {df_cv['r2'].item():.3f} ± {df_cv['std_r2'].item():.3f}"
+                    f"**Mean Absolute Error:** {df_cv['MAE'].item():.3f} ± {df_cv['std_MAE'].item():.3f}",
+                    f"**Mean Squared Error:** {df_cv['MSE'].item():.3f} ± {df_cv['std_MSE'].item():.3f}",
+                    f"**Root Mean Squared Error:** {df_cv['RMSE'].item():.3f} ± {df_cv['std_RMSE'].item():.3f}",
+                    f"**R2:** {df_cv['R2'].item():.3f} ± {df_cv['std_R2'].item():.3f}"
                 ])
             
             for metric in metrics:
@@ -890,9 +899,10 @@ def compute_shap_values(model, X):
     - Binary / regression: (n_samples, n_features)
     - Multiclass: (n_samples, n_features, n_classes)
     """
-    explainer = shap.TreeExplainer(model)
+    explainer = shap.TreeExplainer(model["clf"])
     shap_values = explainer.shap_values(X)
 
+    # --- FIX multiclass output ---
     if isinstance(shap_values, list):
         # list[n_classes] of (n_samples, n_features)
         shap_values = np.stack(shap_values, axis=2)
@@ -1056,7 +1066,7 @@ def model_information(data_type, task):
                             st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
 
                 clf_str = str(st.session_state["model"]["clf"])
-                params = st.session_state["model"]["clf"].get_params()
+                params = st.session_state["model"]["clf"]["clf"].get_params()
 
                 if "RandomForest" in clf_str:
                     show_params(
@@ -1068,13 +1078,14 @@ def model_information(data_type, task):
                             "max_leaf_nodes", "min_impurity_decrease", "class_weight"
                         ]
                     )
-                elif "ExtraTrees" in clf_str:
+                elif "XGB" in clf_str:
                     show_params(
-                        "Extremely Randomized Trees",
+                        "XGBoost",
                         params,
                         keys=[
-                            "n_estimators", "min_samples_split", "min_samples_leaf", "max_features",
-                            "bootstrap"
+                            "n_estimators", "learning_rate", "max_depth", "gamma",
+                            "subsample", "colsample_bytree", "reg_alpha", "reg_lambda",
+                            "min_child_weight", "objective"
                         ]
                     )
                 elif "LGBM" in clf_str:
@@ -1100,8 +1111,8 @@ def model_information(data_type, task):
 
                 if "RandomForest" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/rf.png", use_container_width=True)
-                elif "ExtraTrees" in str(st.session_state["model"]["clf"]):
-                    st.image("imgs/models/extra.png", use_container_width=True)
+                elif "XGB" in str(st.session_state["model"]["clf"]):
+                    st.image("imgs/models/xgboost.png", use_container_width=True)
                 elif "LGBM" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
@@ -1322,6 +1333,68 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
 
     return True
 
+@st.fragment(run_every=5)
+def job_tables():
+    jobcol1, jobcol2 = st.columns(2)
+
+    debug = False
+
+    with jobcol1:
+        st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
+
+        df = manager.get_pending_jobs()
+        if not debug:
+            df = df.drop(columns=["Job ID"])
+
+        column_config = {
+            "Queue position": st.column_config.TextColumn(
+                "Queue position",
+                help="Position in the queue for each job"
+            ),
+            "Job ID": st.column_config.TextColumn(
+                "Job ID",
+                help="Unique identifier for the job run"
+            ),
+            "Start": st.column_config.DateColumn(
+                "Start",
+                format="h:mm A. MMMM D, YYYY",
+                help="Time when started"
+            ),
+            "Status": st.column_config.TextColumn(
+                "Status",
+                help="Job status: pending or running"
+            )
+        }
+        st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
+
+    with jobcol2:
+        st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
+
+        df = manager.get_recent_completed_jobs()
+        if not debug:
+            df = df.drop(columns=["Job ID"])
+
+        column_config = {
+            "Job ID": st.column_config.TextColumn(
+                "Job ID",
+                help="Unique identifier for the job run"
+            ),
+            "End": st.column_config.DateColumn(
+                "End",
+                format="h:mm A. MMMM D, YYYY",
+                help="Time when finished"
+            ),
+            "Duration": st.column_config.TextColumn(
+                "Duration",
+                help="Total execution time (HH:MM:SS)"
+            ),
+            "Status": st.column_config.TextColumn(
+                "Status",
+                help="Job outcome: success or failed"
+            )
+        }
+        st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
+
 def runUI():
 
     with st.expander("Viewing your submission"):
@@ -1339,59 +1412,10 @@ def runUI():
 	    """
         )
 
-    # Uncomment to show queue
-    # jobcol1, jobcol2 = st.columns(2)
-
-    # with jobcol1:
-    #     st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
-    #     df = manager.get_pending_jobs()
-    #     column_config = {
-    #         "Queue position": st.column_config.TextColumn(
-    #             "Queue position",
-    #             help="Position in the queue for each job"
-    #         ),
-    #         "Job ID": st.column_config.TextColumn(
-    #             "Job ID",
-    #             help="Unique identifier for the job run"
-    #         ),
-    #         "Start": st.column_config.DateColumn(
-    #             "Start",
-    #             format="h:mm A. MMMM D, YYYY",
-    #             help="Time when started"
-    #         ),
-    #         "Status": st.column_config.TextColumn(
-    #             "Status",
-    #             help="Job status: pending or running"
-    #         )
-    #     }
-    #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
-
-    # with jobcol2:
-    #     st.markdown("**Last completed jobs**", help="Table displaying the most recently completed jobs, ordered from newest to oldest.")
-    #     df = manager.get_recent_completed_jobs()
-    #     column_config = {
-    #         "Job ID": st.column_config.TextColumn(
-    #             "Job ID",
-    #             help="Unique identifier for the job run"
-    #         ),
-    #         "End": st.column_config.DateColumn(
-    #             "End",
-    #             format="h:mm A. MMMM D, YYYY",
-    #             help="Time when finished"
-    #         ),
-    #         "Duration": st.column_config.TextColumn(
-    #             "Duration",
-    #             help="Total execution time (HH:MM:SS)"
-    #         ),
-    #         "Status": st.column_config.TextColumn(
-    #             "Status",
-    #             help="Job outcome: success or failed"
-    #         )
-    #     }
-    #     st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
+    job_tables()
 
     def get_job_example():
-        st.session_state["job_input"] = "867473e7-0dbc-4e42-81fd-985b7d1f7e64"
+        st.session_state["job_input"] = "047ff57d-8bf2-423d-b439-90f3dc8465a1"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1462,7 +1486,7 @@ def runUI():
                         del st.session_state["job_path"]
                     st.info("Job failed. Try again.")
             else:
-                job_path = os.path.join(dataset_path, job_id,  "runs", "run_6")
+                job_path = os.path.join(dataset_path, job_id,  "runs", "run_1")
 
                 if os.path.exists(job_path):
                     st.session_state["job_path"] = job_path

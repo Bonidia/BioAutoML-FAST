@@ -35,6 +35,7 @@ class TaskResultManager:
             """
             CREATE TABLE IF NOT EXISTS task_results (
                 id TEXT PRIMARY KEY,
+                job_name TEXT,
                 status TEXT,
                 start_time TEXT,
                 end_time TEXT
@@ -43,14 +44,26 @@ class TaskResultManager:
         )
         self.connection.commit()
 
-    def store_pending_task(self, task_id):
+    def store_pending_task(self, task_id, job_name):
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO task_results (id, status, start_time, end_time)
-            VALUES (?, ?, ?, NULL)
+            INSERT OR REPLACE INTO task_results (id, job_name, status, start_time, end_time)
+            VALUES (?, ?, ?, NULL, NULL)
             """,
-            (task_id, TaskStatus.PENDING.value, datetime.now(timezone.utc))
+            (task_id, job_name, TaskStatus.PENDING.value)
+        )
+        self.connection.commit()
+
+    def store_start(self, task_id, status):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            UPDATE task_results
+            SET status = ?, start_time = ?
+            WHERE id = ?
+            """,
+            (status.value, datetime.now(timezone.utc), task_id)
         )
         self.connection.commit()
 
@@ -70,7 +83,7 @@ class TaskResultManager:
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT status, start_time, end_time 
+            SELECT job_name, status, start_time, end_time 
             FROM task_results WHERE id = ?
             """,
             (task_id,),
@@ -78,9 +91,10 @@ class TaskResultManager:
         result = cursor.fetchone()
         if result:
             return {
-                "status": result[0],
-                "start_time": result[1],
-                "end_time": result[2]
+                "job_name": result[0],
+                "status": result[1],
+                "start_time": result[2],
+                "end_time": result[3]
             }
         return None
     
@@ -115,13 +129,13 @@ class TaskResultManager:
     def get_pending_jobs(self):
         """
         Returns pending jobs as a DataFrame with columns:
-        ['Job queue position', 'task_id', 'start_time', 'status']
+        ['Job queue position', 'job_name', 'task_id', 'start_time', 'status']
         Ordered by start_time ascending (earliest pending = position 1).
         """
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT id, start_time, status
+            SELECT id, job_name, start_time, status
             FROM task_results
             WHERE status IN (?, ?)
             ORDER BY start_time ASC
@@ -130,29 +144,29 @@ class TaskResultManager:
             (TaskStatus.PENDING.value, TaskStatus.RUNNING.value)
         )
         results = cursor.fetchall()
-        df = pd.DataFrame(results, columns=["Job ID", "Start", "Status"])
+        df = pd.DataFrame(results, columns=["Job ID", "Job name", "Start", "Status"])
 
         # Ensure consistent column types and compute queue position
         if df.empty:
-            return pd.DataFrame(columns=["Queue position", "Job ID", "Start", "Status"])
+            return pd.DataFrame(columns=["Queue position", "Job ID", "Job name", "Start", "Status"])
 
         df.reset_index(drop=True, inplace=True)
         # position is 1-based index
         df.insert(0, "Queue position", df.index + 1)
 
-        return df[["Queue position", "Job ID", "Start", "Status"]]
+        return df[["Queue position", "Job ID", "Job name", "Start", "Status"]]
 
     def get_recent_completed_jobs(self):
         """
         Returns completed jobs as a DataFrame with columns:
-        ['task_id', 'end_time', 'duration', 'status']
+        ['task_id', 'job_name', 'end_time', 'duration', 'status']
         Ordered by end_time DESC (most recent first).
         Only rows with a non-null end_time are considered completed.
         """
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT id, start_time, end_time, status
+            SELECT id, job_name, start_time, end_time, status
             FROM task_results
             WHERE status = ?
             ORDER BY end_time DESC
@@ -161,10 +175,10 @@ class TaskResultManager:
             (TaskStatus.SUCCESS.value,)
         )
         results = cursor.fetchall()
-        df = pd.DataFrame(results, columns=["Job ID", "Start", "End", "Status"])
+        df = pd.DataFrame(results, columns=["Job ID", "Job name", "Start", "End", "Status"])
 
         if df.empty:
-            return pd.DataFrame(columns=["Job ID", "End", "Duration", "Status"])
+            return pd.DataFrame(columns=["Job ID", "Job name", "End", "Duration", "Status"])
 
         def compute_duration(row):
             if row["Start"] and row["End"]:
@@ -183,6 +197,6 @@ class TaskResultManager:
 
         df["Duration"] = df.apply(compute_duration, axis=1)
         # reorder columns as requested
-        df = df[["Job ID", "End", "Duration", "Status"]]
+        df = df[["Job ID", "Job name", "End", "Duration", "Status"]]
 
         return df

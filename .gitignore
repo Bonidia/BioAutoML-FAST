@@ -9,3 +9,4 @@ DATA
 .fuse_hidden*
 secrets.toml
 task_results.db
+jobs
