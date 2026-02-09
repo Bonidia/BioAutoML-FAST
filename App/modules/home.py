@@ -637,6 +637,26 @@ def count_fasta_sequences(uploaded_files):
 
     return total
 
+def generate_public_id():
+    """
+    Generate a random public job ID.
+
+    Returns
+    -------
+    str
+        A unique public job ID (e.g. 'K7M2Q9')
+    """
+    ALPHABET = (
+        "ABCDEFGHJKLMNPQRSTUVWXYZ"
+        "abcdefghjkmnpqrstuvwxyz"
+        "23456789"
+    )
+    ID_LENGTH = 6
+
+    public_id = "".join(secrets.choice(ALPHABET) for _ in range(ID_LENGTH))
+
+    return public_id
+
 def runUI():
     """Main Streamlit UI function with thread management."""
 
@@ -723,15 +743,12 @@ def runUI():
             data_type = None
 
     if training == "Training set" and data_type != "Structured data":
-        checkcol1, checkcol2, checkcol3, checkcol4 = st.columns(4)
+        checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
             tuning = st.checkbox("Hyperparameter tuning", help="Whether to use hyperparameter tuning for the model (this can make the training take longer).")
         
         with checkcol2:
-            job_name = st.text_input("Name for your job submission", help="Name to help track your submission in the queue in Jobs.")
-
-        with checkcol3:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
             # Simple validation (not strict): show warning if looks invalid
@@ -739,17 +756,14 @@ def runUI():
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
 
-        with checkcol4:
+        with checkcol3:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
     elif training == "Load model":
         tuning = False
 
-        checkcol1, checkcol2, checkcol3 = st.columns(3)
+        checkcol1, checkcol2 = st.columns(2)
 
         with checkcol1:
-            job_name = st.text_input("Name for your submission job", help="Name to help track your submission in the queue in Jobs.")
-
-        with checkcol2:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
             # Simple validation (not strict): show warning if looks invalid
@@ -757,7 +771,7 @@ def runUI():
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
         
-        with checkcol3:
+        with checkcol2:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
             
     with st.form("sequences_submit", clear_on_submit=True):
@@ -878,11 +892,6 @@ def runUI():
                 st.error("Please upload the required test or prediction file(s).")
             st.stop()
 
-        if not job_name:
-            with queue_info:
-                st.error("Please provide a name for your submission job.")
-            st.stop()    
-
         if testing == "No test set":
             test_files = None
 
@@ -907,6 +916,8 @@ def runUI():
                         f"({test_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
                     )
                 st.stop()
+
+        job_name = generate_public_id()
 
         fn_kwargs = {
             "job_name": job_name,

@@ -318,7 +318,7 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
-def submit_job(dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
+def submit_job(job_name, dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -487,11 +487,12 @@ def bibtex_to_dict(bib_file="references.bib"):
     return citation_dict
 
 @st.dialog("Job submitted")
-def job_submitted_dialog(job_id):
+def job_submitted_dialog(job_id, job_name):
     st.success(
-        f'Job submitted to the queue.\n\n'
+        f'Job **{job_name}** submitted to the queue.\n\n'
         f'You can consult the results in **Jobs** using the following ID:\n\n'
-        f'**{job_id}**'
+        f'**{job_id}**\n\n'
+        f'Save this ID securely.'
     )
 
 def count_fasta_sequences(uploaded_files):
@@ -511,6 +512,26 @@ def count_fasta_sequences(uploaded_files):
         f.seek(0)
 
     return total
+
+def generate_public_id():
+    """
+    Generate a random public job ID.
+
+    Returns
+    -------
+    str
+        A unique public job ID (e.g. 'K7M2Q9')
+    """
+    ALPHABET = (
+        "ABCDEFGHJKLMNPQRSTUVWXYZ"
+        "abcdefghjkmnpqrstuvwxyz"
+        "23456789"
+    )
+    ID_LENGTH = 6
+
+    public_id = "".join(secrets.choice(ALPHABET) for _ in range(ID_LENGTH))
+
+    return public_id
 
 def runUI():
 
@@ -798,7 +819,7 @@ def runUI():
                                     help="Single file for prediction (e.g. predict.fasta)")
 
         col1, col2 = st.columns(2)
-    
+
         with col1:
             email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
@@ -831,7 +852,7 @@ def runUI():
 
             training = "Load model"
             testing = "Prediction set"
-            classifier, imbalance = False, False
+            tuning = True
 
             dtype_str = dataset_id.split('_')[-2]
 
@@ -842,7 +863,10 @@ def runUI():
 
             dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
 
+            job_name = generate_public_id()
+
             fn_kwargs = {
+                "job_name": job_name,
                 "dataset_path":  dataset_path,
                 "test_files": test_files,
                 "predict_path":  predict_path,
@@ -866,15 +890,14 @@ def runUI():
                 "task": ["Classification" if task == 0 else "Regression"],
                 "training_set": [training == "Training set"],
                 "testing_set": [testing],
-                "classifier_selected": [classifier], 
-                "imbalance_methods": [imbalance]
+                "tuning": [tuning]
             }
 
             df_job_data = pl.DataFrame(job_data)
             tsv_path = os.path.join(job_path, "job_info.tsv")
             df_job_data.write_csv(tsv_path, separator='\t')
 
-            job_submitted_dialog(job_id)
+            job_submitted_dialog(job_id, job_name)
 
 # Run the Streamlit app
 if __name__ == "__main__":
