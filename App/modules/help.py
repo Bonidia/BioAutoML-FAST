@@ -375,46 +375,38 @@ def tutorials():
 
     with st.expander("**Use case 1: Exploring results in the platform**"):
         video1col1, video1col2, video1col3 = st.columns([1, 3, 1])
-
         with video1col2:
-            st.video("https://youtu.be/wUgqpv6yO0s")
+            st.video("videos/video1.mp4")
 
     with st.expander("**Use case 2: Training a classification model from scratch to predict labeled data**"):
         video2col1, video2col2, video2col3 = st.columns([1, 3, 1])
-
         with video2col2:
-            st.video("https://youtu.be/wkD0DRX391A")
+            st.video("videos/video2.mp4")
 
     with st.expander("**Use case 3: Training a regression model from scratch to predict unlabeled data**"):
         video3col1, video3col2, video3col3 = st.columns([1, 3, 1])
-
         with video3col2:
-            st.video("https://youtu.be/MGIRK_jBZgU")
+            st.video("videos/video3.mp4")
 
     with st.expander("**Use case 4: Reusing models trained within the platform**"):
         video4col1, video4col2, video4col3 = st.columns([1, 3, 1])
-
         with video4col2:
-            st.video("https://youtu.be/9uqLkjyTa7E")
+            st.video("videos/video4.mp4")
 
     with st.expander("**Use case 5: Using trained models from the repository to predict unlabeled data**"):
         video5col1, video5col2, video5col3 = st.columns([1, 3, 1])
-
         with video5col2:
-            st.video("https://youtu.be/JcIF9Npj95c")
+            st.video("videos/video5.mp4")
 
     with st.expander("**Use case 6: Adding new models to the repository**"):
         video6col1, video6col2, video6col3 = st.columns([1, 3, 1])
-
         with video6col2:
-            st.video("https://youtu.be/jXicZETMxCY")
+            st.video("videos/video6.mp4")
 
     with st.expander("**Use case 7: Getting more help**"):
         video7col1, video7col2, video7col3 = st.columns([1, 3, 1])
-
         with video7col2:
-            st.video("https://youtu.be/2kfH4_Vfgyg")
-
+            st.video("videos/video7.mp4")
 
 def runUI():
     with st.expander("Using the platform"):
