@@ -35,8 +35,8 @@ class TaskResultManager:
             """
             CREATE TABLE IF NOT EXISTS task_results (
                 id TEXT PRIMARY KEY,
-                job_name TEXT,
                 status TEXT,
+                pending_time TEXT,
                 start_time TEXT,
                 end_time TEXT
             )
@@ -44,14 +44,14 @@ class TaskResultManager:
         )
         self.connection.commit()
 
-    def store_pending_task(self, task_id, job_name):
+    def store_pending_task(self, task_id):
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO task_results (id, job_name, status, start_time, end_time)
+            INSERT OR REPLACE INTO task_results (id, status, pending_time, start_time, end_time)
             VALUES (?, ?, ?, NULL, NULL)
             """,
-            (task_id, job_name, TaskStatus.PENDING.value)
+            (task_id, TaskStatus.PENDING.value, datetime.now(timezone.utc))
         )
         self.connection.commit()
 
@@ -83,7 +83,7 @@ class TaskResultManager:
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT job_name, status, start_time, end_time 
+            SELECT status, pending_time, start_time, end_time 
             FROM task_results WHERE id = ?
             """,
             (task_id,),
@@ -91,8 +91,8 @@ class TaskResultManager:
         result = cursor.fetchone()
         if result:
             return {
-                "job_name": result[0],
-                "status": result[1],
+                "status": result[0],
+                "pending_time": result[1],
                 "start_time": result[2],
                 "end_time": result[3]
             }
@@ -112,7 +112,7 @@ class TaskResultManager:
             SELECT id
             FROM task_results
             WHERE status IN (?, ?)
-            ORDER BY start_time ASC, id ASC
+            ORDER BY pending_time ASC, id ASC
             """,
             (TaskStatus.PENDING.value, TaskStatus.RUNNING.value)
         )
@@ -129,44 +129,44 @@ class TaskResultManager:
     def get_pending_jobs(self):
         """
         Returns pending jobs as a DataFrame with columns:
-        ['Job queue position', 'job_name', 'task_id', 'start_time', 'status']
+        ['Job queue position', 'task_id', 'start_time', 'status']
         Ordered by start_time ascending (earliest pending = position 1).
         """
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT id, job_name, start_time, status
+            SELECT id, start_time, status
             FROM task_results
             WHERE status IN (?, ?)
-            ORDER BY start_time ASC
+            ORDER BY pending_time ASC
             LIMIT 5
             """,
             (TaskStatus.PENDING.value, TaskStatus.RUNNING.value)
         )
         results = cursor.fetchall()
-        df = pd.DataFrame(results, columns=["Job ID", "Job name", "Start", "Status"])
+        df = pd.DataFrame(results, columns=["Job ID", "Start", "Status"])
 
         # Ensure consistent column types and compute queue position
         if df.empty:
-            return pd.DataFrame(columns=["Queue position", "Job ID", "Job name", "Start", "Status"])
+            return pd.DataFrame(columns=["Queue position", "Job ID", "Start", "Status"])
 
         df.reset_index(drop=True, inplace=True)
         # position is 1-based index
         df.insert(0, "Queue position", df.index + 1)
 
-        return df[["Queue position", "Job ID", "Job name", "Start", "Status"]]
+        return df[["Queue position", "Job ID", "Start", "Status"]]
 
     def get_recent_completed_jobs(self):
         """
         Returns completed jobs as a DataFrame with columns:
-        ['task_id', 'job_name', 'end_time', 'duration', 'status']
+        ['task_id', 'end_time', 'duration', 'status']
         Ordered by end_time DESC (most recent first).
         Only rows with a non-null end_time are considered completed.
         """
         cursor = self.connection.cursor()
         cursor.execute(
             """
-            SELECT id, job_name, start_time, end_time, status
+            SELECT id, start_time, end_time, status
             FROM task_results
             WHERE status = ?
             ORDER BY end_time DESC
@@ -175,10 +175,10 @@ class TaskResultManager:
             (TaskStatus.SUCCESS.value,)
         )
         results = cursor.fetchall()
-        df = pd.DataFrame(results, columns=["Job ID", "Job name", "Start", "End", "Status"])
+        df = pd.DataFrame(results, columns=["Job ID", "Start", "End", "Status"])
 
         if df.empty:
-            return pd.DataFrame(columns=["Job ID", "Job name", "End", "Duration", "Status"])
+            return pd.DataFrame(columns=["Job ID", "End", "Duration", "Status"])
 
         def compute_duration(row):
             if row["Start"] and row["End"]:
@@ -197,6 +197,39 @@ class TaskResultManager:
 
         df["Duration"] = df.apply(compute_duration, axis=1)
         # reorder columns as requested
-        df = df[["Job ID", "Job name", "End", "Duration", "Status"]]
+        df = df[["Job ID", "End", "Duration", "Status"]]
 
         return df
+
+    def get_job_duration(self, task_id):
+        """
+        Return the duration between start_time and end_time for a given task_id.
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            SELECT start_time, end_time
+            FROM task_results
+            WHERE id = ?
+            """,
+            (task_id,)
+        )
+        row = cursor.fetchone()
+
+        if not row or not row[0] or not row[1]:
+            return None
+
+        try:
+            start = datetime.fromisoformat(row[0])
+            end = datetime.fromisoformat(row[1])
+            delta = end - start
+
+            total_seconds = int(delta.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}",
+
+        except Exception:
+            return None

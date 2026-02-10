@@ -17,7 +17,7 @@ class JobStatus(Enum):
     FAILED = "failed"
     INVALID = "invalid"
 
-def send_job_email(email, job_name, job_id, status):
+def send_job_email(email, job_id, status):
     """
     Send a job completion email using Gmail SMTP.
     """
@@ -26,13 +26,13 @@ def send_job_email(email, job_name, job_id, status):
 
     # Email content
     if status == "started":
-        subject = f"[BioAutoML-FAST] Job {job_name} submitted to queue"
+        subject = f"[BioAutoML-FAST] Job submitted to queue"
         body = f"""Dear user,\n\nYour job was submitted to the queue.\nJob ID: {job_id}\n\nYou will receive an email when your job is finished."""
     elif status == "success":
-        subject = f"[BioAutoML-FAST] Job {job_name} has finished"
+        subject = f"[BioAutoML-FAST] Job has finished"
         body = f"""Dear user,\n\nYour job has completed successfully.\nJob ID: {job_id}\n\nConsult the output in the Jobs module using your Job ID and, if encrypted, password."""
     elif status == "failed":
-        subject = f"[BioAutoML-FAST] Job {job_name} has finished"
+        subject = f"[BioAutoML-FAST] Job has finished"
         body = f"""Dear user,\n\nYour job has failed.\n\nTry submitting again later."""
 
     response =  requests.post(
@@ -63,7 +63,7 @@ def _on_success(job, connection, result, *args, **kwargs):
         email = None
 
     if email:
-        send_job_email(email, job.kwargs.get("job_name"), job.id, "success")
+        send_job_email(email, job.id, "success")
 
 def _on_failure(job, connection, *args, **kwargs):
     """
@@ -77,7 +77,7 @@ def _on_failure(job, connection, *args, **kwargs):
         email = None
 
     if email:
-        send_job_email(email, job.kwargs.get("job_name"), job.id, "failed")
+        send_job_email(email, job.id, "failed")
 
 def enqueue_task(fn, fn_kwargs=None):
     """
@@ -90,7 +90,7 @@ def enqueue_task(fn, fn_kwargs=None):
     enqueue_kwargs = {"on_success": _on_success, "on_failure": _on_failure}
 
     # create the job
-    job = q.enqueue(fn, kwargs=fn_kwargs, **enqueue_kwargs, job_timeout=3600)
+    job = q.enqueue(fn, kwargs=fn_kwargs, **enqueue_kwargs, job_timeout=7200)
 
     try:
         email = job.kwargs.get("email")
@@ -98,10 +98,10 @@ def enqueue_task(fn, fn_kwargs=None):
         email = None
 
     if email:
-        send_job_email(email, job.kwargs.get("job_name"), job.id, "started")
+        send_job_email(email, job.id, "started")
     
     id_ = job.id
-    manager.store_pending_task(id_, job.kwargs.get("job_name"))
+    manager.store_pending_task(id_)
 
     return id_
 

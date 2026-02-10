@@ -1337,7 +1337,7 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
 def job_tables():
     jobcol1, jobcol2 = st.columns(2)
 
-    debug = False
+    debug = True
 
     with jobcol1:
         st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
@@ -1353,7 +1353,7 @@ def job_tables():
             ),
             "Job ID": st.column_config.TextColumn(
                 "Job ID",
-                help="Unique identifier for the job run"
+                help="Identifier for the job run"
             ),
             "Start": st.column_config.DateColumn(
                 "Start",
@@ -1377,7 +1377,7 @@ def job_tables():
         column_config = {
             "Job ID": st.column_config.TextColumn(
                 "Job ID",
-                help="Unique identifier for the job run"
+                help="Identifier for the job run"
             ),
             "End": st.column_config.DateColumn(
                 "End",
@@ -1415,7 +1415,7 @@ def runUI():
     job_tables()
 
     def get_job_example():
-        st.session_state["job_input"] = "047ff57d-8bf2-423d-b439-90f3dc8465a1"
+        st.session_state["job_input"] = "9797dd39-05e4-4e14-b30a-89847371777d"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1496,7 +1496,7 @@ def runUI():
                     st.error("Job does not exist!")
 
     if "job_path" in st.session_state:
-        st.success("Job was completed with the following results")
+        st.success(f"Job took **{manager.get_job_duration(job_id)[0]}** and was completed with the following results:")
 
         if "model" in st.session_state:
             del st.session_state["model"]

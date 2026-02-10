@@ -318,7 +318,7 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
-def submit_job(job_name, dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
+def submit_job(dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -487,9 +487,9 @@ def bibtex_to_dict(bib_file="references.bib"):
     return citation_dict
 
 @st.dialog("Job submitted")
-def job_submitted_dialog(job_id, job_name):
+def job_submitted_dialog(job_id):
     st.success(
-        f'Job **{job_name}** submitted to the queue.\n\n'
+        f'Job submitted to the queue.\n\n'
         f'You can consult the results in **Jobs** using the following ID:\n\n'
         f'**{job_id}**\n\n'
         f'Save this ID securely.'
@@ -513,25 +513,19 @@ def count_fasta_sequences(uploaded_files):
 
     return total
 
-def generate_public_id():
-    """
-    Generate a random public job ID.
+class InternalUploadedFile:
+    def __init__(self, path: str):
+        self.path = path
+        self.name = os.path.basename(path)
 
-    Returns
-    -------
-    str
-        A unique public job ID (e.g. 'K7M2Q9')
-    """
-    ALPHABET = (
-        "ABCDEFGHJKLMNPQRSTUVWXYZ"
-        "abcdefghjkmnpqrstuvwxyz"
-        "23456789"
-    )
-    ID_LENGTH = 6
+        with open(path, "rb") as f:
+            self._data = f.read()
 
-    public_id = "".join(secrets.choice(ALPHABET) for _ in range(ID_LENGTH))
+    def getvalue(self):
+        return self._data
 
-    return public_id
+    def read(self):
+        return self._data
 
 def runUI():
 
@@ -552,9 +546,12 @@ def runUI():
 
     MAX_SEQS = 5_000
 
-    _, excol2 = st.columns([9, 1])
+    _, excol2, excol3 = st.columns([8, 1, 1])
 
     with excol2:
+        sample_data = st.toggle("Use example", help="Use example data instead of submitted files.")
+
+    with excol3:
         zip_path = "repo_examples.zip"
         with open(zip_path, "rb") as f:
             st.download_button(
@@ -562,7 +559,8 @@ def runUI():
                 data=f,
                 file_name="repo_examples.zip",
                 mime="application/zip",
-                use_container_width=True
+                use_container_width=True,
+                help="Download examples"
             )
 
     citation_dict = bibtex_to_dict()
@@ -837,67 +835,73 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        if not test_files:
-            with queue_info:
-                st.error("Please upload the required prediction file.")
-        else:
-            prediction_seq_count = count_fasta_sequences(test_files)
-            if prediction_seq_count > MAX_SEQS:
-                with queue_info:
-                    st.error(
-                        f"Prediction set exceeds the maximum allowed size "
-                        f"({prediction_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
-                    )
-                st.stop()
-
+        if sample_data:
+            test_files = InternalUploadedFile("examples/repo_examples/model2/positive.fasta")
             training = "Load model"
             testing = "Prediction set"
+            data_type = "Protein"
+            task = "Classification"
             tuning = True
+            dataset_id = "dataset2_yu_protein_0"
+        else:
+            if not test_files:
+                with queue_info:
+                    st.error("Please upload the required prediction file.")
+            else:
+                prediction_seq_count = count_fasta_sequences(test_files)
+                if prediction_seq_count > MAX_SEQS:
+                    with queue_info:
+                        st.error(
+                            f"Prediction set exceeds the maximum allowed size "
+                            f"({prediction_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                        )
+                    st.stop()
 
-            dtype_str = dataset_id.split('_')[-2]
+                training = "Load model"
+                testing = "Prediction set"
+                tuning = True
 
-            if dtype_str == "protein":
-                data_type = "Protein"
-            elif dtype_str == "dnarna":
-                data_type = "DNA/RNA"
+                dtype_str = dataset_id.split('_')[-2]
 
-            dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
+                if dtype_str == "protein":
+                    data_type = "Protein"
+                elif dtype_str == "dnarna":
+                    data_type = "DNA/RNA"
 
-            job_name = generate_public_id()
+        dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
 
-            fn_kwargs = {
-                "job_name": job_name,
-                "dataset_path":  dataset_path,
-                "test_files": test_files,
-                "predict_path":  predict_path,
-                "data_type": data_type,
-                "training":  training,
-                "testing":   testing,
-                "email":     email,
-                "password":  password
-            }
-                
-            # Add job to the queue
-            job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
-            job_path = os.path.join(predict_path, job_id)
+        fn_kwargs = {
+            "dataset_path":  dataset_path,
+            "test_files": test_files,
+            "predict_path":  predict_path,
+            "data_type": data_type,
+            "training":  training,
+            "testing":   testing,
+            "email":     email,
+            "password":  password
+        }
+            
+        # Add job to the queue
+        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
+        job_path = os.path.join(predict_path, job_id)
 
-            os.makedirs(job_path, exist_ok=True)
+        os.makedirs(job_path, exist_ok=True)
 
-            task = int(dataset_id.split('_')[-1])
+        task = int(dataset_id.split('_')[-1])
 
-            job_data = {
-                "data_type": [data_type],
-                "task": ["Classification" if task == 0 else "Regression"],
-                "training_set": [training == "Training set"],
-                "testing_set": [testing],
-                "tuning": [tuning]
-            }
+        job_data = {
+            "data_type": [data_type],
+            "task": ["Classification" if task == 0 else "Regression"],
+            "training_set": [training == "Training set"],
+            "testing_set": [testing],
+            "tuning": [tuning]
+        }
 
-            df_job_data = pl.DataFrame(job_data)
-            tsv_path = os.path.join(job_path, "job_info.tsv")
-            df_job_data.write_csv(tsv_path, separator='\t')
+        df_job_data = pl.DataFrame(job_data)
+        tsv_path = os.path.join(job_path, "job_info.tsv")
+        df_job_data.write_csv(tsv_path, separator='\t')
 
-            job_submitted_dialog(job_id, job_name)
+        job_submitted_dialog(job_id)
 
 # Run the Streamlit app
 if __name__ == "__main__":

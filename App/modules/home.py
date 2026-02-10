@@ -288,7 +288,7 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
-def submit_job(job_name, train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None):
+def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -320,26 +320,16 @@ def submit_job(job_name, train_files, test_files, predict_path, data_type, task,
                 df_train.write_csv(os.path.join(feat_path, "train.csv"))
                 df_labels.write_csv(os.path.join(feat_path, "train_labels.csv"))
                 df_index.write_csv(os.path.join(feat_path, "fnameseqtrain.csv"))
-                
-                if classifier == "CatBoost":
-                    classifier_option = 0
-                elif classifier == "Random Forest":
-                    classifier_option = 1
-                elif classifier == "LightGBM":
-                    classifier_option = 2
-                elif classifier == "XGBoost":
-                    classifier_option = 3
+
 
                 command = [
                     "python",
-                    "BioAutoML-multiclass.py" if df_labels.n_unique() > 2 else "BioAutoML-binary.py",
+                    "generation.py",
                     "--tuning",
-                    "1" if tuning else "0",
+                    "150" if tuning else "0",
                     "--train", os.path.join(feat_path, "train.csv"),
                     "--train_label", os.path.join(feat_path, "train_labels.csv"),
                     "--train_nameseq", os.path.join(feat_path, "fnameseqtrain.csv"),
-                    "--classifier", str(classifier_option),
-                    "-nf", "True",
                 ]
 
                 if test_files:
@@ -611,9 +601,9 @@ def submit_job(job_name, train_files, test_files, predict_path, data_type, task,
         print(f"Error in job processing: {e}")
 
 @st.dialog("Job submitted")
-def job_submitted_dialog(job_id, job_name):
+def job_submitted_dialog(job_id):
     st.success(
-        f'Job **{job_name}** submitted to the queue.\n\n'
+        f'Job submitted to the queue.\n\n'
         f'You can consult the results in **Jobs** using the following ID:\n\n'
         f'**{job_id}**\n\n'
         f'Save this ID securely.'
@@ -637,25 +627,19 @@ def count_fasta_sequences(uploaded_files):
 
     return total
 
-def generate_public_id():
-    """
-    Generate a random public job ID.
+class InternalUploadedFile:
+    def __init__(self, path: str):
+        self.path = path
+        self.name = os.path.basename(path)
 
-    Returns
-    -------
-    str
-        A unique public job ID (e.g. 'K7M2Q9')
-    """
-    ALPHABET = (
-        "ABCDEFGHJKLMNPQRSTUVWXYZ"
-        "abcdefghjkmnpqrstuvwxyz"
-        "23456789"
-    )
-    ID_LENGTH = 6
+        with open(path, "rb") as f:
+            self._data = f.read()
 
-    public_id = "".join(secrets.choice(ALPHABET) for _ in range(ID_LENGTH))
+    def getvalue(self):
+        return self._data
 
-    return public_id
+    def read(self):
+        return self._data
 
 def runUI():
     """Main Streamlit UI function with thread management."""
@@ -695,13 +679,16 @@ def runUI():
             """
         )
 
-    MAX_SEQS = 60_000
+    MAX_SEQS = 5_000
 
     queue_info = st.container()
 
-    _, excol2 = st.columns([9, 1])
+    _, excol2, excol3 = st.columns([8, 1, 1])
 
     with excol2:
+        sample_data = st.toggle("Use example", help="Use example data instead of submitted files.")
+
+    with excol3:
         zip_path = "home_examples.zip"
         with open(zip_path, "rb") as f:
             st.download_button(
@@ -709,7 +696,8 @@ def runUI():
                 data=f,
                 file_name="home_examples.zip",
                 mime="application/zip",
-                use_container_width=True
+                use_container_width=True,
+                help="Download examples"
             )
 
     col1, col2 = st.columns(2)
@@ -757,6 +745,19 @@ def runUI():
                     st.warning("That doesn't look like a valid email address.")
 
         with checkcol3:
+            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+    elif training == "Training set" and data_type == "Structured data":
+        checkcol1, checkcol2 = st.columns(2)
+
+        with checkcol1:
+            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+
+            # Simple validation (not strict): show warning if looks invalid
+            if email:
+                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                    st.warning("That doesn't look like a valid email address.")
+
+        with checkcol2:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
     elif training == "Load model":
         tuning = False
@@ -852,75 +853,87 @@ def runUI():
     predict_path = os.path.abspath("jobs")
 
     if submitted:
-        # For non-structured sequence classification, require >= 2 class files
-        if task:
-            if training == "Training set" and task == "Classification":
-                if not train_files or len(train_files) < 2:
+        if sample_data:
+            train_files = InternalUploadedFile("examples/home_examples/classification/aminoacid/trained_model.sav")
+            test_files = [
+                InternalUploadedFile("examples/home_examples/classification/aminoacid/test/positive.fasta"),
+                InternalUploadedFile("examples/home_examples/classification/aminoacid/test/negative.fasta"),
+            ]
+            training = "Load model"
+            testing = "Test set"
+            data_type = "Nucleotide"
+            task = "Classification"
+            tuning = False
+        else:
+            # For non-structured sequence classification, require >= 2 class files
+            if task and data_type != "Structured data":
+                if training == "Training set" and task == "Classification":
+                    if not train_files or len(train_files) < 2:
+                        with queue_info:
+                            st.error("Training set (classification) requires at least 2 classes (one FASTA per class).")
+                        st.stop()
+
+                # For non-structured sequence test set, require >= 2 class files for classification
+                if testing == "Test set" and task == "Classification":
+                    if not test_files or len(test_files) < 2:
+                        with queue_info:
+                            st.error("Test set (classification) requires at least 2 classes (one FASTA per class).")
+                        st.stop()
+
+            if data_type:
+                # For structured data training, require a single CSV for both tasks
+                if training == "Training set" and data_type == "Structured data" and train_files is None:
                     with queue_info:
-                        st.error("Training set (classification) requires at least 2 classes (one FASTA per class).")
+                        st.error("Training set requires 1 file with the column for labels (or continuous target for regression).")
                     st.stop()
 
-            # For non-structured sequence test set, require >= 2 class files for classification
-            if testing == "Test set" and task == "Classification":
-                if not test_files or len(test_files) < 2:
+                # For structured data test set, require single CSV
+                if testing == "Test set" and data_type == "Structured data" and test_files is None:
                     with queue_info:
-                        st.error("Test set (classification) requires at least 2 classes (one FASTA per class).")
+                        st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
+                    st.stop()
+            
+            if training == "Load model":
+                if not train_files:
+                    with queue_info:
+                        st.error("Please provide the trained model file.")
                     st.stop()
 
-        if data_type:
-            # For structured data training, require a single CSV for both tasks
-            if training == "Training set" and data_type == "Structured data" and train_files is None:
+            # Test/prediction files required unless "No test set"
+            if testing != "No test set" and not test_files:
                 with queue_info:
-                    st.error("Training set requires 1 file with the column for labels (or continuous target for regression).")
+                    st.error("Please upload the required test or prediction file(s).")
                 st.stop()
 
-            # For structured data test set, require single CSV
-            if testing == "Test set" and data_type == "Structured data" and test_files is None:
-                with queue_info:
-                    st.error("Test set requires 1 file with the column for labels (or continuous target for regression).")
-                st.stop()
-        
-        if training == "Load model":
-            if not train_files:
-                with queue_info:
-                    st.error("Please provide the trained model file.")
-                st.stop()
+            if testing == "No test set":
+                test_files = None
 
-        # Test/prediction files required unless "No test set"
-        if testing != "No test set" and not test_files:
-            with queue_info:
-                st.error("Please upload the required test or prediction file(s).")
-            st.stop()
+            # Only applies to FASTA-based sequence tasks
+            if training == "Training set" and data_type != "Structured data":
 
-        if testing == "No test set":
-            test_files = None
+                train_seq_count = count_fasta_sequences(train_files)
+                if train_seq_count > MAX_SEQS:
+                    with queue_info:
+                        st.error(
+                            f"Training set exceeds the maximum allowed size "
+                            f"({train_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                        )
+                    st.stop()
 
-        # Only applies to FASTA-based sequence tasks
-        if training == "Training set" and data_type != "Structured data":
+            if testing in ["Test set", "Prediction set"] and data_type != "Structured data":
+                test_seq_count = count_fasta_sequences(test_files)
+                if test_seq_count > MAX_SEQS:
+                    with queue_info:
+                        st.error(
+                            f"Testing/Prediction set exceeds the maximum allowed size "
+                            f"({test_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                        )
+                    st.stop()
 
-            train_seq_count = count_fasta_sequences(train_files)
-            if train_seq_count > MAX_SEQS:
-                with queue_info:
-                    st.error(
-                        f"Training set exceeds the maximum allowed size "
-                        f"({train_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
-                    )
-                st.stop()
-
-        if testing in ["Test set", "Prediction set"] and test_files:
-            test_seq_count = count_fasta_sequences(test_files)
-            if test_seq_count > MAX_SEQS:
-                with queue_info:
-                    st.error(
-                        f"Testing/Prediction set exceeds the maximum allowed size "
-                        f"({test_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
-                    )
-                st.stop()
-
-        job_name = generate_public_id()
+            if data_type == "Structured data":
+                tuning = True
 
         fn_kwargs = {
-            "job_name": job_name,
             "train_files": train_files,
             "test_files": test_files,
             "predict_path":  predict_path,
@@ -950,7 +963,7 @@ def runUI():
         tsv_path = os.path.join(job_path, "job_info.tsv")
         df_job_data.write_csv(tsv_path, separator='\t')
 
-        job_submitted_dialog(job_id, job_name)
+        job_submitted_dialog(job_id)
 
 if __name__ == "__main__":
     runUI()

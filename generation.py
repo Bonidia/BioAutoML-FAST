@@ -646,7 +646,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
-    parser.add_argument('-tuning', '--tuning', default=50, help='number of trials for hyperparameter tuning - default = 50')
+    parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 50')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-train_nameseq', '--train_nameseq', default='', help='csv with sequence names')
