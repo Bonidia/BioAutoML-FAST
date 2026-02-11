@@ -490,9 +490,9 @@ def bibtex_to_dict(bib_file="references.bib"):
 def job_submitted_dialog(job_id):
     st.success(
         f'Job submitted to the queue.\n\n'
-        f'You can consult the results in **Jobs** using the following ID:\n\n'
-        f'**{job_id}**\n\n'
-        f'Save this ID securely.'
+        f'You can consult the results in **Jobs** using the following link:\n\n'
+        f'**https://bioautoml.icmc.usp.br/?id={job_id}**\n\n'
+        f'Save this link securely.'
     )
 
 def count_fasta_sequences(uploaded_files):
@@ -552,7 +552,7 @@ def runUI():
         sample_data = st.toggle("Use example", help="Use example data instead of submitted files.")
 
     with excol3:
-        zip_path = "repo_examples.zip"
+        zip_path = "examples/repo_examples.zip"
         with open(zip_path, "rb") as f:
             st.download_button(
                 label="Examples",

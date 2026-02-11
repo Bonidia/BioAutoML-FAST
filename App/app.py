@@ -32,9 +32,18 @@ def runUI():
 
     manager._create_db()
 
-    page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"], 
-    icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
-    menu_icon="cast", default_index=0, orientation="horizontal")
+    query_params = st.query_params
+
+    job_id = query_params.get("id")
+
+    if job_id:
+        page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"], 
+                            icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
+                            menu_icon="cast", default_index=1, orientation="horizontal")
+    else:
+        page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"], 
+                    icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
+                    menu_icon="cast", default_index=0, orientation="horizontal")
 
     if page == "Home":
         modules.home.runUI()

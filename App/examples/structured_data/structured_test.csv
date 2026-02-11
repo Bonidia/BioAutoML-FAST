@@ -1,0 +1,409 @@
+Suburb,Rooms,Type,Price,Distance,Bedroom2,Bathroom,Car,Landsize,label
+Alphington,4,h,1975000.0,6.4,4.0,2.0,2.0,600.0,Northern Metropolitan
+Yarraville,3,h,745000.0,7.0,2.0,1.0,1.0,325.0,Western Metropolitan
+Ascot Vale,2,h,1035000.0,4.3,2.0,1.0,1.0,319.0,Western Metropolitan
+Malvern East,3,t,1253000.0,11.2,3.0,2.0,1.0,216.0,Southern Metropolitan
+Ivanhoe East,5,h,1797000.0,9.0,4.0,3.0,3.0,826.0,Eastern Metropolitan
+Templestowe Lower,4,h,1500000.0,13.8,4.0,2.0,2.0,420.0,Eastern Metropolitan
+Meadow Heights,3,h,482000.0,17.4,3.0,2.0,2.0,452.0,Northern Metropolitan
+Heidelberg,2,u,450000.0,8.9,2.0,1.0,0.0,2020.0,Eastern Metropolitan
+Brighton East,5,h,2550000.0,10.7,5.0,3.0,2.0,915.0,Southern Metropolitan
+Kingsville,2,h,677200.0,7.8,2.0,2.0,1.0,180.0,Western Metropolitan
+Clayton South,3,u,700000.0,17.5,3.0,2.0,2.0,363.0,South-Eastern Metropolitan
+Essendon,2,u,405000.0,8.0,2.0,1.0,1.0,121.0,Western Metropolitan
+Brighton,3,h,1935000.0,10.5,3.0,2.0,1.0,385.0,Southern Metropolitan
+Moonee Ponds,3,h,1725000.0,6.9,3.0,2.0,3.0,596.0,Western Metropolitan
+Glen Iris,2,u,600000.0,9.2,2.0,1.0,1.0,0.0,Southern Metropolitan
+Essendon,3,h,897000.0,8.0,3.0,1.0,2.0,226.0,Western Metropolitan
+Surrey Hills,2,u,830000.0,10.2,2.0,1.0,1.0,180.0,Southern Metropolitan
+Rosanna,3,h,780000.0,11.4,3.0,1.0,2.0,627.0,Eastern Metropolitan
+Strathmore,5,h,1150000.0,9.7,5.0,2.0,2.0,702.0,Western Metropolitan
+Niddrie,3,h,991000.0,11.2,3.0,1.0,1.0,716.0,Western Metropolitan
+Maribyrnong,5,h,1350000.0,8.7,5.0,3.0,5.0,670.0,Western Metropolitan
+Fawkner,2,u,333000.0,12.4,2.0,1.0,1.0,97.0,Northern Metropolitan
+Thornbury,2,h,925000.0,6.5,2.0,1.0,1.0,258.0,Northern Metropolitan
+Collingwood,3,u,1326000.0,1.6,3.0,2.0,1.0,0.0,Northern Metropolitan
+Malvern East,1,u,300000.0,11.2,1.0,1.0,1.0,0.0,Southern Metropolitan
+Ascot Vale,3,h,1230000.0,5.9,3.0,1.0,2.0,538.0,Western Metropolitan
+Gladstone Park,3,h,625000.0,12.9,3.0,1.0,2.0,544.0,Western Metropolitan
+Brighton,3,t,1425000.0,11.2,3.0,2.0,2.0,495.0,Southern Metropolitan
+Thomastown,3,h,508000.0,15.3,3.0,2.0,1.0,189.0,Northern Metropolitan
+Hughesdale,2,h,1262000.0,13.0,2.0,1.0,1.0,546.0,Southern Metropolitan
+Essendon,4,h,1402000.0,8.0,4.0,2.0,1.0,554.0,Western Metropolitan
+Reservoir,2,u,525000.0,11.2,3.0,1.0,2.0,284.0,Northern Metropolitan
+Williamstown,3,h,1310000.0,8.0,3.0,2.0,1.0,185.0,Western Metropolitan
+Avondale Heights,3,h,850000.0,10.5,3.0,1.0,2.0,766.0,Western Metropolitan
+Flemington,3,h,885000.0,4.4,3.0,1.0,0.0,162.0,Northern Metropolitan
+Avondale Heights,2,u,411000.0,10.5,2.0,1.0,1.0,0.0,Western Metropolitan
+Toorak,3,u,1100000.0,4.6,3.0,2.0,1.0,0.0,Southern Metropolitan
+Oakleigh South,3,h,782000.0,14.7,3.0,2.0,2.0,0.0,South-Eastern Metropolitan
+Brunswick East,4,h,1550000.0,4.5,4.0,2.0,2.0,470.0,Northern Metropolitan
+North Melbourne,2,u,799000.0,1.8,2.0,1.0,1.0,0.0,Northern Metropolitan
+East Melbourne,1,u,895000.0,1.3,1.0,1.0,1.0,0.0,Northern Metropolitan
+Hawthorn East,2,u,568000.0,7.5,2.0,1.0,1.0,0.0,Southern Metropolitan
+Blackburn North,4,h,1300000.0,13.4,4.0,2.0,2.0,543.0,Eastern Metropolitan
+Wheelers Hill,4,h,1157000.0,16.7,4.0,2.0,2.0,752.0,South-Eastern Metropolitan
+Brunswick East,2,u,835000.0,4.5,2.0,1.0,2.0,0.0,Northern Metropolitan
+South Melbourne,1,h,855000.0,1.9,1.0,1.0,0.0,67.0,Southern Metropolitan
+Essendon,3,h,1000000.0,7.5,3.0,2.0,2.0,213.0,Western Metropolitan
+Preston,3,h,1171000.0,8.4,3.0,1.0,2.0,483.0,Northern Metropolitan
+Preston,2,t,635000.0,8.8,2.0,1.0,1.0,79.0,Northern Metropolitan
+Carnegie,3,h,1200000.0,11.4,3.0,2.0,1.0,588.0,Southern Metropolitan
+Keilor East,4,h,1010000.0,12.8,4.0,2.0,2.0,776.0,Western Metropolitan
+Reservoir,2,u,465000.0,12.0,2.0,1.0,1.0,676.0,Northern Metropolitan
+Ascot Vale,3,h,1130000.0,5.9,3.0,2.0,1.0,272.0,Western Metropolitan
+Oakleigh,2,h,750000.0,14.0,2.0,2.0,2.0,607.0,Southern Metropolitan
+Brunswick,3,h,1280000.0,5.2,3.0,1.0,2.0,212.0,Northern Metropolitan
+Caulfield North,3,h,1870000.0,8.1,3.0,2.0,1.0,339.0,Southern Metropolitan
+Coburg,3,h,835000.0,7.8,3.0,1.0,2.0,385.0,Northern Metropolitan
+Bundoora,4,h,769000.0,12.1,4.0,2.0,2.0,662.0,Northern Metropolitan
+Reservoir,4,h,920000.0,12.0,4.0,2.0,2.0,743.0,Northern Metropolitan
+Hadfield,4,h,815000.0,12.1,4.0,2.0,2.0,672.0,Northern Metropolitan
+Mentone,3,t,815000.0,20.0,3.0,3.0,2.0,93.0,South-Eastern Metropolitan
+Mill Park,3,h,725000.0,17.9,3.0,2.0,2.0,602.0,Northern Metropolitan
+Sunshine North,3,h,700000.0,13.3,3.0,1.0,2.0,538.0,Western Metropolitan
+Footscray,2,h,745000.0,6.4,2.0,1.0,1.0,355.0,Western Metropolitan
+Albion,4,h,816000.0,13.9,4.0,1.0,2.0,837.0,Western Metropolitan
+Niddrie,4,h,1751000.0,10.4,4.0,3.0,2.0,564.0,Western Metropolitan
+Port Melbourne,3,h,1515000.0,3.8,3.0,2.0,0.0,211.0,Southern Metropolitan
+Carnegie,3,u,577000.0,11.4,3.0,1.0,1.0,0.0,Southern Metropolitan
+Albert Park,4,h,2300000.0,3.3,4.0,2.0,1.0,153.0,Southern Metropolitan
+Coburg,2,u,470000.0,7.8,2.0,2.0,1.0,0.0,Northern Metropolitan
+Rosanna,3,u,601000.0,11.4,3.0,2.0,1.0,217.0,Eastern Metropolitan
+Yarraville,3,h,910000.0,7.0,3.0,3.0,2.0,197.0,Western Metropolitan
+Northcote,3,h,1605000.0,5.3,3.0,1.0,0.0,507.0,Northern Metropolitan
+Jacana,3,h,537000.0,14.5,3.0,1.0,2.0,600.0,Northern Metropolitan
+Brunswick,4,h,1450000.0,5.2,4.0,2.0,2.0,323.0,Northern Metropolitan
+Craigieburn,3,h,500000.0,20.6,3.0,2.0,2.0,448.0,Northern Metropolitan
+Malvern,4,h,4050000.0,5.9,4.0,3.0,2.0,787.0,Southern Metropolitan
+Oakleigh South,6,h,1900000.0,14.7,6.0,2.0,6.0,1200.0,South-Eastern Metropolitan
+Altona,4,t,820000.0,11.0,4.0,2.0,2.0,288.0,Western Metropolitan
+Yarraville,2,h,822000.0,7.0,2.0,1.0,3.0,539.0,Western Metropolitan
+Port Melbourne,1,u,500000.0,3.8,1.0,1.0,1.0,0.0,Southern Metropolitan
+Balwyn North,5,h,1750000.0,9.2,5.0,2.0,2.0,710.0,Southern Metropolitan
+Hadfield,2,h,545000.0,12.1,2.0,1.0,3.0,591.0,Northern Metropolitan
+Bentleigh East,3,h,750000.0,13.9,3.0,2.0,1.0,337.0,Southern Metropolitan
+Epping,3,h,545000.0,19.6,3.0,1.0,2.0,400.0,Northern Metropolitan
+Hoppers Crossing,4,h,723000.0,18.4,4.0,2.0,2.0,872.0,Western Metropolitan
+Thornbury,2,h,1000000.0,7.0,2.0,1.0,2.0,443.0,Northern Metropolitan
+Reservoir,2,h,1700000.0,11.2,2.0,1.0,6.0,1041.0,Northern Metropolitan
+South Melbourne,3,h,1820000.0,2.1,3.0,1.0,1.0,204.0,Southern Metropolitan
+Braybrook,5,h,760000.0,8.6,5.0,2.0,2.0,622.0,Western Metropolitan
+Melton,4,h,550000.0,31.7,4.0,2.0,2.0,1241.0,Western Victoria
+Preston,5,h,1350000.0,8.4,5.0,3.0,4.0,525.0,Northern Metropolitan
+Burwood,5,h,1100000.0,11.7,5.0,2.0,1.0,544.0,Southern Metropolitan
+Ascot Vale,2,u,540000.0,5.9,2.0,2.0,1.0,0.0,Western Metropolitan
+Camberwell,3,h,2177000.0,7.8,3.0,1.0,2.0,635.0,Southern Metropolitan
+Moorabbin,3,t,910000.0,14.6,3.0,2.0,2.0,312.0,Southern Metropolitan
+Richmond,2,u,479000.0,2.6,2.0,1.0,1.0,534.0,Northern Metropolitan
+Carnegie,2,u,360000.0,11.4,2.0,1.0,1.0,0.0,Southern Metropolitan
+Carlton North,3,h,1214000.0,3.2,3.0,3.0,1.0,144.0,Northern Metropolitan
+Greensborough,2,u,610000.0,16.1,2.0,1.0,1.0,168.0,Northern Metropolitan
+Fawkner,2,h,575000.0,12.4,2.0,1.0,2.0,621.0,Northern Metropolitan
+Montmorency,3,u,569000.0,16.2,3.0,1.0,2.0,280.0,Eastern Metropolitan
+Coburg North,3,h,770000.0,6.7,3.0,1.0,1.0,520.0,Northern Metropolitan
+Northcote,3,h,1800000.0,5.3,3.0,1.0,2.0,771.0,Northern Metropolitan
+Doncaster,3,h,1285000.0,12.4,3.0,1.0,2.0,645.0,Eastern Metropolitan
+West Footscray,3,t,620000.0,8.2,3.0,1.0,2.0,255.0,Western Metropolitan
+Bulleen,4,h,1300000.0,11.8,4.0,3.0,1.0,604.0,Eastern Metropolitan
+Balwyn,2,u,725000.0,7.9,2.0,1.0,1.0,136.0,Southern Metropolitan
+Bentleigh East,4,h,1415000.0,13.9,4.0,2.0,2.0,604.0,Southern Metropolitan
+Surrey Hills,3,h,2225000.0,10.2,3.0,1.0,2.0,829.0,Southern Metropolitan
+Bentleigh East,4,h,1384000.0,13.8,4.0,3.0,2.0,631.0,Southern Metropolitan
+St Kilda,1,u,395000.0,6.1,1.0,1.0,1.0,1286.0,Southern Metropolitan
+Reservoir,4,h,1030000.0,11.2,4.0,2.0,3.0,630.0,Northern Metropolitan
+Balwyn,3,u,1070000.0,9.7,3.0,2.0,2.0,206.0,Southern Metropolitan
+North Melbourne,4,h,1475000.0,1.8,4.0,2.0,1.0,137.0,Northern Metropolitan
+Hadfield,4,h,750074.0,12.1,4.0,2.0,1.0,302.0,Northern Metropolitan
+Mitcham,3,t,800000.0,17.2,3.0,2.0,2.0,343.0,Eastern Metropolitan
+Reservoir,3,u,475000.0,11.2,3.0,1.0,2.0,521.0,Northern Metropolitan
+Abbotsford,1,u,426000.0,2.5,1.0,1.0,1.0,0.0,Northern Metropolitan
+Reservoir,3,h,572000.0,11.2,3.0,1.0,2.0,41400.0,Northern Metropolitan
+Brighton East,3,h,1580000.0,10.7,4.0,2.0,2.0,597.0,Southern Metropolitan
+Brighton,3,u,1180000.0,10.5,3.0,2.0,2.0,0.0,Southern Metropolitan
+Craigieburn,3,t,420000.0,20.6,3.0,2.0,2.0,219.0,Northern Metropolitan
+Heidelberg West,3,h,465000.0,9.4,2.0,1.0,1.0,413.0,Eastern Metropolitan
+Heathmont,3,h,901000.0,21.3,3.0,2.0,2.0,678.0,Eastern Metropolitan
+Port Melbourne,2,h,1016500.0,3.8,2.0,1.0,1.0,131.0,Southern Metropolitan
+Sunshine North,3,h,490000.0,13.3,3.0,1.0,2.0,541.0,Western Metropolitan
+Fawkner,3,h,860000.0,12.4,2.0,1.0,4.0,1075.0,Northern Metropolitan
+Essendon North,2,u,445000.0,8.2,2.0,1.0,1.0,92.0,Western Metropolitan
+Port Melbourne,1,u,545000.0,3.5,1.0,1.0,1.0,0.0,Southern Metropolitan
+Bundoora,3,h,710000.0,12.1,3.0,1.0,1.0,540.0,Northern Metropolitan
+Bentleigh East,3,h,900000.0,13.9,3.0,1.0,3.0,780.0,Southern Metropolitan
+Seddon,2,h,815000.0,6.6,2.0,1.0,0.0,172.0,Western Metropolitan
+Keilor East,3,h,738000.0,12.8,3.0,1.0,4.0,546.0,Western Metropolitan
+Sandringham,4,t,2221000.0,15.2,4.0,2.0,2.0,381.0,Southern Metropolitan
+Altona North,3,h,700000.0,11.1,3.0,1.0,1.0,557.0,Western Metropolitan
+Bentleigh East,3,h,1470000.0,13.8,3.0,2.0,2.0,616.0,Southern Metropolitan
+Port Melbourne,2,u,900000.0,3.8,2.0,1.0,2.0,0.0,Southern Metropolitan
+Bentleigh,2,u,405000.0,13.0,2.0,1.0,1.0,0.0,Southern Metropolitan
+Frankston South,3,h,750000.0,38.0,3.0,1.0,2.0,698.0,South-Eastern Metropolitan
+Ferntree Gully,3,h,663500.0,24.8,3.0,1.0,2.0,736.0,Eastern Metropolitan
+Sunshine North,3,h,650000.0,13.3,3.0,1.0,2.0,476.0,Western Metropolitan
+Carnegie,2,h,930000.0,11.4,2.0,1.0,1.0,264.0,Southern Metropolitan
+Narre Warren,3,h,597500.0,34.1,3.0,1.0,2.0,810.0,South-Eastern Metropolitan
+Camberwell,4,h,2513000.0,7.8,4.0,2.0,3.0,696.0,Southern Metropolitan
+Ashburton,4,h,2220000.0,11.0,4.0,3.0,2.0,480.0,Southern Metropolitan
+Sunshine West,4,h,645400.0,13.5,4.0,2.0,3.0,765.0,Western Metropolitan
+Albert Park,2,h,2810000.0,3.3,2.0,1.0,1.0,263.0,Southern Metropolitan
+Ivanhoe,5,h,2600000.0,7.9,5.0,3.0,1.0,1006.0,Eastern Metropolitan
+Wheelers Hill,4,h,1211000.0,16.7,4.0,3.0,4.0,653.0,South-Eastern Metropolitan
+Bundoora,3,h,660000.0,12.1,3.0,1.0,2.0,582.0,Northern Metropolitan
+Armadale,2,u,592500.0,6.3,2.0,1.0,1.0,0.0,Southern Metropolitan
+Avondale Heights,3,h,725000.0,10.5,3.0,1.0,4.0,606.0,Western Metropolitan
+Coburg North,4,h,820000.0,9.2,4.0,1.0,3.0,498.0,Northern Metropolitan
+Watsonia North,4,h,920000.0,14.5,4.0,2.0,2.0,966.0,Northern Metropolitan
+Oakleigh South,4,u,774000.0,15.5,4.0,2.0,2.0,0.0,South-Eastern Metropolitan
+Malvern,3,h,1700000.0,5.9,3.0,2.0,0.0,312.0,Southern Metropolitan
+Pascoe Vale,3,h,708000.0,9.9,3.0,1.0,2.0,321.0,Northern Metropolitan
+Port Melbourne,3,h,1670000.0,3.8,3.0,2.0,1.0,140.0,Southern Metropolitan
+Burwood,4,h,1535000.0,10.4,4.0,3.0,2.0,1004.0,Southern Metropolitan
+Fawkner,3,h,400000.0,12.4,3.0,1.0,1.0,285.0,Northern Metropolitan
+Hadfield,3,h,719000.0,12.1,3.0,1.0,4.0,692.0,Northern Metropolitan
+Eaglemont,3,h,1300000.0,8.9,3.0,1.0,2.0,615.0,Eastern Metropolitan
+St Albans,3,u,500000.0,14.0,3.0,1.0,1.0,388.0,Western Metropolitan
+Williamstown North,4,h,1520000.0,8.9,4.0,2.0,3.0,560.0,Western Metropolitan
+Caulfield North,2,u,523000.0,8.1,2.0,1.0,1.0,0.0,Southern Metropolitan
+Kew,3,h,1450000.0,5.6,3.0,2.0,2.0,247.0,Southern Metropolitan
+Preston,3,h,1000000.0,8.8,3.0,1.0,3.0,624.0,Northern Metropolitan
+Prahran,2,u,660000.0,4.6,2.0,1.0,1.0,0.0,Southern Metropolitan
+Hughesdale,4,h,1167500.0,13.0,3.0,2.0,1.0,678.0,Southern Metropolitan
+Mount Waverley,3,h,1200000.0,14.2,3.0,1.0,4.0,807.0,Eastern Metropolitan
+Kingsbury,2,h,731000.0,12.4,2.0,1.0,0.0,640.0,Northern Metropolitan
+Ringwood,3,u,766000.0,19.9,3.0,1.0,2.0,327.0,Eastern Metropolitan
+Bentleigh East,4,h,1100000.0,13.9,4.0,2.0,4.0,653.0,Southern Metropolitan
+Carnegie,2,u,380000.0,11.4,2.0,1.0,1.0,0.0,Southern Metropolitan
+Reservoir,3,h,612500.0,12.0,3.0,1.0,1.0,170.0,Northern Metropolitan
+Templestowe Lower,3,h,1350000.0,12.4,3.0,2.0,3.0,725.0,Eastern Metropolitan
+Kew East,3,t,1620000.0,7.5,3.0,2.0,2.0,248.0,Southern Metropolitan
+Malvern East,4,h,1675000.0,11.2,3.0,2.0,4.0,727.0,Southern Metropolitan
+Glen Waverley,4,h,1200000.0,16.7,4.0,2.0,2.0,660.0,Eastern Metropolitan
+Kew,4,h,2117000.0,5.6,4.0,1.0,2.0,520.0,Southern Metropolitan
+Hawthorn East,2,u,622000.0,7.5,2.0,1.0,1.0,0.0,Southern Metropolitan
+Heidelberg Heights,2,h,682000.0,10.5,2.0,1.0,0.0,341.0,Eastern Metropolitan
+Northcote,1,u,385000.0,5.5,1.0,1.0,0.0,0.0,Northern Metropolitan
+Richmond,3,h,1270000.0,2.6,2.0,1.0,1.0,181.0,Northern Metropolitan
+Brunswick,3,h,1250000.0,5.2,3.0,1.0,1.0,483.0,Northern Metropolitan
+Surrey Hills,4,h,2720000.0,10.2,4.0,3.0,2.0,1005.0,Southern Metropolitan
+Altona,2,u,580000.0,13.8,2.0,1.0,1.0,225.0,Western Metropolitan
+Dingley Village,4,h,1255000.0,22.2,4.0,2.0,3.0,624.0,South-Eastern Metropolitan
+Melbourne,2,u,540000.0,0.0,2.0,1.0,0.0,0.0,Northern Metropolitan
+Lalor,2,h,685000.0,16.3,2.0,1.0,2.0,766.0,Northern Metropolitan
+West Footscray,4,h,1325000.0,8.2,4.0,2.0,4.0,525.0,Western Metropolitan
+Ascot Vale,4,h,950000.0,5.9,4.0,2.0,1.0,298.0,Western Metropolitan
+West Footscray,2,h,470000.0,8.2,2.0,1.0,1.0,0.0,Western Metropolitan
+South Yarra,2,u,827000.0,3.3,2.0,2.0,2.0,17200.0,Southern Metropolitan
+Essendon,3,h,1100000.0,8.0,3.0,2.0,1.0,789.0,Western Metropolitan
+Williamstown,1,u,310000.0,8.0,1.0,1.0,1.0,0.0,Western Metropolitan
+Balwyn,5,h,2665000.0,9.7,4.0,3.0,2.0,674.0,Southern Metropolitan
+Wantirna South,6,h,1180000.0,14.7,6.0,2.0,2.0,453.0,Eastern Metropolitan
+Glen Iris,4,h,2010000.0,9.2,4.0,2.0,2.0,659.0,Southern Metropolitan
+Toorak,3,u,922500.0,4.6,3.0,1.0,2.0,4657.0,Southern Metropolitan
+Brunswick East,2,h,1305000.0,4.0,2.0,1.0,0.0,315.0,Northern Metropolitan
+Fawkner,3,u,470000.0,12.4,3.0,0.0,0.0,261.0,Northern Metropolitan
+Altona,3,u,630000.0,13.8,2.0,1.0,2.0,311.0,Western Metropolitan
+Strathmore,3,t,600000.0,9.7,4.0,3.0,2.0,717.0,Western Metropolitan
+Richmond,3,h,3020000.0,2.6,3.0,2.0,2.0,389.0,Northern Metropolitan
+Coburg North,2,h,935000.0,9.2,2.0,1.0,2.0,833.0,Northern Metropolitan
+Northcote,2,h,1340000.0,5.5,2.0,1.0,1.0,297.0,Northern Metropolitan
+Newport,3,h,891500.0,8.4,3.0,1.0,0.0,344.0,Western Metropolitan
+Essendon,5,h,2335000.0,7.5,5.0,2.0,6.0,1012.0,Western Metropolitan
+St Helena,3,h,805000.0,16.1,3.0,1.0,0.0,930.0,Eastern Metropolitan
+Hoppers Crossing,3,h,540000.0,18.4,3.0,2.0,2.0,580.0,Western Metropolitan
+Ashburton,3,h,1655000.0,11.0,3.0,1.0,3.0,780.0,Southern Metropolitan
+Surrey Hills,3,h,1620000.0,10.2,3.0,1.0,2.0,665.0,Southern Metropolitan
+Oakleigh,3,u,637000.0,14.0,3.0,1.0,2.0,119.0,Southern Metropolitan
+Alphington,3,h,1625000.0,5.7,3.0,2.0,1.0,300.0,Northern Metropolitan
+Croydon North,3,h,857000.0,23.0,3.0,2.0,1.0,1007.0,Eastern Metropolitan
+Braybrook,2,h,570000.0,8.6,2.0,1.0,2.0,567.0,Western Metropolitan
+Bulleen,2,h,890000.0,11.8,2.0,1.0,2.0,559.0,Eastern Metropolitan
+Maribyrnong,3,t,550000.0,8.7,3.0,2.0,2.0,77.0,Western Metropolitan
+Heidelberg,4,h,1450000.0,10.6,4.0,3.0,2.0,952.0,Eastern Metropolitan
+Caulfield South,3,h,1577500.0,9.3,3.0,2.0,2.0,357.0,Southern Metropolitan
+Malvern East,3,h,1055000.0,11.2,3.0,2.0,1.0,0.0,Southern Metropolitan
+Elwood,2,u,765000.0,7.7,2.0,1.0,0.0,0.0,Southern Metropolitan
+Reservoir,3,h,539000.0,11.2,3.0,1.0,1.0,474.0,Northern Metropolitan
+South Melbourne,4,h,2180000.0,2.1,4.0,3.0,1.0,200.0,Southern Metropolitan
+Chirnside Park,3,h,640000.0,27.1,3.0,2.0,2.0,945.0,Eastern Victoria
+Port Melbourne,3,h,1725000.0,3.5,3.0,1.0,2.0,293.0,Southern Metropolitan
+Hawthorn,4,h,7650000.0,5.3,4.0,2.0,4.0,1690.0,Southern Metropolitan
+Ripponlea,2,u,660000.0,7.4,2.0,1.0,0.0,477.0,Southern Metropolitan
+Mill Park,4,h,722500.0,17.9,4.0,2.0,2.0,643.0,Northern Metropolitan
+Hadfield,3,h,631500.0,12.1,4.0,1.0,3.0,593.0,Northern Metropolitan
+Kealba,3,h,365000.0,15.0,3.0,1.0,0.0,543.0,Western Metropolitan
+Niddrie,4,h,1160000.0,11.2,4.0,3.0,2.0,424.0,Western Metropolitan
+Coburg,3,h,1370000.0,7.8,3.0,1.0,1.0,563.0,Northern Metropolitan
+Malvern,4,h,2300000.0,7.4,4.0,2.0,2.0,599.0,Southern Metropolitan
+Kew,3,t,732000.0,5.6,3.0,1.0,1.0,904.0,Southern Metropolitan
+Northcote,2,h,950000.0,5.5,2.0,1.0,1.0,191.0,Northern Metropolitan
+Malvern East,2,h,2412000.0,11.2,2.0,1.0,4.0,1220.0,Southern Metropolitan
+Brighton,3,h,2400000.0,11.2,3.0,2.0,2.0,835.0,Southern Metropolitan
+South Yarra,3,u,1072000.0,3.3,3.0,0.0,0.0,0.0,Southern Metropolitan
+Strathmore,3,h,1500000.0,9.7,3.0,2.0,4.0,722.0,Western Metropolitan
+Brunswick,3,h,947000.0,5.2,3.0,1.0,2.0,996.0,Northern Metropolitan
+Ashwood,3,h,785000.0,12.2,3.0,1.0,1.0,557.0,Southern Metropolitan
+Collingwood,3,t,1308000.0,1.6,3.0,1.0,2.0,125.0,Northern Metropolitan
+Vermont South,5,h,1300000.0,17.2,5.0,2.0,2.0,786.0,Eastern Metropolitan
+Albion,3,h,625000.0,13.9,3.0,1.0,0.0,695.0,Western Metropolitan
+Alphington,3,h,1165000.0,6.4,3.0,1.0,2.0,979.0,Northern Metropolitan
+Balwyn North,3,h,1575000.0,9.2,3.0,2.0,2.0,645.0,Southern Metropolitan
+Northcote,3,h,1275000.0,5.3,3.0,1.0,0.0,245.0,Northern Metropolitan
+Hawthorn East,2,u,520000.0,6.2,2.0,1.0,1.0,0.0,Southern Metropolitan
+Nunawading,2,u,725000.0,15.4,2.0,1.0,2.0,848.0,Eastern Metropolitan
+Albert Park,3,h,1800000.0,3.0,3.0,1.0,1.0,130.0,Southern Metropolitan
+Brunswick,3,h,1060000.0,5.2,3.0,1.0,0.0,257.0,Northern Metropolitan
+Malvern East,3,h,2030000.0,8.4,3.0,2.0,2.0,660.0,Southern Metropolitan
+Chadstone,3,t,865000.0,13.6,3.0,2.0,2.0,277.0,Southern Metropolitan
+Ascot Vale,3,h,1306000.0,4.3,3.0,1.0,0.0,199.0,Western Metropolitan
+Niddrie,2,u,457000.0,11.2,2.0,1.0,1.0,0.0,Western Metropolitan
+Elsternwick,2,h,900000.0,8.5,2.0,1.0,1.0,198.0,Southern Metropolitan
+Scoresby,3,h,1000000.0,22.2,3.0,2.0,2.0,1088.0,Eastern Metropolitan
+Pascoe Vale,4,h,650000.0,9.9,4.0,1.0,2.0,410.0,Northern Metropolitan
+Avondale Heights,4,h,835000.0,9.5,4.0,2.0,2.0,573.0,Western Metropolitan
+Seddon,3,h,900000.0,5.1,3.0,1.0,1.0,252.0,Western Metropolitan
+Abbotsford,2,h,890000.0,2.5,2.0,1.0,1.0,150.0,Northern Metropolitan
+Northcote,3,h,1510000.0,5.5,3.0,1.0,3.0,327.0,Northern Metropolitan
+Northcote,2,h,1095000.0,5.5,2.0,1.0,2.0,306.0,Northern Metropolitan
+St Kilda,4,h,1950000.0,6.1,4.0,2.0,2.0,436.0,Southern Metropolitan
+Templestowe Lower,3,u,641000.0,13.8,3.0,1.0,2.0,349.0,Eastern Metropolitan
+Brighton,2,t,975000.0,11.2,2.0,1.0,1.0,444.0,Southern Metropolitan
+South Kingsville,2,h,420000.0,9.1,2.0,1.0,1.0,78.0,Western Metropolitan
+Prahran,3,h,2180000.0,4.5,2.0,2.0,2.0,238.0,Southern Metropolitan
+Preston,3,h,1150000.0,8.4,3.0,0.0,0.0,502.0,Northern Metropolitan
+Nunawading,4,h,1075000.0,15.4,4.0,2.0,2.0,697.0,Eastern Metropolitan
+Toorak,2,u,838000.0,4.6,2.0,1.0,1.0,0.0,Southern Metropolitan
+South Melbourne,3,h,2300000.0,2.1,3.0,2.0,2.0,0.0,Southern Metropolitan
+Middle Park,2,u,702000.0,4.1,2.0,1.0,1.0,0.0,Southern Metropolitan
+Werribee,3,h,427000.0,14.7,3.0,1.0,2.0,637.0,Western Metropolitan
+Elwood,1,u,357000.0,7.7,1.0,1.0,1.0,0.0,Southern Metropolitan
+Surrey Hills,2,u,550000.0,11.2,2.0,1.0,1.0,174.0,Southern Metropolitan
+Altona,2,u,580000.0,13.8,2.0,2.0,1.0,175.0,Western Metropolitan
+Malvern,2,u,740000.0,7.4,2.0,1.0,1.0,0.0,Southern Metropolitan
+Brunswick,2,h,871000.0,5.2,2.0,1.0,1.0,215.0,Northern Metropolitan
+Port Melbourne,1,u,540000.0,3.8,1.0,1.0,1.0,0.0,Southern Metropolitan
+Donvale,3,h,902000.0,16.1,3.0,1.0,2.0,649.0,Eastern Metropolitan
+Aberfeldie,3,u,1160000.0,9.1,3.0,2.0,1.0,309.0,Western Metropolitan
+Caulfield North,2,u,575000.0,8.1,2.0,1.0,1.0,0.0,Southern Metropolitan
+Keilor East,3,t,660000.0,12.8,3.0,2.0,1.0,265.0,Western Metropolitan
+Toorak,2,u,876000.0,4.6,2.0,1.0,1.0,649.0,Southern Metropolitan
+Carnegie,2,u,580010.0,10.1,2.0,1.0,1.0,0.0,Southern Metropolitan
+Mount Waverley,2,u,620000.0,14.2,2.0,1.0,1.0,190.0,Eastern Metropolitan
+Moonee Ponds,2,u,730000.0,6.9,2.0,1.0,2.0,217.0,Western Metropolitan
+Toorak,2,u,1140000.0,4.1,2.0,2.0,2.0,586.0,Southern Metropolitan
+Reservoir,2,h,610000.0,11.2,3.0,1.0,2.0,383.0,Northern Metropolitan
+South Yarra,2,u,840000.0,3.3,2.0,2.0,1.0,0.0,Southern Metropolitan
+Taylors Lakes,3,h,746000.0,15.5,3.0,2.0,2.0,649.0,Western Metropolitan
+Fawkner,3,h,730000.0,12.4,3.0,1.0,2.0,638.0,Northern Metropolitan
+Williamstown,4,h,1300000.0,8.0,4.0,2.0,2.0,369.0,Western Metropolitan
+West Footscray,3,h,878000.0,8.2,3.0,1.0,1.0,397.0,Western Metropolitan
+Brunswick,2,h,650000.0,5.2,2.0,1.0,1.0,108.0,Northern Metropolitan
+Prahran,1,u,240000.0,4.5,1.0,1.0,1.0,0.0,Southern Metropolitan
+Doncaster,4,h,1460800.0,13.9,4.0,3.0,2.0,654.0,Eastern Metropolitan
+Brighton,4,h,2260000.0,10.5,4.0,2.0,2.0,881.0,Southern Metropolitan
+Reservoir,3,u,301000.0,11.2,3.0,1.0,1.0,0.0,Northern Metropolitan
+South Yarra,1,u,330000.0,3.3,1.0,1.0,1.0,0.0,Southern Metropolitan
+Prahran,1,u,330000.0,4.5,1.0,1.0,1.0,0.0,Southern Metropolitan
+Bentleigh East,4,t,1465000.0,13.9,3.0,2.0,2.0,319.0,Southern Metropolitan
+Ormond,2,u,430000.0,11.8,2.0,1.0,1.0,0.0,Southern Metropolitan
+Werribee,3,h,483000.0,14.7,3.0,1.0,2.0,569.0,Western Metropolitan
+Oakleigh,3,h,1124000.0,14.0,3.0,1.0,1.0,685.0,Southern Metropolitan
+Brunswick,2,u,501000.0,5.2,2.0,1.0,1.0,1140.0,Northern Metropolitan
+St Albans,4,h,537000.0,14.0,4.0,2.0,2.0,447.0,Western Metropolitan
+Prahran,2,h,1090000.0,4.5,2.0,1.0,1.0,158.0,Southern Metropolitan
+Brighton East,4,h,1920000.0,10.7,4.0,1.0,1.0,1000.0,Southern Metropolitan
+Noble Park,2,u,445000.0,22.7,2.0,1.0,3.0,197.0,South-Eastern Metropolitan
+Cheltenham,5,h,1140000.0,17.9,5.0,2.0,2.0,570.0,Southern Metropolitan
+Craigieburn,5,h,680000.0,20.6,5.0,3.0,2.0,646.0,Northern Metropolitan
+Carrum,4,h,965000.0,31.2,4.0,1.0,3.0,1000.0,South-Eastern Metropolitan
+Coburg North,3,t,830000.0,6.7,3.0,2.0,2.0,275.0,Northern Metropolitan
+Melbourne,2,u,1075000.0,0.0,2.0,2.0,1.0,0.0,Northern Metropolitan
+Balwyn,3,h,1750000.0,7.9,3.0,3.0,1.0,790.0,Southern Metropolitan
+Malvern East,4,h,2001000.0,11.2,4.0,2.0,2.0,526.0,Southern Metropolitan
+Sandringham,5,h,3350000.0,15.2,5.0,4.0,4.0,700.0,Southern Metropolitan
+Doncaster,5,h,1322000.0,13.9,5.0,1.0,0.0,729.0,Eastern Metropolitan
+Yarraville,4,h,1606000.0,7.0,4.0,2.0,3.0,455.0,Western Metropolitan
+Glen Iris,5,h,2180000.0,7.3,5.0,3.0,2.0,595.0,Southern Metropolitan
+Werribee,4,h,621000.0,14.7,4.0,2.0,2.0,556.0,Western Metropolitan
+Balwyn North,3,u,1050000.0,9.2,3.0,2.0,2.0,244.0,Southern Metropolitan
+Glenroy,3,h,596000.0,13.0,3.0,1.0,3.0,624.0,Northern Metropolitan
+South Kingsville,4,t,915000.0,9.1,4.0,3.0,1.0,662.0,Western Metropolitan
+Brighton East,3,h,1355000.0,10.7,3.0,1.0,2.0,759.0,Southern Metropolitan
+Brighton,2,u,858000.0,11.2,2.0,1.0,1.0,107.0,Southern Metropolitan
+South Yarra,2,u,601000.0,3.3,2.0,1.0,1.0,0.0,Southern Metropolitan
+Fitzroy North,2,u,650000.0,3.6,2.0,1.0,1.0,0.0,Northern Metropolitan
+Ringwood North,4,h,1050000.0,19.9,4.0,2.0,2.0,770.0,Eastern Metropolitan
+Bentleigh,3,h,1230000.0,13.0,3.0,1.0,2.0,676.0,Southern Metropolitan
+Balwyn,4,h,1800000.0,9.7,3.0,2.0,2.0,577.0,Southern Metropolitan
+Gladstone Park,3,h,645000.0,12.9,3.0,1.0,1.0,556.0,Western Metropolitan
+Moonee Ponds,2,h,900000.0,6.9,2.0,1.0,1.0,339.0,Western Metropolitan
+Brighton East,5,h,2750000.0,10.3,5.0,3.0,3.0,626.0,Southern Metropolitan
+Mentone,3,t,1051000.0,20.0,3.0,2.0,2.0,435.0,South-Eastern Metropolitan
+Sunshine West,3,h,450000.0,10.5,3.0,1.0,2.0,283.0,Western Metropolitan
+Watsonia,5,h,826000.0,14.9,5.0,1.0,2.0,545.0,Northern Metropolitan
+Abbotsford,1,u,457000.0,2.5,1.0,1.0,1.0,0.0,Northern Metropolitan
+Yarraville,4,h,1028000.0,7.0,4.0,2.0,2.0,431.0,Western Metropolitan
+Carlton,3,h,1760000.0,1.6,3.0,2.0,2.0,151.0,Northern Metropolitan
+Pascoe Vale,2,h,962000.0,8.5,2.0,1.0,2.0,624.0,Northern Metropolitan
+Mount Waverley,4,h,1340000.0,14.2,4.0,2.0,2.0,800.0,Eastern Metropolitan
+Murrumbeena,2,h,685000.0,12.1,2.0,1.0,1.0,0.0,Southern Metropolitan
+Windsor,4,h,2050000.0,5.1,4.0,2.0,1.0,321.0,Southern Metropolitan
+Oakleigh,3,h,760000.0,12.3,3.0,1.0,1.0,692.0,Southern Metropolitan
+Elwood,2,u,670000.0,7.2,2.0,1.0,0.0,643.0,Southern Metropolitan
+Highett,3,h,1460000.0,16.0,3.0,2.0,2.0,725.0,Southern Metropolitan
+Carlton North,2,h,950000.0,3.5,2.0,1.0,,97.0,Northern Metropolitan
+South Morang,3,t,420000.0,20.5,3.0,2.0,2.0,155.0,Northern Metropolitan
+Kew,2,u,515000.0,5.6,2.0,1.0,1.0,743.0,Southern Metropolitan
+Flemington,2,h,715000.0,4.4,2.0,1.0,1.0,0.0,Northern Metropolitan
+Hughesdale,4,h,2120000.0,13.0,4.0,2.0,2.0,847.0,Southern Metropolitan
+Thornbury,2,h,1164000.0,6.5,2.0,2.0,0.0,206.0,Northern Metropolitan
+Donvale,3,h,900000.0,16.1,3.0,1.0,2.0,726.0,Eastern Metropolitan
+South Yarra,2,h,1200000.0,3.3,2.0,1.0,0.0,176.0,Southern Metropolitan
+Brunswick East,2,h,580000.0,4.5,2.0,1.0,1.0,0.0,Northern Metropolitan
+North Melbourne,1,u,320000.0,2.3,1.0,1.0,1.0,0.0,Northern Metropolitan
+Carnegie,1,u,363000.0,11.4,1.0,1.0,1.0,0.0,Southern Metropolitan
+Yallambie,3,h,800000.0,15.0,3.0,2.0,2.0,660.0,Northern Metropolitan
+St Kilda,1,u,459000.0,6.1,1.0,1.0,1.0,0.0,Southern Metropolitan
+Brunswick,1,u,370000.0,5.2,1.0,1.0,1.0,0.0,Northern Metropolitan
+Maidstone,2,t,600000.0,9.2,2.0,2.0,1.0,145.0,Western Metropolitan
+Greensborough,3,h,730000.0,16.1,3.0,2.0,2.0,563.0,Northern Metropolitan
+Doreen,3,h,530500.0,25.9,3.0,2.0,2.0,400.0,Northern Victoria
+North Melbourne,2,t,1105000.0,2.3,2.0,2.0,1.0,88.0,Northern Metropolitan
+Reservoir,3,h,526250.0,12.0,3.0,1.0,1.0,308.0,Northern Metropolitan
+Emerald,2,h,655000.0,36.9,2.0,1.0,0.0,1000.0,Eastern Victoria
+Brunswick,2,u,600000.0,5.2,2.0,1.0,1.0,768.0,Northern Metropolitan
+Glen Iris,2,h,1699000.0,9.2,3.0,1.0,2.0,653.0,Southern Metropolitan
+Essendon,2,u,707000.0,8.0,2.0,1.0,1.0,179.0,Western Metropolitan
+Doncaster East,4,h,1600000.0,14.3,4.0,3.0,2.0,878.0,Eastern Metropolitan
+Hawthorn East,3,u,735000.0,7.5,2.0,1.0,1.0,0.0,Southern Metropolitan
+Maribyrnong,3,t,560000.0,8.7,3.0,2.0,2.0,83.0,Western Metropolitan
+Carlton,1,u,310000.0,1.8,1.0,1.0,1.0,0.0,Northern Metropolitan
+Templestowe Lower,4,h,1325000.0,13.8,4.0,3.0,2.0,740.0,Eastern Metropolitan
+Sunshine West,3,h,486000.0,13.5,3.0,1.0,2.0,539.0,Western Metropolitan
+Viewbank,3,h,870000.0,8.9,3.0,2.0,2.0,291.0,Eastern Metropolitan
+Keilor East,3,h,1001000.0,11.7,3.0,1.0,2.0,605.0,Western Metropolitan
+Mitcham,3,h,1010000.0,17.2,3.0,2.0,2.0,672.0,Eastern Metropolitan
+Newport,4,h,1115000.0,8.4,4.0,1.0,1.0,0.0,Western Metropolitan
+South Melbourne,2,h,980000.0,1.9,2.0,1.0,0.0,64.0,Southern Metropolitan
+Ivanhoe,4,h,2595000.0,7.9,4.0,3.0,3.0,719.0,Eastern Metropolitan
+Kew East,5,h,1950000.0,7.5,5.0,2.0,3.0,711.0,Southern Metropolitan
+Brunswick,3,h,976000.0,5.2,3.0,2.0,1.0,240.0,Northern Metropolitan
+Burwood,3,h,1390000.0,11.7,3.0,1.0,2.0,697.0,Southern Metropolitan
+Hoppers Crossing,4,h,576000.0,18.4,4.0,2.0,1.0,570.0,Western Metropolitan
+Richmond,2,u,715000.0,2.4,2.0,1.0,2.0,2427.0,Northern Metropolitan
+Altona North,3,h,910000.0,11.1,3.0,1.0,3.0,535.0,Western Metropolitan
+Collingwood,2,h,1095000.0,2.0,2.0,1.0,0.0,151.0,Northern Metropolitan
+Essendon,3,h,1070000.0,8.0,3.0,1.0,2.0,363.0,Western Metropolitan
+Pascoe Vale,3,h,960000.0,9.9,3.0,2.0,2.0,501.0,Northern Metropolitan
+Mill Park,4,h,676000.0,17.9,4.0,2.0,2.0,537.0,Northern Metropolitan
+Surrey Hills,3,u,930000.0,11.2,3.0,2.0,2.0,252.0,Southern Metropolitan
+West Footscray,1,u,288000.0,8.2,1.0,1.0,1.0,628.0,Western Metropolitan
+Camberwell,3,h,1800000.0,7.8,3.0,2.0,0.0,584.0,Southern Metropolitan
+Ringwood,3,h,800000.0,19.9,3.0,2.0,1.0,461.0,Eastern Metropolitan
+Hughesdale,4,h,1700000.0,13.0,4.0,2.0,2.0,545.0,Southern Metropolitan
+Thornbury,3,h,1031000.0,7.0,3.0,1.0,2.0,612.0,Northern Metropolitan
+Richmond,1,u,314000.0,2.4,1.0,1.0,1.0,0.0,Northern Metropolitan
+Eltham,3,h,842000.0,18.0,3.0,1.0,1.0,960.0,Eastern Metropolitan
+Craigieburn,3,h,390000.0,20.6,3.0,1.0,1.0,301.0,Northern Metropolitan
+Murrumbeena,4,t,1100000.0,12.1,4.0,3.0,2.0,286.0,Southern Metropolitan
+Avondale Heights,4,h,605000.0,10.5,4.0,1.0,0.0,569.0,Western Metropolitan

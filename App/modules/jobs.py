@@ -67,6 +67,10 @@ def load_reduction_data(job_path, evaluation):
 def scale_features(features):
     """Scale features with caching"""
 
+    string_cols = features.select_dtypes(include=["object"]).columns
+    if not string_cols.empty:
+        features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
+
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
@@ -393,25 +397,31 @@ def load_features(job_path, training):
 
 def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
     """Create and cache the distribution plot"""
-    fig = ff.create_distplot(
-        fig_data,
-        unique_labels,
-        bin_size=bin_edges,
-        colors=color_map,
-        rug_text=fig_rug_text if fig_rug_text is not None else False,
-        histnorm="probability density",
-        show_rug=fig_rug_text is not None  # Only show rug if text is provided
-    )
-    
-    fig.update_layout(
-        title=f"Feature distribution for {selected_feature}",
-        xaxis_title=selected_feature,
-        yaxis_title="Density",
-        height=800,
-        margin=dict(t=30, b=50)
-    )
 
-    return fig
+    try:
+        fig = ff.create_distplot(
+            fig_data,
+            unique_labels,
+            bin_size=bin_edges,
+            colors=color_map,
+            rug_text=fig_rug_text if fig_rug_text is not None else False,
+            histnorm="probability density",
+            show_rug=fig_rug_text is not None  # Only show rug if text is provided
+        )
+        
+        fig.update_layout(
+            title=f"Feature distribution for {selected_feature}",
+            xaxis_title=selected_feature,
+            yaxis_title="Density",
+            height=800,
+            margin=dict(t=30, b=50)
+        )
+
+        return fig
+    except:
+        st.warning("Plot not available for this feature.")
+
+    return None
 
 def feature_distribution():
     
@@ -449,9 +459,6 @@ def feature_distribution():
         features, labels, nameseqs = load_features(st.session_state["job_path"], True)
     else:
         features, labels, nameseqs = load_features(st.session_state["job_path"], False)
-
-    if "imputer" in st.session_state["model"]:
-        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     if "mapper" in st.session_state:
         features = features.rename(columns=st.session_state["mapper"])
@@ -503,7 +510,9 @@ def feature_distribution():
             fig_rug_text if show_rug else None,  # Pass None if rug is disabled
             selected_feature
         )
-        st.plotly_chart(fig, use_container_width=True)
+        
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
 
 def create_confusion_matrix_figure(df):
     labels = df.columns[1:-1].tolist()
@@ -1048,9 +1057,253 @@ def model_information(data_type, task):
 
     has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
 
-    col1, col2 = st.columns(2)
+    if data_type != "Structured data":
+        col1, col2 = st.columns(2)
 
-    with col1:
+        with col1:
+            with st.container(border=True):
+                cont1, cont2 = st.columns([3, 1])
+
+                with cont1:
+                    st.markdown("**Model**")
+
+                    st.markdown(f"**Task:** {task}")
+
+                    def show_params(title, params, keys):
+                        st.markdown(f"**Algorithm:** {title}")
+                        for k in keys:
+                            if k in params and params[k] is not None:
+                                st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
+
+                    clf_str = str(st.session_state["model"]["clf"])
+                    params = st.session_state["model"]["clf"]["clf"].get_params()
+
+                    if "RandomForest" in clf_str:
+                        show_params(
+                            "Random Forest",
+                            params,
+                            keys=[
+                                "n_estimators", "criterion", "max_depth", "max_features",
+                                "min_samples_split", "min_samples_leaf", "bootstrap",
+                                "max_leaf_nodes", "min_impurity_decrease", "class_weight"
+                            ]
+                        )
+                    elif "XGB" in clf_str:
+                        show_params(
+                            "XGBoost",
+                            params,
+                            keys=[
+                                "n_estimators", "learning_rate", "max_depth", "gamma",
+                                "subsample", "colsample_bytree", "reg_alpha", "reg_lambda",
+                                "min_child_weight", "objective"
+                            ]
+                        )
+                    elif "LGBM" in clf_str:
+                        show_params(
+                            "LightGBM",
+                            params,
+                            keys=[
+                                "n_estimators", "learning_rate", "max_depth", "boosting_type",
+                                "subsample", "colsample_bytree", "num_leaves", "min_child_samples",
+                                "reg_alpha", "reg_lambda"
+                            ]
+                        )
+                with cont2:
+                    with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
+                        st.download_button(
+                            label="Download model",
+                            data=model_file,
+                            file_name="trained_model.sav",
+                            mime="application/octet-stream",
+                            use_container_width=True,
+                            help="SAV file can be loaded into the application"
+                        )
+
+                    if "RandomForest" in str(st.session_state["model"]["clf"]):
+                        st.image("imgs/models/rf.png", use_container_width=True)
+                    elif "XGB" in str(st.session_state["model"]["clf"]):
+                        st.image("imgs/models/xgboost.png", use_container_width=True)
+                    elif "LGBM" in str(st.session_state["model"]["clf"]):
+                        st.image("imgs/models/lightgbm.png", use_container_width=True)
+
+        with col2:
+            st.markdown("**Extracted features**", help="Here you can download the features extracted from the submitted datasets. Please note that for larger models from the repository, the process may take a little longer.")
+
+            if st.button("Prepare datasets for download", use_container_width=True):
+                if has_test_set:
+                    download_col1, download_col2 = st.columns(2)
+                with st.spinner("Compressing datasets..."):
+                    
+                    with tempfile.NamedTemporaryFile(
+                        mode="wb",
+                        suffix=".csv.gz"
+                    ) as tmp:
+                        with gzip.open(tmp.name, mode="wt", newline="") as gz:
+                            writer = csv.writer(gz)
+
+                            renamed_columns = [
+                                st.session_state["mapper"].get(col, col)
+                                for col in st.session_state["model"]["train"].columns
+                            ]
+
+                            # Header
+                            writer.writerow(
+                                ["Sample name"]
+                                + renamed_columns
+                                + ["label"]
+                            )
+
+                            for name, row, label in zip(
+                                st.session_state["model"]["nameseq_train"],
+                                st.session_state["model"]["train"].itertuples(index=False),
+                                st.session_state["model"]["train_labels"],
+                            ):
+                                writer.writerow([name, *row, label])
+
+                        if has_test_set:
+                            test_fnameseq = os.path.join(
+                                st.session_state["job_path"],
+                                "feat_extraction/fnameseqtest.csv",
+                            )
+                            test_features = os.path.join(
+                                st.session_state["job_path"],
+                                "best_descriptors/best_test.csv",
+                            )
+                            test_labels = os.path.join(
+                                st.session_state["job_path"],
+                                "feat_extraction/flabeltest.csv",
+                            )
+
+                            with tempfile.NamedTemporaryFile(
+                                mode="wb",
+                                suffix=".csv.gz"
+                            ) as tmp_test:
+                                with gzip.open(tmp_test.name, mode="wt", newline="") as gz:
+                                    writer = csv.writer(gz)
+
+                                    with (
+                                        open(test_fnameseq, newline="") as f_name,
+                                        open(test_features, newline="") as f_feat,
+                                        open(test_labels, newline="") as f_label,
+                                    ):
+                                        reader_name = csv.reader(f_name)
+                                        reader_feat = csv.reader(f_feat)
+                                        reader_label = csv.reader(f_label)
+
+                                        # --- Read and rename test feature header ---
+                                        next(reader_name, None)
+                                        test_feature_header = next(reader_feat)
+                                        next(reader_label, None)
+
+                                        renamed_test_columns = [
+                                            st.session_state["mapper"].get(col, col)
+                                            for col in test_feature_header
+                                        ]
+
+                                        # Write final header
+                                        writer.writerow(
+                                            ["Sample name"]
+                                            + renamed_test_columns
+                                            + ["label"]
+                                        )
+
+                                        # Stream rows
+                                        for name_row, feat_row, label_row in zip(
+                                            reader_name, reader_feat, reader_label
+                                        ):
+                                            writer.writerow(
+                                                [name_row[0], *feat_row, label_row[0]]
+                                            )
+
+                                with download_col1:
+                                    with open(tmp.name, "rb") as f:
+                                        st.download_button(
+                                            label="Download training set (.csv.gz)",
+                                            data=f,
+                                            file_name="train_dataset.csv.gz",
+                                            mime="application/gzip",
+                                            use_container_width=True
+                                        )
+
+                                with download_col2:
+                                    with open(tmp_test.name, "rb") as f:
+                                        st.download_button(
+                                            label="Download test/prediction set (.csv.gz)",
+                                            data=f,
+                                            file_name="test_dataset.csv.gz",
+                                            mime="application/gzip",
+                                            use_container_width=True,
+                                        )
+                        else:
+                            with open(tmp.name, "rb") as f:
+                                st.download_button(
+                                    label="Download training set (.csv.gz)",
+                                    data=f,
+                                    file_name="train_dataset.csv.gz",
+                                    mime="application/gzip",
+                                    use_container_width=True
+                                )
+                        
+                        st.success("Datasets compressed successfully!")
+
+            st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
+
+            if "model" in st.session_state:
+                df_descriptors = st.session_state["model"]["descriptors"]
+            else:
+                path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
+                df_descriptors = pd.read_csv(path_descriptors)
+
+            # Replace values
+            pd.set_option('future.no_silent_downcasting', True)
+            df_descriptors = df_descriptors.replace({1: True, 0: False})
+
+            # Show in Streamlit
+            st.dataframe(df_descriptors.sort_index(axis=1), hide_index=True)
+            
+            with st.expander("**Descriptors information**"):
+                if data_type == "DNA/RNA":
+                    st.markdown(
+                        """**DNC**: Dinucleotide composition;  \n"""
+                        """**Fickett**: Fickett score based on positional nucleotide features;  \n"""
+                        """**FourierBinary**: Binary numerical mapping using Fourier transform;  \n"""
+                        """**FourierComplex**: Complex numerical mapping using Fourier transform;  \n"""
+                        """**NAC**: Nucleotide composition;  \n"""
+                        """**ORF**: Open reading frame-based features;  \n"""
+                        """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
+                        """**TNC**: Trinucleotide composition;  \n"""
+                        """**Tsallis**: Tsallis entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                        """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 2 after 1-gap;  \n"""
+                        """**kGap_tri**: Xmer k-Spaced Ymer composition frequency with 3 after 1-gap;  \n"""
+                        """**repDNA**: Comprehensive representation of DNA sequences including k-mers, autocorrelations, and physicochemical features;  \n"""
+                    )
+                elif data_type == "Protein":
+                    st.markdown(
+                        """**AAC**: Amino acid composition;  \n"""
+                        """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
+                        """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
+                        """**CTDC**: Composition;  \n"""
+                        """**CTDD**: Distribution;  \n"""
+                        """**CTDT**: Transition;  \n"""
+                        """**CTriad**: Conjoint triad;  \n"""
+                        """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
+                        """**DDE**: Dipeptide deviation from expected mean;  \n"""
+                        """**DPC**: Kmer dipeptides composition;  \n"""
+                        """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
+                        """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
+                        """**GAAC**: Grouped amino acid composition;  \n"""
+                        """**GDPC**: Grouped dipeptide composition;  \n"""
+                        """**GTPC**: Grouped tripeptide composition;  \n"""
+                        """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
+                        """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
+                        """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
+                        """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
+                        """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                        """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
+                        """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
+                        """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 1 after 1-gap;  \n"""
+                    )
+    else:
         with st.container(border=True):
             cont1, cont2 = st.columns([3, 1])
 
@@ -1116,183 +1369,6 @@ def model_information(data_type, task):
                 elif "LGBM" in str(st.session_state["model"]["clf"]):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
-    with col2:
-        st.markdown("**Extracted features**", help="Here you can download the features extracted from the submitted datasets. Please note that for larger models from the repository, the process may take a little longer.")
-
-        if st.button("Prepare datasets for download", use_container_width=True):
-            if has_test_set:
-                download_col1, download_col2 = st.columns(2)
-            with st.spinner("Compressing datasets..."):
-                
-                with tempfile.NamedTemporaryFile(
-                    mode="wb",
-                    suffix=".csv.gz"
-                ) as tmp:
-                    with gzip.open(tmp.name, mode="wt", newline="") as gz:
-                        writer = csv.writer(gz)
-
-                        renamed_columns = [
-                            st.session_state["mapper"].get(col, col)
-                            for col in st.session_state["model"]["train"].columns
-                        ]
-
-                        # Header
-                        writer.writerow(
-                            ["Sample name"]
-                            + renamed_columns
-                            + ["label"]
-                        )
-
-                        for name, row, label in zip(
-                            st.session_state["model"]["nameseq_train"],
-                            st.session_state["model"]["train"].itertuples(index=False),
-                            st.session_state["model"]["train_labels"],
-                        ):
-                            writer.writerow([name, *row, label])
-
-                    if has_test_set:
-                        test_fnameseq = os.path.join(
-                            st.session_state["job_path"],
-                            "feat_extraction/fnameseqtest.csv",
-                        )
-                        test_features = os.path.join(
-                            st.session_state["job_path"],
-                            "best_descriptors/best_test.csv",
-                        )
-                        test_labels = os.path.join(
-                            st.session_state["job_path"],
-                            "feat_extraction/flabeltest.csv",
-                        )
-
-                        with tempfile.NamedTemporaryFile(
-                            mode="wb",
-                            suffix=".csv.gz"
-                        ) as tmp_test:
-                            with gzip.open(tmp_test.name, mode="wt", newline="") as gz:
-                                writer = csv.writer(gz)
-
-                                with (
-                                    open(test_fnameseq, newline="") as f_name,
-                                    open(test_features, newline="") as f_feat,
-                                    open(test_labels, newline="") as f_label,
-                                ):
-                                    reader_name = csv.reader(f_name)
-                                    reader_feat = csv.reader(f_feat)
-                                    reader_label = csv.reader(f_label)
-
-                                    # --- Read and rename test feature header ---
-                                    next(reader_name, None)
-                                    test_feature_header = next(reader_feat)
-                                    next(reader_label, None)
-
-                                    renamed_test_columns = [
-                                        st.session_state["mapper"].get(col, col)
-                                        for col in test_feature_header
-                                    ]
-
-                                    # Write final header
-                                    writer.writerow(
-                                        ["Sample name"]
-                                        + renamed_test_columns
-                                        + ["label"]
-                                    )
-
-                                    # Stream rows
-                                    for name_row, feat_row, label_row in zip(
-                                        reader_name, reader_feat, reader_label
-                                    ):
-                                        writer.writerow(
-                                            [name_row[0], *feat_row, label_row[0]]
-                                        )
-
-                            with download_col1:
-                                with open(tmp.name, "rb") as f:
-                                    st.download_button(
-                                        label="Download training set (.csv.gz)",
-                                        data=f,
-                                        file_name="train_dataset.csv.gz",
-                                        mime="application/gzip",
-                                        use_container_width=True
-                                    )
-
-                            with download_col2:
-                                with open(tmp_test.name, "rb") as f:
-                                    st.download_button(
-                                        label="Download test/prediction set (.csv.gz)",
-                                        data=f,
-                                        file_name="test_dataset.csv.gz",
-                                        mime="application/gzip",
-                                        use_container_width=True,
-                                    )
-                    else:
-                        with open(tmp.name, "rb") as f:
-                            st.download_button(
-                                label="Download training set (.csv.gz)",
-                                data=f,
-                                file_name="train_dataset.csv.gz",
-                                mime="application/gzip",
-                                use_container_width=True
-                            )
-                    
-                    st.success("Datasets compressed successfully!")
-
-        st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
-
-        if "model" in st.session_state:
-            df_descriptors = st.session_state["model"]["descriptors"]
-        else:
-            path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
-            df_descriptors = pd.read_csv(path_descriptors)
-
-        # Replace values
-        pd.set_option('future.no_silent_downcasting', True)
-        df_descriptors = df_descriptors.replace({1: True, 0: False})
-
-        # Show in Streamlit
-        st.dataframe(df_descriptors.sort_index(axis=1), hide_index=True)
-        
-        with st.expander("**Descriptors information**"):
-            if data_type == "DNA/RNA":
-                st.markdown(
-                    """**DNC**: Dinucleotide composition;  \n"""
-                    """**Fickett**: Fickett score based on positional nucleotide features;  \n"""
-                    """**FourierBinary**: Binary numerical mapping using Fourier transform;  \n"""
-                    """**FourierComplex**: Complex numerical mapping using Fourier transform;  \n"""
-                    """**NAC**: Nucleotide composition;  \n"""
-                    """**ORF**: Open reading frame-based features;  \n"""
-                    """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
-                    """**TNC**: Trinucleotide composition;  \n"""
-                    """**Tsallis**: Tsallis entropy from 1-mer to 5-mer with q = 2.3;  \n"""
-                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 2 after 1-gap;  \n"""
-                    """**kGap_tri**: Xmer k-Spaced Ymer composition frequency with 3 after 1-gap;  \n"""
-                    """**repDNA**: Comprehensive representation of DNA sequences including k-mers, autocorrelations, and physicochemical features;  \n"""
-                )
-            elif data_type == "Protein":
-                st.markdown(
-                    """**AAC**: Amino acid composition;  \n"""
-                    """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
-                    """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
-                    """**CTDC**: Composition;  \n"""
-                    """**CTDD**: Distribution;  \n"""
-                    """**CTDT**: Transition;  \n"""
-                    """**CTriad**: Conjoint triad;  \n"""
-                    """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
-                    """**DDE**: Dipeptide deviation from expected mean;  \n"""
-                    """**DPC**: Kmer dipeptides composition;  \n"""
-                    """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
-                    """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
-                    """**GAAC**: Grouped amino acid composition;  \n"""
-                    """**GDPC**: Grouped dipeptide composition;  \n"""
-                    """**GTPC**: Grouped tripeptide composition;  \n"""
-                    """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
-                    """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
-                    """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
-                    """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
-                    """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
-                    """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
-                    """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
-                    """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 1 after 1-gap;  \n"""
-                )
 
 def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
     password_bytes = password.encode("utf-8")
@@ -1412,7 +1488,15 @@ def runUI():
 	    """
         )
 
-    job_tables()
+    # job_tables()
+
+    query_params = st.query_params
+
+    job_id = query_params.get("id")
+
+    if job_id:
+        if "job_input" not in st.session_state:
+            st.session_state["job_input"] = job_id
 
     def get_job_example():
         st.session_state["job_input"] = "9797dd39-05e4-4e14-b30a-89847371777d"
@@ -1496,7 +1580,7 @@ def runUI():
                     st.error("Job does not exist!")
 
     if "job_path" in st.session_state:
-        st.success(f"Job took **{manager.get_job_duration(job_id)[0]}** and was completed with the following results:")
+        st.success(f"Job was completed with the following results:")
 
         if "model" in st.session_state:
             del st.session_state["model"]
@@ -1606,18 +1690,28 @@ def runUI():
 
         tabs = {}
 
-        if df_job_info["testing_set"].item() != "No test set":
-            if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
-                tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                            "Feature Importance"]
+        if data_type != "Structured data":
+            if df_job_info["testing_set"].item() != "No test set":
+                if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
+                    tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                                "Feature Importance"]
+                else:
+                    tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                                "Feature Importance", "Feature Distribution",
+                                "Feature Correlation", "Dimensionality Reduction"]
             else:
+                if sum(train_stats["num_seqs"].to_list()) > 5_000:
+                    tab_list = ["Model Information", "Performance Metrics",
+                                "Feature Importance"]
+                else:
+                    tab_list = ["Model Information", "Performance Metrics",
+                                "Feature Importance", "Feature Distribution",
+                                "Feature Correlation", "Dimensionality Reduction"]
+        else:
+            if df_job_info["testing_set"].item() != "No test set":
                 tab_list = ["Model Information", "Performance Metrics", "Predictions",
                             "Feature Importance", "Feature Distribution",
                             "Feature Correlation", "Dimensionality Reduction"]
-        else:
-            if sum(train_stats["num_seqs"].to_list()) > 5_000:
-                tab_list = ["Model Information", "Performance Metrics",
-                            "Feature Importance"]
             else:
                 tab_list = ["Model Information", "Performance Metrics",
                             "Feature Importance", "Feature Distribution",

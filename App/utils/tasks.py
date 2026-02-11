@@ -27,10 +27,10 @@ def send_job_email(email, job_id, status):
     # Email content
     if status == "started":
         subject = f"[BioAutoML-FAST] Job submitted to queue"
-        body = f"""Dear user,\n\nYour job was submitted to the queue.\nJob ID: {job_id}\n\nYou will receive an email when your job is finished."""
+        body = f"""Dear user,\n\nYour job was submitted to the queue.\nJob link: https://bioautoml.icmc.usp.br/?id={job_id}\n\nYou will receive an email when your job is finished."""
     elif status == "success":
         subject = f"[BioAutoML-FAST] Job has finished"
-        body = f"""Dear user,\n\nYour job has completed successfully.\nJob ID: {job_id}\n\nConsult the output in the Jobs module using your Job ID and, if encrypted, password."""
+        body = f"""Dear user,\n\nYour job has completed successfully.\nJob link: https://bioautoml.icmc.usp.br/?id={job_id}\n\nConsult the output in the Jobs module using your Job ID and, if encrypted, password."""
     elif status == "failed":
         subject = f"[BioAutoML-FAST] Job has finished"
         body = f"""Dear user,\n\nYour job has failed.\n\nTry submitting again later."""

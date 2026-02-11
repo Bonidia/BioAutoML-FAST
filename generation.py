@@ -449,8 +449,13 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
             string_cols = train.select_dtypes(include=["object"]).columns
             if not string_cols.empty:
                 train[string_cols] = ord_encoder.transform(train[string_cols])
+
+            if os.path.exists(ftest) is True:
+                string_cols = test.select_dtypes(include=["object"]).columns
+                if not string_cols.empty:
+                    test[string_cols] = ord_encoder.transform(test[string_cols])
     else:
-        lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder()
+        lb_encoder, ord_encoder = LabelEncoder(), OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 
         if task == 0:
             train_labels = lb_encoder.fit_transform(train_labels)

@@ -7,6 +7,7 @@ import subprocess
 from subprocess import Popen
 import streamlit.components.v1 as components
 import os
+import csv
 import string
 import utils
 import base64
@@ -604,13 +605,13 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 def job_submitted_dialog(job_id):
     st.success(
         f'Job submitted to the queue.\n\n'
-        f'You can consult the results in **Jobs** using the following ID:\n\n'
-        f'**{job_id}**\n\n'
-        f'Save this ID securely.'
+        f'You can consult the results in **Jobs** using the following link:\n\n'
+        f'**https://bioautoml.icmc.usp.br/?id={job_id}**\n\n'
+        f'Save this link securely.'
     )
 
-def count_fasta_sequences(uploaded_files):
-    """Counts total FASTA records across one or more uploaded files."""
+def count_samples(uploaded_files, data_type):
+    """Counts total records across one or more uploaded files."""
     if not uploaded_files:
         return 0
 
@@ -618,14 +619,53 @@ def count_fasta_sequences(uploaded_files):
         uploaded_files = [uploaded_files]
 
     total = 0
-    for f in uploaded_files:
-        f.seek(0)
-        for line in f:
-            if line.startswith(b">"):
+    if data_type != "Structured data":
+        for f in uploaded_files:
+            f.seek(0)
+            for line in f:
+                if line.startswith(b">"):
+                    total += 1
+            f.seek(0)
+    else:
+        for f in uploaded_files:
+            f.seek(0)
+            for line in f:
                 total += 1
-        f.seek(0)
+            total -= 1
+            f.seek(0)
 
     return total
+
+def check_structured_data(uploaded_files):
+    """
+    Check whether each uploaded CSV file contains a column named 'label'.
+    
+    Returns:
+        True if all files contain 'label'
+        False if at least one does not
+    """
+    if not uploaded_files:
+        return None
+
+    if not isinstance(uploaded_files, list):
+        uploaded_files = [uploaded_files]
+
+    for f in uploaded_files:
+        f.seek(0)
+
+        try:
+            reader = csv.reader(
+                (line.decode("utf-8") if isinstance(line, bytes) else line)
+                for line in f
+            )
+            header = next(reader)
+        except Exception as e:
+            return False
+
+        if "label" not in header:
+            return False
+
+    return True
 
 class InternalUploadedFile:
     def __init__(self, path: str):
@@ -689,7 +729,7 @@ def runUI():
         sample_data = st.toggle("Use example", help="Use example data instead of submitted files.")
 
     with excol3:
-        zip_path = "home_examples.zip"
+        zip_path = "examples/home_examples.zip"
         with open(zip_path, "rb") as f:
             st.download_button(
                 label="Examples",
@@ -908,29 +948,43 @@ def runUI():
             if testing == "No test set":
                 test_files = None
 
-            # Only applies to FASTA-based sequence tasks
-            if training == "Training set" and data_type != "Structured data":
-
-                train_seq_count = count_fasta_sequences(train_files)
+            if training == "Training set":
+                train_seq_count = count_samples(train_files, data_type)
                 if train_seq_count > MAX_SEQS:
                     with queue_info:
                         st.error(
                             f"Training set exceeds the maximum allowed size "
-                            f"({train_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                            f"({train_seq_count:,} samples uploaded, limit is {MAX_SEQS})."
                         )
                     st.stop()
 
-            if testing in ["Test set", "Prediction set"] and data_type != "Structured data":
-                test_seq_count = count_fasta_sequences(test_files)
+            if testing in ["Test set", "Prediction set"]:
+                test_seq_count = count_samples(test_files, data_type)
                 if test_seq_count > MAX_SEQS:
                     with queue_info:
                         st.error(
                             f"Testing/Prediction set exceeds the maximum allowed size "
-                            f"({test_seq_count:,} sequences uploaded, limit is {MAX_SEQS})."
+                            f"({test_seq_count:,} samples uploaded, limit is {MAX_SEQS})."
                         )
                     st.stop()
 
             if data_type == "Structured data":
+                if training == "Training set":
+                    if not check_structured_data(train_files):
+                        with queue_info:
+                            st.error(
+                                "Training set doesn't have a column named 'label'."
+                            )
+                        st.stop()
+
+                if testing == "Test set":
+                    if not check_structured_data(test_files):
+                        with queue_info:
+                            st.error(
+                                "Test set doesn't have a column named 'label'."
+                            )
+                        st.stop()
+
                 tuning = True
 
         fn_kwargs = {

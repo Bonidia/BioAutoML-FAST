@@ -200,36 +200,3 @@ class TaskResultManager:
         df = df[["Job ID", "End", "Duration", "Status"]]
 
         return df
-
-    def get_job_duration(self, task_id):
-        """
-        Return the duration between start_time and end_time for a given task_id.
-        """
-        cursor = self.connection.cursor()
-        cursor.execute(
-            """
-            SELECT start_time, end_time
-            FROM task_results
-            WHERE id = ?
-            """,
-            (task_id,)
-        )
-        row = cursor.fetchone()
-
-        if not row or not row[0] or not row[1]:
-            return None
-
-        try:
-            start = datetime.fromisoformat(row[0])
-            end = datetime.fromisoformat(row[1])
-            delta = end - start
-
-            total_seconds = int(delta.total_seconds())
-            hours = total_seconds // 3600
-            minutes = (total_seconds % 3600) // 60
-            seconds = total_seconds % 60
-
-            return f"{hours:02d}:{minutes:02d}:{seconds:02d}",
-
-        except Exception:
-            return None
