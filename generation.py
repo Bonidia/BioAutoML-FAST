@@ -651,7 +651,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
-    parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 50')
+    parser.add_argument('-dtype', '--dtype', default="Sequence", help='Data type - Sequence, Structured')
+    parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 150')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-train_nameseq', '--train_nameseq', default='', help='csv with sequence names')
@@ -663,6 +664,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     path_model = args.path_model
     task = int(args.task)
+    dtype = str(args.dtype)
     tuning = int(args.tuning)
     ftrain = str(args.train)
     ftrain_labels = str(args.train_label)
@@ -702,7 +704,10 @@ if __name__ == '__main__':
                 sys.exit()
         elif task == 1:
             if os.path.exists(ftrain_labels):
-                train_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_train)["nameseq"].to_list()]
+                if dtype != "Sequence":
+                    train_labels_read = pd.read_csv(ftrain_labels).values.ravel()
+                else:
+                    train_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_train)["nameseq"].to_list()]
                 print('Train_labels - %s: Found File' % ftrain_labels)
             else:
                 print('Train_labels - %s: File not exists' % ftrain_labels)
@@ -737,7 +742,10 @@ if __name__ == '__main__':
                 sys.exit()
         elif task == 1:
             if os.path.exists(ftest_labels):
-                test_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_test)["nameseq"].to_list()]
+                if dtype != "Sequence":
+                    test_labels_read = pd.read_csv(ftest_labels).values.ravel()
+                else:
+                    test_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_test)["nameseq"].to_list()]
                 print('Test_labels - %s: Found File' % ftest_labels)
             else:
                 print('Test_labels - %s: File not exists' % ftest_labels)

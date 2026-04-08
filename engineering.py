@@ -941,7 +941,7 @@ if __name__ == '__main__':
 						help='fasta format file, e.g., fasta/ncRNA fasta/lncRNA fasta/circRNA')
 	parser.add_argument('-fasta_label_test', '--fasta_label_test', nargs='+',
 						help='labels for fasta files, e.g., ncRNA lncRNA circRNA')
-	parser.add_argument('-dtype', '--dtype', default="DNA/RNA", help='Data type - DNA/RNA, Protein')
+	parser.add_argument('-dtype', '--dtype', default="DNA/RNA", help='Data type - DNA/RNA, Protein, Structured')
 	parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
 	parser.add_argument('-estimations', '--estimations', default=200, help='number of estimations - BioAutoML - default = 200')
 	parser.add_argument('-patience', '--patience', default=80, help='number of trials before early stopping - default = 80')

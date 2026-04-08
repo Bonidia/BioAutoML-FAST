@@ -1579,171 +1579,174 @@ def runUI():
                         del st.session_state["job_path"]
                     st.error("Job does not exist!")
 
-    if "job_path" in st.session_state:
-        st.success(f"Job was completed with the following results:")
+    try:
+        if "job_path" in st.session_state:
+            st.success(f"Job was completed with the following results:")
 
-        if "model" in st.session_state:
-            del st.session_state["model"]
+            if "model" in st.session_state:
+                del st.session_state["model"]
 
-        if "reducer" in st.session_state:
-            del st.session_state["reducer"]
+            if "reducer" in st.session_state:
+                del st.session_state["reducer"]
 
-        if "mapper" in st.session_state:
-            del st.session_state["mapper"]
+            if "mapper" in st.session_state:
+                del st.session_state["mapper"]
 
-        path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
-        
-        if os.path.exists(path_model):
-            if "model" not in st.session_state:
-                with st.spinner("Loading trained model..."):
-                    st.session_state["model"] = joblib.load(path_model)
+            path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
+            
+            if os.path.exists(path_model):
+                if "model" not in st.session_state:
+                    with st.spinner("Loading trained model..."):
+                        st.session_state["model"] = joblib.load(path_model)
 
-                train_stats = st.session_state["model"]["train_stats"]
-        else:
-            train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
-
-        if "label_encoder" in st.session_state["model"]:
-            task = "Classification"
-        else:
-            task = "Regression"
-
-        data_type = "Structured data"
-
-        if "descriptors" in st.session_state["model"]:
-            df_descriptors = st.session_state["model"]["descriptors"]
-
-            if "NAC" in df_descriptors.columns:
-                data_type = "DNA/RNA"
+                    train_stats = st.session_state["model"]["train_stats"]
             else:
-                data_type = "Protein"
+                train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
 
-        if "mapper" not in st.session_state:
-            if data_type == "DNA/RNA":
-                st.session_state["mapper"] = joblib.load("dict_nt.pkl")
+            if "label_encoder" in st.session_state["model"]:
+                task = "Classification"
             else:
-                st.session_state["mapper"] = joblib.load("dict_aa.pkl")
+                task = "Regression"
 
-        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+            data_type = "Structured data"
 
-        with st.expander("Summary Statistics"):
-            st.info(
-            """
-            This section summarizes the **basic characteristics of your dataset**.
+            if "descriptors" in st.session_state["model"]:
+                df_descriptors = st.session_state["model"]["descriptors"]
 
-            Depending on the data type, it reports the number of samples or sequences, their length 
-            distribution, and relevant composition statistics (such as GC content). Results are shown 
-            separately for the **training set** and, when available, the **test/prediction set**.
-
-            These statistics help assess data quality and provide essential context for interpreting the 
-            downstream analyses.
-            """
-            )
-
-            str_type = {
-                "DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
-                "Protein": ["", "Amino acid"],
-                "Structured data": ["<br><strong>num_samples</strong>: Number of samples", "Structured data"]
-            }
-
-            tooltip_text = """
-            <strong>num_seqs</strong>: Number of sequences;<br>
-            <strong>min_len</strong>: Minimum length of sequences;<br>
-            <strong>max_len</strong>: Maximum length of sequences;<br>
-            <strong>avg_len</strong>: Average length of sequences;<br>
-            <strong>std_len</strong>: Standard deviation for length of sequences;<br>
-            <strong>sum_len</strong>: Sum of length of all sequences;<br>
-            <strong>Q1</strong>: 25th percentile for length of sequences;<br>
-            <strong>Q2</strong>: 50th percentile for length of sequences;<br>
-            <strong>Q3</strong>: 75th percentile for length of sequences;<br>
-            <strong>N50</strong>: Length of the shortest read in the group of 
-            longest sequences that together represent (at least) 50% of the 
-            characters in the set of sequences;
-            """
-
-            if data_type == "Structured data":
-                tooltip_text = "<strong>num_samples</strong>: Number of samples;"
-            else:
-                tooltip_text += str_type[data_type][0]
-
-            st.markdown(f"""
-            <div style="display: flex; justify-content: flex-end">
-                <div class="tooltip"> 
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    <span class="tooltiptext">
-                        {tooltip_text}
-            """, unsafe_allow_html=True)
-                
-            st.markdown("**Training set**")
-        
-            train_stats_formatted = train_stats.style.format(thousands=",")
-            st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
-
-            if df_job_info["testing_set"].item() != "No test set":
-                st.markdown("**Test/Prediction set**")
-                test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
-                test_stats_formatted = test_stats.style.format(thousands=",")
-                st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
-
-        tabs = {}
-
-        if data_type != "Structured data":
-            if df_job_info["testing_set"].item() != "No test set":
-                if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
-                    tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                                "Feature Importance"]
+                if "NAC" in df_descriptors.columns:
+                    data_type = "DNA/RNA"
                 else:
+                    data_type = "Protein"
+
+            if "mapper" not in st.session_state:
+                if data_type == "DNA/RNA":
+                    st.session_state["mapper"] = joblib.load("dict_nt.pkl")
+                else:
+                    st.session_state["mapper"] = joblib.load("dict_aa.pkl")
+
+            df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+
+            with st.expander("**Summary Statistics**"):
+                st.info(
+                """
+                This section summarizes the **basic characteristics of your dataset**.
+
+                Depending on the data type, it reports the number of samples or sequences, their length 
+                distribution, and relevant composition statistics (such as GC content). Results are shown 
+                separately for the **training set** and, when available, the **test/prediction set**.
+
+                These statistics help assess data quality and provide essential context for interpreting the 
+                downstream analyses.
+                """
+                )
+
+                str_type = {
+                    "DNA/RNA": ["<br><strong>gc_content</strong>: Average GC% content considering all sequences;", "Nucleotide"],
+                    "Protein": ["", "Amino acid"],
+                    "Structured data": ["<br><strong>num_samples</strong>: Number of samples", "Structured data"]
+                }
+
+                tooltip_text = """
+                <strong>num_seqs</strong>: Number of sequences;<br>
+                <strong>min_len</strong>: Minimum length of sequences;<br>
+                <strong>max_len</strong>: Maximum length of sequences;<br>
+                <strong>avg_len</strong>: Average length of sequences;<br>
+                <strong>std_len</strong>: Standard deviation for length of sequences;<br>
+                <strong>sum_len</strong>: Sum of length of all sequences;<br>
+                <strong>Q1</strong>: 25th percentile for length of sequences;<br>
+                <strong>Q2</strong>: 50th percentile for length of sequences;<br>
+                <strong>Q3</strong>: 75th percentile for length of sequences;<br>
+                <strong>N50</strong>: Length of the shortest read in the group of 
+                longest sequences that together represent (at least) 50% of the 
+                characters in the set of sequences;
+                """
+
+                if data_type == "Structured data":
+                    tooltip_text = "<strong>num_samples</strong>: Number of samples;"
+                else:
+                    tooltip_text += str_type[data_type][0]
+
+                st.markdown(f"""
+                <div style="display: flex; justify-content: flex-end">
+                    <div class="tooltip"> 
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span class="tooltiptext">
+                            {tooltip_text}
+                """, unsafe_allow_html=True)
+                    
+                st.markdown("**Training set**")
+            
+                train_stats_formatted = train_stats.style.format(thousands=",")
+                st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
+
+                if df_job_info["testing_set"].item() != "No test set":
+                    st.markdown("**Test/Prediction set**")
+                    test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
+                    test_stats_formatted = test_stats.style.format(thousands=",")
+                    st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
+
+            tabs = {}
+
+            if data_type != "Structured data":
+                if df_job_info["testing_set"].item() != "No test set":
+                    if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
+                        tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                                    "Feature Importance"]
+                    else:
+                        tab_list = ["Model Information", "Performance Metrics", "Predictions",
+                                    "Feature Importance", "Feature Distribution",
+                                    "Feature Correlation", "Dimensionality Reduction"]
+                else:
+                    if sum(train_stats["num_seqs"].to_list()) > 5_000:
+                        tab_list = ["Model Information", "Performance Metrics",
+                                    "Feature Importance"]
+                    else:
+                        tab_list = ["Model Information", "Performance Metrics",
+                                    "Feature Importance", "Feature Distribution",
+                                    "Feature Correlation", "Dimensionality Reduction"]
+            else:
+                if df_job_info["testing_set"].item() != "No test set":
                     tab_list = ["Model Information", "Performance Metrics", "Predictions",
                                 "Feature Importance", "Feature Distribution",
                                 "Feature Correlation", "Dimensionality Reduction"]
-            else:
-                if sum(train_stats["num_seqs"].to_list()) > 5_000:
-                    tab_list = ["Model Information", "Performance Metrics",
-                                "Feature Importance"]
                 else:
                     tab_list = ["Model Information", "Performance Metrics",
                                 "Feature Importance", "Feature Distribution",
                                 "Feature Correlation", "Dimensionality Reduction"]
-        else:
-            if df_job_info["testing_set"].item() != "No test set":
-                tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                            "Feature Importance", "Feature Distribution",
-                            "Feature Correlation", "Dimensionality Reduction"]
-            else:
-                tab_list = ["Model Information", "Performance Metrics",
-                            "Feature Importance", "Feature Distribution",
-                            "Feature Correlation", "Dimensionality Reduction"]
 
-        # Create the tabs dynamically
-        streamlit_tabs = st.tabs(tab_list)
+            # Create the tabs dynamically
+            streamlit_tabs = st.tabs(tab_list)
 
-        # Map tab names to Streamlit tab objects
-        tabs = {name: tab for name, tab in zip(tab_list, streamlit_tabs)}
+            # Map tab names to Streamlit tab objects
+            tabs = {name: tab for name, tab in zip(tab_list, streamlit_tabs)}
 
-        with tabs["Model Information"]:
-            model_information(data_type, task)
+            with tabs["Model Information"]:
+                model_information(data_type, task)
 
-        with tabs["Performance Metrics"]:
-            performance_metrics(task)
+            with tabs["Performance Metrics"]:
+                performance_metrics(task)
 
-        if "Predictions" in tabs:
-            with tabs["Predictions"]:
-                show_predictions()
+            if "Predictions" in tabs:
+                with tabs["Predictions"]:
+                    show_predictions()
 
-        with tabs["Feature Importance"]:
-            feature_importance()
+            with tabs["Feature Importance"]:
+                feature_importance()
 
-        if "Feature Distribution" in tabs:
-            with tabs["Feature Distribution"]:
-                feature_distribution()
+            if "Feature Distribution" in tabs:
+                with tabs["Feature Distribution"]:
+                    feature_distribution()
 
-        if "Feature Correlation" in tabs:
-            with tabs["Feature Correlation"]:
-                feature_correlation()
+            if "Feature Correlation" in tabs:
+                with tabs["Feature Correlation"]:
+                    feature_correlation()
 
-        if "Dimensionality Reduction" in tabs:
-            with tabs["Dimensionality Reduction"]:
-                dimensionality_reduction()
+            if "Dimensionality Reduction" in tabs:
+                with tabs["Dimensionality Reduction"]:
+                    dimensionality_reduction()
+    except:
+        st.error("An error occurred. Submit a new job.")

@@ -326,8 +326,10 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command = [
                     "python",
                     "generation.py",
-                    "--tuning",
-                    "150" if tuning else "0",
+                    "--task",
+                    "1" if task == "Regression" else "0",
+                    "--dtype",
+                    "Structured",
                     "--train", os.path.join(feat_path, "train.csv"),
                     "--train_label", os.path.join(feat_path, "train_labels.csv"),
                     "--train_nameseq", os.path.join(feat_path, "fnameseqtrain.csv"),
@@ -516,6 +518,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))
                         df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
                         
+                        command.append("--dtype")
+                        command.append("Structured")
                         command.append("--test")
                         command.append(os.path.join(feat_path, "test.csv"))
                         command.append("--test_label")
@@ -636,13 +640,17 @@ def count_samples(uploaded_files, data_type):
 
     return total
 
+import csv
+
 def check_structured_data(uploaded_files):
     """
-    Check whether each uploaded CSV file contains a column named 'label'.
+    Check whether each uploaded CSV file:
+    1. Contains a column named 'label'
+    2. The 'label' column contains only numerical values
     
     Returns:
-        True if all files contain 'label'
-        False if at least one does not
+        True if all conditions are satisfied for all files
+        False otherwise
     """
     if not uploaded_files:
         return None
@@ -658,11 +666,32 @@ def check_structured_data(uploaded_files):
                 (line.decode("utf-8") if isinstance(line, bytes) else line)
                 for line in f
             )
-            header = next(reader)
-        except Exception as e:
-            return False
 
-        if "label" not in header:
+            header = next(reader)
+
+            if "label" not in header:
+                return False
+
+            label_idx = header.index("label")
+
+            for row in reader:
+                # Skip empty rows
+                if not row or len(row) <= label_idx:
+                    return False
+
+                value = row[label_idx].strip()
+
+                # Reject empty values
+                if value == "":
+                    return False
+
+                # Check numeric (int or float)
+                try:
+                    float(value)
+                except ValueError:
+                    return False
+
+        except Exception:
             return False
 
     return True
@@ -920,6 +949,18 @@ def runUI():
                             st.error("Test set (classification) requires at least 2 classes (one FASTA per class).")
                         st.stop()
 
+                if training == "Training set" and task == "Regression":
+                    if not train_files:
+                        with queue_info:
+                            st.error("Training set (Regression) requires one FASTA file.")
+                        st.stop()
+
+                if testing == "Test set" and task == "Regression":
+                    if not test_files:
+                        with queue_info:
+                            st.error("Test set (Regression) requires one FASTA file.")
+                        st.stop()
+
             if data_type:
                 # For structured data training, require a single CSV for both tasks
                 if training == "Training set" and data_type == "Structured data" and train_files is None:
@@ -973,7 +1014,7 @@ def runUI():
                     if not check_structured_data(train_files):
                         with queue_info:
                             st.error(
-                                "Training set doesn't have a column named 'label'."
+                                "Training set doesn't have a column named 'label' with numerical values only."
                             )
                         st.stop()
 
@@ -981,7 +1022,7 @@ def runUI():
                     if not check_structured_data(test_files):
                         with queue_info:
                             st.error(
-                                "Test set doesn't have a column named 'label'."
+                                "Test set doesn't have a column named 'label' with numerical values only."
                             )
                         st.stop()
 
