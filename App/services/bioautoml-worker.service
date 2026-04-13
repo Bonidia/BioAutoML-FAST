@@ -10,10 +10,10 @@ Wants=network.target
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/root/BioAutoML-Fast/App
+WorkingDirectory=/root/BioAutoML-FAST/App
 
 # Explicitly source the venv from parent directory
-ExecStart=/bin/bash -c 'source /root/BioAutoML-Fast/.venv/bin/activate && rq worker bioautoml'
+ExecStart=/bin/bash -c 'source /root/BioAutoML-FAST/.venv/bin/activate && rq worker bioautoml'
 
 Restart=always
 RestartSec=10
