@@ -311,6 +311,14 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
                 df_train = pl.from_pandas(pd.read_csv(save_path).reset_index())
                 df_train = df_train.rename({"index": "nameseq"})
+                
+                if task == "Regression":
+                    df_train = df_train.with_columns(
+                        pl.concat_str(["nameseq", "label"], separator="|").alias("nameseq")
+                    )
+                    
+                    df_train = df_train.with_columns(pl.lit(train_files.name.split(".csv")[0]).alias("label"))
+
                 df_labels = df_train.select(["label"])
                 df_index = df_train.select(["nameseq"])
                 df_train = df_train.drop(["nameseq", "label"])
@@ -322,14 +330,15 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 df_labels.write_csv(os.path.join(feat_path, "train_labels.csv"))
                 df_index.write_csv(os.path.join(feat_path, "fnameseqtrain.csv"))
 
+                if task == "Regression":
+                    df_train = pl.read_csv(save_path).with_columns(pl.lit(train_files.name.split(".csv")[0]).alias("label"))
+                    df_train.write_csv(save_path)
 
                 command = [
                     "python",
                     "generation.py",
                     "--task",
                     "1" if task == "Regression" else "0",
-                    "--dtype",
-                    "Structured",
                     "--train", os.path.join(feat_path, "train.csv"),
                     "--train_label", os.path.join(feat_path, "train_labels.csv"),
                     "--train_nameseq", os.path.join(feat_path, "fnameseqtrain.csv"),
@@ -346,6 +355,14 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         
                         df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
                         df_test = df_test.rename({"index": "nameseq"})
+                        
+                        if task == "Regression":
+                            df_test = df_test.with_columns(
+                                pl.concat_str(["nameseq", "label"], separator="|").alias("nameseq")
+                            )
+                            
+                            df_test = df_test.with_columns(pl.lit(test_files.name.split(".csv")[0]).alias("label"))
+
                         df_labels = df_test.select(["label"])
                         df_index = df_test.select(["nameseq"])
                         df_test = df_test.drop(["nameseq", "label"])
@@ -353,7 +370,11 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))
                         df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
-                        
+
+                        if task == "Regression":
+                            df_test = pl.read_csv(save_path).with_columns(pl.lit(test_files.name.split(".csv")[0]).alias("label"))
+                            df_test.write_csv(save_path)
+                            
                         command.append("--test")
                         command.append(os.path.join(feat_path, "test.csv"))
                         command.append("--test_label")
@@ -375,6 +396,9 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))
                         df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                        df_test = pl.read_csv(save_path).with_columns(pl.lit("Predicted").alias("label"))
+                        df_test.write_csv(save_path)
 
                         command.append("--test")
                         command.append(os.path.join(feat_path, "test.csv"))
@@ -506,10 +530,18 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                     if testing == "Test set":
                         save_path = os.path.join(test_path, "test.csv")
                         with open(save_path, mode="wb") as f:
-                            f.write(test_files.getvalue())
+                            f.write(test_files[0].getvalue())
                         
                         df_test = pl.from_pandas(pd.read_csv(save_path).reset_index())
                         df_test = df_test.rename({"index": "nameseq"})
+
+                        if "label_encoder" not in model:
+                            df_test = df_test.with_columns(
+                                pl.concat_str(["nameseq", "label"], separator="|").alias("nameseq")
+                            )
+                            
+                            df_test = df_test.with_columns(pl.lit(test_files[0].name.split(".csv")[0]).alias("label"))
+
                         df_labels = df_test.select(["label"])
                         df_index = df_test.select(["nameseq"])
                         df_test = df_test.drop(["nameseq", "label"])
@@ -517,9 +549,11 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))
                         df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                        if "label_encoder" not in model:
+                            df_test = pl.read_csv(save_path).with_columns(pl.lit(test_files[0].name.split(".csv")[0]).alias("label"))
+                            df_test.write_csv(save_path)
                         
-                        command.append("--dtype")
-                        command.append("Structured")
                         command.append("--test")
                         command.append(os.path.join(feat_path, "test.csv"))
                         command.append("--test_label")
@@ -541,6 +575,9 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         df_index.write_csv(os.path.join(feat_path, "fnameseqtest.csv"))
                         df_test.write_csv(os.path.join(feat_path, "test.csv"))
                         df_labels.write_csv(os.path.join(feat_path, "test_labels.csv"))
+
+                        df_test = pl.read_csv(save_path).with_columns(pl.lit("Predicted").alias("label"))
+                        df_test.write_csv(save_path)
 
                         command.append("--test")
                         command.append(os.path.join(feat_path, "test.csv"))
@@ -642,7 +679,7 @@ def count_samples(uploaded_files, data_type):
 
 import csv
 
-def check_structured_data(uploaded_files):
+def check_structured_data(uploaded_files, task):
     """
     Check whether each uploaded CSV file:
     1. Contains a column named 'label'
@@ -685,11 +722,12 @@ def check_structured_data(uploaded_files):
                 if value == "":
                     return False
 
-                # Check numeric (int or float)
-                try:
-                    float(value)
-                except ValueError:
-                    return False
+                if task == "Regression":
+                    # Check numeric (int or float)
+                    try:
+                        float(value)
+                    except ValueError:
+                        return False
 
         except Exception:
             return False
@@ -1011,7 +1049,7 @@ def runUI():
 
             if data_type == "Structured data":
                 if training == "Training set":
-                    if not check_structured_data(train_files):
+                    if not check_structured_data(train_files, task):
                         with queue_info:
                             st.error(
                                 "Training set doesn't have a column named 'label' with numerical values only."
@@ -1019,7 +1057,7 @@ def runUI():
                         st.stop()
 
                 if testing == "Test set":
-                    if not check_structured_data(test_files):
+                    if not check_structured_data(test_files, task):
                         with queue_info:
                             st.error(
                                 "Test set doesn't have a column named 'label' with numerical values only."

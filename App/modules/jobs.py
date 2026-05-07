@@ -179,7 +179,10 @@ def dimensionality_reduction():
             nameseqs = nameseqs["nameseq"].tolist()
 
         if "label_encoder" not in st.session_state["model"]:
-            class_label = st.session_state["model"]["train_stats"]["class"].item()
+            if evaluation == "Training set":
+                class_label = st.session_state["model"]["train_stats"]["class"].item()
+            else:
+                class_label = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))["class"].item()
             labels["label"] = class_label
             
         labels = labels["label"].tolist()
@@ -326,6 +329,10 @@ def feature_correlation():
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
+    string_cols = features.select_dtypes(include=["object"]).columns
+    if not string_cols.empty:
+        features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
+
     if "imputer" in st.session_state["model"]:
         features = pd.DataFrame(
             st.session_state["model"]["imputer"].transform(features),
@@ -392,36 +399,32 @@ def load_features(job_path, training):
             features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
             labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))
         nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
-        
+
     return features, labels, nameseqs
 
 def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
     """Create and cache the distribution plot"""
 
-    try:
-        fig = ff.create_distplot(
-            fig_data,
-            unique_labels,
-            bin_size=bin_edges,
-            colors=color_map,
-            rug_text=fig_rug_text if fig_rug_text is not None else False,
-            histnorm="probability density",
-            show_rug=fig_rug_text is not None  # Only show rug if text is provided
-        )
-        
-        fig.update_layout(
-            title=f"Feature distribution for {selected_feature}",
-            xaxis_title=selected_feature,
-            yaxis_title="Density",
-            height=800,
-            margin=dict(t=30, b=50)
-        )
+    fig = ff.create_distplot(
+        fig_data,
+        unique_labels,
+        bin_size=bin_edges,
+        colors=color_map,
+        rug_text=fig_rug_text if fig_rug_text is not None else False,
+        histnorm="probability density",
+        show_rug=fig_rug_text is not None  # Only show rug if text is provided
+    )
+    
+    fig.update_layout(
+        title=f"Feature distribution for {selected_feature}",
+        xaxis_title=selected_feature,
+        yaxis_title="Density",
+        height=800,
+        margin=dict(t=30, b=50)
+    )
 
-        return fig
-    except:
-        st.warning("Plot not available for this feature.")
+    return fig
 
-    return None
 
 def feature_distribution():
     
@@ -443,76 +446,88 @@ def feature_distribution():
             """
         )
 
-    # Determine evaluation set options
-    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
-    
-    has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
-    
-    evaluation = st.selectbox(
-        ":mag_right: Evaluation set",
-        ["Training set", "Test/Prediction set"] if has_test_set else ["Training set"],
-        help="Training set evaluated with 10-fold cross-validation",
-        key="distribution"
-    )
-
-    if evaluation == "Training set":
-        features, labels, nameseqs = load_features(st.session_state["job_path"], True)
-    else:
-        features, labels, nameseqs = load_features(st.session_state["job_path"], False)
-
-    if "mapper" in st.session_state:
-        features = features.rename(columns=st.session_state["mapper"])
-
-    col1, col2 = st.columns(2)
-
-    # Select feature to plot
-    with col1:
-        selected_feature = st.selectbox("Select a feature", features.columns)
-        show_rug = st.checkbox("Show rug plot", value=False, 
-                             help="Toggle to show/hide individual data points along the axis")
-
-    # Get unique labels and assign colors
-    if "label_encoder" not in st.session_state["model"]:
-        class_label = st.session_state["model"]["train_stats"]["class"].item()
-        labels["label"] = class_label
-    
-    unique_labels = labels["label"].unique()
-    color_map = utils.get_colors(len(unique_labels))[:len(unique_labels)]
-
-    with col2:
-        num_bins = st.slider("Number of bins", min_value=5, max_value=50, value=30)
-
-    # Prepare plot data
-    with st.spinner('Preparing data...'):
-        fig_data = []
-        fig_rug_text = []
-        feature_data = features[selected_feature].values.astype(float)
-
-        for label in unique_labels:
-            group_indices = list(chain(*(labels == label).values))
-            group_data = feature_data[group_indices]
-            fig_data.append(group_data)
-            if show_rug:  # Only prepare rug text if needed
-                group_names = nameseqs[group_indices]
-                fig_rug_text.append(group_names)
-            else:
-                fig_rug_text.append(None)
-
-        bin_edges = np.histogram(fig_data[0], bins=num_bins)[1]
-
-    # Create and display plot
-    with st.spinner('Generating visualization...'):
-        fig = create_distplot(
-            fig_data,
-            unique_labels,
-            bin_edges,
-            color_map,
-            fig_rug_text if show_rug else None,  # Pass None if rug is disabled
-            selected_feature
-        )
+    try:
+        # Determine evaluation set options
+        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
         
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
+        has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
+        
+        evaluation = st.selectbox(
+            ":mag_right: Evaluation set",
+            ["Training set", "Test/Prediction set"] if has_test_set else ["Training set"],
+            help="Training set evaluated with 10-fold cross-validation",
+            key="distribution"
+        )
+
+        if evaluation == "Training set":
+            features, labels, nameseqs = load_features(st.session_state["job_path"], True)
+        else:
+            features, labels, nameseqs = load_features(st.session_state["job_path"], False)
+
+        string_cols = features.select_dtypes(include=["object"]).columns
+        if len(string_cols) > 0:
+            features = features.drop(columns=string_cols)
+
+        if "mapper" in st.session_state:
+            features = features.rename(columns=st.session_state["mapper"])
+
+        col1, col2 = st.columns(2)
+
+        # Select feature to plot
+        with col1:
+            selected_feature = st.selectbox("Select a feature", features.columns)
+            show_rug = st.checkbox("Show rug plot", value=False, 
+                                help="Toggle to show/hide individual data points along the axis")
+
+        # Get unique labels and assign colors
+        if "label_encoder" not in st.session_state["model"]:
+            if evaluation == "Training set":
+                class_label = st.session_state["model"]["train_stats"]["class"].item()
+            else:
+                class_label = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))["class"].item()
+            labels["label"] = class_label
+        
+        unique_labels = labels["label"].unique()
+        color_map = utils.get_colors(len(unique_labels))[:len(unique_labels)]
+
+        with col2:
+            num_bins = st.slider("Number of bins", min_value=5, max_value=50, value=30)
+
+        # Prepare plot data
+        with st.spinner('Preparing data...'):
+            fig_data = []
+            fig_rug_text = []
+            feature_data = features[selected_feature].values.astype(float)
+
+            for label in unique_labels:
+                group_indices = list(chain(*(labels == label).values))
+                group_data = feature_data[group_indices]
+                fig_data.append(group_data)
+                if show_rug:  # Only prepare rug text if needed
+                    group_names = nameseqs[group_indices]
+                    fig_rug_text.append(group_names)
+                else:
+                    fig_rug_text.append(None)
+
+            bin_edges = np.histogram(fig_data[0], bins=num_bins)[1]
+
+        # Create and display plot
+        with st.spinner('Generating visualization...'):
+            fig = create_distplot(
+                fig_data,
+                unique_labels,
+                bin_edges,
+                color_map,
+                fig_rug_text if show_rug else None,  # Pass None if rug is disabled
+                selected_feature
+            )
+            
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+
+    except:
+        st.warning("Plot not available for this feature.")
+
 
 def create_confusion_matrix_figure(df):
     labels = df.columns[1:-1].tolist()
@@ -1499,7 +1514,7 @@ def runUI():
             st.session_state["job_input"] = job_id
 
     def get_job_example():
-        st.session_state["job_input"] = "9797dd39-05e4-4e14-b30a-89847371777d"
+        st.session_state["job_input"] = "2d8abeb1-5606-4371-b613-c59a45df0f1e"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1748,5 +1763,5 @@ def runUI():
             if "Dimensionality Reduction" in tabs:
                 with tabs["Dimensionality Reduction"]:
                     dimensionality_reduction()
-    except:
-        st.error("An error occurred. Submit a new job.")
+    except Exception as e:
+        st.error(f"An error occurred. Submit a new job. {e}")
