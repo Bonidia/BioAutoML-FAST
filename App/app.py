@@ -8,7 +8,7 @@ from datetime import datetime
 def clear_cache():
     keys = list(st.session_state.keys())
     for key in keys:
-        if key != "cookie":
+        if key not in ("cookie", "chat_history"):
             st.session_state.pop(key)
 
 @st.dialog("ℹ️ Use notice", width="large")
@@ -24,6 +24,8 @@ def cookie_dialog():
     )
 
     st.session_state["cookie"] = True
+    if st.button("Got it", use_container_width=True, type="primary"):
+        st.rerun()
 
 def runUI():
     st.set_page_config(page_title = "BioAutoML-FAST", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
@@ -36,14 +38,15 @@ def runUI():
 
     job_id = query_params.get("id")
 
-    if job_id:
-        page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"], 
-                            icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
-                            menu_icon="cast", default_index=1, orientation="horizontal")
-    else:
-        page = option_menu(None, ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"], 
-                    icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
-                    menu_icon="cast", default_index=0, orientation="horizontal")
+    default_index = 1 if job_id else 0
+    page = option_menu(
+        None,
+        ["Home", "Jobs", "Model Repository", "Share", "AI Help & Tutorials", "About"],
+        icons=["house", "gear-wide", "diagram-2", "link", "book", "info-circle"],
+        menu_icon="cast",
+        default_index=default_index,
+        orientation="horizontal",
+    )
 
     if page == "Home":
         modules.home.runUI()

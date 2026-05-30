@@ -1486,6 +1486,42 @@ def job_tables():
         }
         st.dataframe(df, column_config=column_config, use_container_width=True, hide_index=True)
 
+@st.fragment(run_every=3)
+def live_log_viewer(job_id):
+    predict_path = "jobs"
+    job = manager.get_result(job_id)
+
+    if not job:
+        return
+
+    status = job["status"]
+
+    if status == "pending":
+        position = manager.get_job_position(job_id)
+        st.info(f"Job is queued at position #{position}. Waiting to start...")
+    elif status == "running":
+        st.info("Job is currently running...")
+        log_path = os.path.join(predict_path, job_id, "subprocess.log")
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
+                log_content = f.read()
+            if log_content.strip():
+                lines = log_content.splitlines()
+                if len(lines) > 20:
+                    st.caption(f"Showing last 20 of {len(lines)} lines")
+                    display_content = "\n".join(lines[-20:])
+                else:
+                    display_content = log_content
+                st.code(display_content, language=None)
+            else:
+                st.caption("Waiting for output...")
+        else:
+            st.caption("Log not yet available.")
+    elif status == "success":
+        st.success("Job has completed! Submit your Job ID again to view the results.")
+    elif status == "failure":
+        st.error("Job has failed. Please try submitting a new job.")
+
 def runUI():
 
     with st.expander("Viewing your submission"):
@@ -1536,6 +1572,11 @@ def runUI():
 
     predict_path, dataset_path = "jobs", "datasets"
 
+    # Auto-submit once when the page is opened via a direct URL with ?id=
+    if query_params.get("id") and not st.session_state.get("url_job_submitted"):
+        st.session_state["url_job_submitted"] = True
+        submitted = True
+
     if submitted:
         if job_id:
             job_path = ""
@@ -1546,6 +1587,7 @@ def runUI():
 
             if job:
                 if job["status"] == "success":
+                    st.session_state.pop("watching_job_id", None)
                     _cleanup_previous_temp()
 
                     enc_path = os.path.join(job_path, "job_archive.enc")
@@ -1559,7 +1601,7 @@ def runUI():
                             if succeeded:
                                 st.session_state["job_path"] = temp_dir
                             else:
-                                st.error(f"Wrong password for descryption.")
+                                st.error(f"Wrong password for decryption.")
                                 if "job_path" in st.session_state:
                                     del st.session_state["job_path"]
                         else:
@@ -1578,13 +1620,15 @@ def runUI():
                 elif job["status"] == "running" or job["status"] == "pending":
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
-                    st.info(f"Job is position #{manager.get_job_position(job_id)} in the queue. Come back later.")
+                    st.session_state["watching_job_id"] = job_id
 
                 elif job["status"] == "failure":
+                    st.session_state.pop("watching_job_id", None)
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
                     st.info("Job failed. Try again.")
             else:
+                st.session_state.pop("watching_job_id", None)
                 job_path = os.path.join(dataset_path, job_id,  "runs", "run_1")
 
                 if os.path.exists(job_path):
@@ -1593,6 +1637,9 @@ def runUI():
                     if "job_path" in st.session_state:
                         del st.session_state["job_path"]
                     st.error("Job does not exist!")
+
+    if "watching_job_id" in st.session_state:
+        live_log_viewer(st.session_state["watching_job_id"])
 
     try:
         if "job_path" in st.session_state:
@@ -1764,4 +1811,4 @@ def runUI():
                 with tabs["Dimensionality Reduction"]:
                     dimensionality_reduction()
     except Exception as e:
-        st.error(f"An error occurred. Submit a new job.") # {e}
+        st.error(f"An error occurred: {e}. Submit a new job.")

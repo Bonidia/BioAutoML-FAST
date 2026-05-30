@@ -1,21 +1,33 @@
 import streamlit as st
 import requests
 from utils.tasks import manager
-import re
 
 def runUI():
-    with st.expander("Sharing your model"):
+    with st.expander("About model sharing"):
         st.info("""
-            Here you can **share a model generated within the platform** to be considered for inclusion in the **model repository**.  
+            Here you can **share a model generated within the platform** to be considered for inclusion in the **model repository**.
             Shared models allow other users to benefit from task-specific predictors trained on new datasets and biological problems.
 
             To submit a model, provide the **Job ID** of a completed, **non-encrypted** job, along with a brief **description of the data** used and the **DOI of the corresponding publication** to be cited. This information ensures proper attribution, transparency, and reproducibility.
 
             All submissions undergo a **manual review process** to verify data quality, documentation, and relevance. If approved, the model may be added to the curated repository and made available for community use.
 
-            You may be contacted by the our team if additional details or clarification are required during the review process.
+            You may be contacted by our team if additional details or clarification are required during the review process.
             """
         )
+
+    st.markdown(
+        """
+        <div class="checklist-card">
+        <div class="check-title">Before you submit — checklist</div>
+        ✅ &nbsp; The job is <b>completed</b> and accessible via the <i>Jobs</i> page<br>
+        ✅ &nbsp; The job is <b>not encrypted</b> (encrypted submissions cannot be reviewed)<br>
+        ✅ &nbsp; You have a <b>DOI or publication reference</b> for the dataset<br>
+        ✅ &nbsp; You can provide a <b>brief description</b> of the biological problem and data used
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.form("share_submit", border=True, clear_on_submit=True):
 

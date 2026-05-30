@@ -655,6 +655,8 @@ def job_submitted_dialog(job_id):
         f'**https://bioautoml.icmc.usp.br/?id={job_id}**\n\n'
         f'Save this link securely.'
     )
+    st.markdown("**Job ID**")
+    st.code(job_id, language=None)
 
 def count_samples(uploaded_files, data_type):
     """Counts total records across one or more uploaded files."""
@@ -739,6 +741,114 @@ def check_structured_data(uploaded_files, task):
 
     return True
 
+# Valid IUPAC nucleotide codes (DNA + RNA, including ambiguous)
+_FASTA_NT_CHARS = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
+# Valid IUPAC amino acid single-letter codes (including ambiguous/special)
+_FASTA_AA_CHARS = frozenset("ACDEFGHIKLMNPQRSTVWYUOBZXacdefghiklmnpqrstvwyuobzx*-")
+
+def validate_fasta(uploaded_file, data_type, task=None):
+    """
+    Validates a FASTA file's format and biological content.
+    Returns (is_valid, error_message_or_None).
+    """
+    name = uploaded_file.name
+
+    uploaded_file.seek(0)
+    raw = uploaded_file.read()
+    uploaded_file.seek(0)
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except Exception:
+            return False, f"**{name}**: could not be read as a text file. Make sure it is a plain-text FASTA file."
+
+    lines = text.splitlines()
+    non_empty = [l for l in lines if l.strip()]
+
+    if not non_empty:
+        return False, f"**{name}**: file is empty."
+
+    if not non_empty[0].startswith(">"):
+        return False, (
+            f"**{name}**: invalid FASTA format — the file must start with a header line "
+            f"beginning with '>'. Make sure you are uploading a FASTA file and not a CSV or other format."
+        )
+
+    valid_chars = _FASTA_NT_CHARS if data_type == "DNA/RNA" else _FASTA_AA_CHARS
+
+    seq_count = 0
+    current_header = None
+    header_line_no = 0
+    has_sequence = False
+
+    for line_no, raw_line in enumerate(lines, 1):
+        line = raw_line.rstrip()
+        if not line:
+            continue
+
+        if line.startswith(">"):
+            if current_header is not None and not has_sequence:
+                return False, (
+                    f"**{name}**: header '>{current_header}' at line {header_line_no} "
+                    f"has no sequence data."
+                )
+
+            header = line[1:].strip()
+            if not header:
+                return False, f"**{name}**: empty sequence header at line {line_no}."
+
+            if task == "Regression":
+                if "|" not in header:
+                    return False, (
+                        f"**{name}**: header '>{header}' at line {line_no} is missing the "
+                        f"required '|value' label. Regression FASTA headers must follow the "
+                        f"format '>sequence_name|numeric_value' (e.g. '>seq1|0.85')."
+                    )
+                value_str = header.rsplit("|", 1)[-1].strip()
+                try:
+                    float(value_str)
+                except ValueError:
+                    return False, (
+                        f"**{name}**: header '>{header}' at line {line_no} has "
+                        f"'|{value_str}' which is not a valid number."
+                    )
+
+            current_header = header
+            header_line_no = line_no
+            has_sequence = False
+            seq_count += 1
+
+        else:
+            if current_header is None:
+                return False, (
+                    f"**{name}**: sequence data at line {line_no} appears before any header."
+                )
+
+            invalid = set(line) - valid_chars
+            if invalid:
+                inv_str = ", ".join(f"'{c}'" for c in sorted(invalid))
+                dtype_label = "DNA/RNA" if data_type == "DNA/RNA" else "Protein"
+                return False, (
+                    f"**{name}**: unexpected character(s) {inv_str} in sequence at line {line_no} "
+                    f"— not valid for {dtype_label}."
+                )
+
+            has_sequence = True
+
+    if current_header is not None and not has_sequence:
+        return False, (
+            f"**{name}**: last header '>{current_header}' (line {header_line_no}) "
+            f"has no sequence data."
+        )
+
+    if seq_count == 0:
+        return False, f"**{name}**: no sequences found in file."
+
+    return True, None
+
 class InternalUploadedFile:
     def __init__(self, path: str):
         self.path = path
@@ -795,7 +905,7 @@ def runUI():
 
     queue_info = st.container()
 
-    _, excol2, excol3 = st.columns([8, 1, 1])
+    _, excol2, excol3 = st.columns([7, 1.2, 1.2])
 
     with excol2:
         sample_data = st.toggle("Use example", help="Use example data instead of submitted files.")
@@ -811,6 +921,10 @@ def runUI():
                 use_container_width=True,
                 help="Download examples"
             )
+
+    st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
+
+    tuning = False  # default; overridden by the checkbox widget below when applicable
 
     col1, col2 = st.columns(2)
 
@@ -886,7 +1000,34 @@ def runUI():
         
         with checkcol2:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-            
+
+    # ── Configuration summary ──────────────────────────────────────────────
+    _summary = []
+    if training == "Training set":
+        _summary.append(f"🎯 <b>Mode:</b> Training a new model")
+        if task:
+            _summary.append(f"📋 <b>Task:</b> {task}")
+        if data_type:
+            _summary.append(f"🧬 <b>Data type:</b> {data_type_label}")
+        if data_type and data_type != "Structured data":
+            _summary.append(f"⚙️ <b>Tuning:</b> {'Yes' if tuning else 'No'}")
+    else:
+        _summary.append("🎯 <b>Mode:</b> Loading an existing model")
+    _summary.append(f"🔬 <b>Validation:</b> {testing}")
+    if email:
+        _summary.append(f"📧 <b>Notify:</b> {email}")
+    if password:
+        _summary.append(" 🔒 <b>Encrypted</b>")
+    st.markdown(
+        '<div class="config-summary-card">'
+        '<strong class="card-title">Current Configuration</strong>'
+        + " &nbsp;·&nbsp; ".join(_summary)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="section-label">Upload files</div>', unsafe_allow_html=True)
+
     with st.form("sequences_submit", clear_on_submit=True):
         if training == "Training set":
             if testing == "No test set":
@@ -1051,6 +1192,55 @@ def runUI():
                             f"({test_seq_count:,} samples uploaded, limit is {MAX_SEQS})."
                         )
                     st.stop()
+
+            # FASTA format and content validation
+            if training == "Training set" and data_type in ("DNA/RNA", "Protein"):
+                _regression_task = task if task == "Regression" else None
+
+                # Duplicate class filename check for classification
+                if task == "Classification" and isinstance(train_files, list):
+                    _train_names = [f.name for f in train_files]
+                    if len(_train_names) != len(set(_train_names)):
+                        with queue_info:
+                            st.error(
+                                "Training set has duplicate file names. "
+                                "Each class must have a unique filename."
+                            )
+                        st.stop()
+                if task == "Classification" and testing == "Test set" and isinstance(test_files, list):
+                    _test_names = [f.name for f in test_files]
+                    if len(_test_names) != len(set(_test_names)):
+                        with queue_info:
+                            st.error(
+                                "Test set has duplicate file names. "
+                                "Each class must have a unique filename."
+                            )
+                        st.stop()
+
+                # Validate each training FASTA file
+                _train_list = train_files if isinstance(train_files, list) else [train_files]
+                for _f in _train_list:
+                    _ok, _err = validate_fasta(_f, data_type, _regression_task)
+                    if not _ok:
+                        with queue_info:
+                            st.error(_err)
+                        st.stop()
+
+                # Validate test/prediction FASTA files
+                if testing == "Test set":
+                    _test_list = test_files if isinstance(test_files, list) else [test_files]
+                    for _f in _test_list:
+                        _ok, _err = validate_fasta(_f, data_type, _regression_task)
+                        if not _ok:
+                            with queue_info:
+                                st.error(_err)
+                            st.stop()
+                elif testing == "Prediction set":
+                    _ok, _err = validate_fasta(test_files, data_type, task=None)
+                    if not _ok:
+                        with queue_info:
+                            st.error(_err)
+                        st.stop()
 
             if data_type == "Structured data":
                 if training == "Training set":

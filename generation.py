@@ -94,7 +94,12 @@ def save_measures(output_measures, scores):
     )
 
 def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
-    """Evaluation Function: Using Cross-Validation"""
+    """Run 10-fold cross-validation and write metrics and confusion matrix to CSV.
+
+    task=0: classification — binary uses Sn/Sp/AUC/gmean/MCC; multiclass uses macro metrics.
+    task=1: regression — writes MAE/MSE/RMSE/R2; skips confusion matrix.
+    Confusion matrix rows/columns are decoded through the global lb_encoder.
+    """
 
     def specificity_score(y_true, y_pred):
         tn = ((y_true == 0) & (y_pred == 0)).sum()
@@ -220,7 +225,7 @@ def get_best_model_optuna(X, y, task, n_trials):
     """
 
     if isinstance(y, list):
-	    y = np.array(y)
+        y = np.array(y)
     
     def objective(trial):
         # Define base pipeline components
@@ -411,7 +416,15 @@ def get_best_model_optuna(X, y, task, n_trials):
     return final_pipeline, best_clf_type
 
 def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output):
-    
+    """End-to-end training and prediction pipeline.
+
+    When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
+    (tuning trials), trains the best pipeline, and saves the model dict to output/.
+    When model is a pre-loaded dict: skips training and applies the saved encoders/imputer/clf directly.
+    Writes cross-validation metrics, confusion matrix, feature importances, and test predictions to output/.
+    task: 0 = Classification, 1 = Regression.
+    """
+
     global clf, lb_encoder, ord_encoder
 
     if not os.path.exists(output):

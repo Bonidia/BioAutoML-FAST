@@ -31,13 +31,19 @@ import numpy as np
 from Bio import SeqIO
 
 class EarlyStoppingCallback:
+	"""Optuna callback that stops a study when no meaningful improvement is seen for `patience` consecutive trials."""
+
 	def __init__(self, patience, min_delta):
+		"""patience: number of consecutive trials without improvement before stopping.
+		min_delta: minimum absolute change in best value that counts as an improvement.
+		"""
 		self.patience = patience
 		self.min_delta = min_delta
 		self.best_value = None
 		self.no_improve_count = 0
 
 	def __call__(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial):
+		"""Called after each trial; calls study.stop() once patience is exhausted."""
 		# Ignore pruned or failed trials
 		if trial.state != optuna.trial.TrialState.COMPLETE:
 			return
@@ -178,7 +184,13 @@ def objective_nucleotide(trial, train, task, y):
 	return metric
 
 def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, train_labels, test, foutput):
-	"""Automated Feature Engineering - Bayesian Optimization"""
+	"""Select the best subset of nucleotide descriptors via Bayesian optimization (Optuna TPE).
+
+	Treats each descriptor group as a binary on/off variable and maximises MCC (task=0)
+	or minimises RMSE (task=1) using 5-fold CV with LightGBM.
+	Saves selected_descriptors.csv, best_train.csv, and best_test.csv under foutput/best_descriptors/.
+	Returns (path_btrain, path_btest, btrain_df, btest_df).
+	"""
 	print('Automated Feature Engineering - Bayesian Optimization')
 
 	df_x = pd.read_csv(train)
@@ -401,8 +413,13 @@ def objective_aminoacid(trial, train, task, y):
 	return metric
 
 def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train_labels, test, foutput):
+	"""Select the best subset of amino acid descriptors via Bayesian optimization (Optuna TPE).
 
-	"""Automated Feature Engineering - Bayesian Optimization"""
+	Treats each descriptor group as a binary on/off variable and maximises MCC (task=0)
+	or minimises RMSE (task=1) using 5-fold CV with LightGBM.
+	Saves selected_descriptors.csv, best_train.csv, and best_test.csv under foutput/best_descriptors/.
+	Returns (path_btrain, path_btest, btrain_df, btest_df).
+	"""
 
 	print('Automated Feature Engineering - Bayesian Optimization')
 
@@ -522,8 +539,14 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 	return path_btrain, path_btest, btrain, btest
 
 def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
+	"""Extract amino acid descriptors from FASTA files and concatenate them into train/test CSVs.
 
-	"""Extracts the features from the sequences in the fasta files."""
+	Runs all feature extractors (Shannon, Tsallis, ComplexNetworks, kGap, AAC, DPC, iFeature,
+	modlAMP Global/Peptide, Fourier Integer/EIIP) in parallel subprocesses.
+	Aligns all descriptor CSVs by sequence name using Polars, then splits by train/test membership.
+	Writes fnameseqtrain, ftrain, flabeltrain (and test equivalents) under foutput/feat_extraction/.
+	Returns (fnameseqtrain, fnameseqtest, ftrain, flabeltrain, ftest, flabeltest) as file paths.
+	"""
 
 	# Setup directories
 	path = os.path.join(foutput, 'feat_extraction')
@@ -730,7 +753,14 @@ def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, fou
 	return fnameseqtrain, fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
 def feature_extraction_nucleotide(ftrain, ftrain_labels, ftest, ftest_labels, foutput):
-	"""Extracts the features from the sequences in the fasta files."""
+	"""Extract nucleotide descriptors from FASTA files and concatenate them into train/test CSVs.
+
+	Runs all feature extractors (NAC, DNC, TNC, kGap, ORF, Fickett, Shannon, Fourier Binary/Complex,
+	Tsallis, repDNA) in parallel subprocesses.
+	Aligns all descriptor CSVs by sequence name using Polars, then splits by train/test membership.
+	Writes fnameseqtrain, ftrain, flabeltrain (and test equivalents) under foutput/feat_extraction/.
+	Returns (fnameseqtrain, fnameseqtest, ftrain, flabeltrain, ftest, flabeltest) as file paths.
+	"""
 
 	# Setup directories
 	path = os.path.join(foutput, 'feat_extraction')

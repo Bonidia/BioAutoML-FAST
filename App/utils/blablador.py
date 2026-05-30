@@ -17,13 +17,13 @@ class Models():
 
     def get_model_ids(self):
         response = requests.get(url = self.url, headers = self.headers)
-        response = json.loads(response.text)
-
-        # TODO write error messages for 400, 401, etc respones
-        # like with response.ok , response.status, etc... 
+        response.raise_for_status()
+        data = json.loads(response.text)
+        if "data" not in data:
+            raise ValueError(f"Unexpected response from models API: {response.text[:200]}")
 
         ids = []
-        for model in response["data"]:
+        for model in data["data"]:
             ids.append(model["id"])
 
         return(ids)
@@ -55,19 +55,15 @@ class ChatCompletions():
             "top_p": self.top_p,
             "n": self.choices,
             "max_tokens": self.max_tokens,
-            "stop": [
-                "string"
-            ],
-            "stream": "false",
+            "stream": False,
             "presence_penalty": self.presence_penalty,
             "frequency_penalty": self.frequency_penalty,
             "user": self.user
         }
         payload = json.dumps(payload)
-        
+
         response = requests.post(url = self.url, headers = self.headers, data=payload)
-        # TODO write error messages for 400, 401, etc respones
-        # like with response.ok , response.status, etc... 
+        response.raise_for_status()
         return(response.text)
 
 class Completions():

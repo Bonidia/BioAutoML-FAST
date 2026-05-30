@@ -116,7 +116,7 @@ def test_extraction(job_path, test_data, model, data_type):
             datasets.append(feat_path + "/Tsallis_30.csv")
             datasets.append(feat_path + "/Tsallis_40.csv")
             datasets.append(feat_path + "/ComplexNetworks.csv")
-            datasets.append(feat_path + "/kGap_di.csv")
+            datasets.append(feat_path + "/kGap.csv")
             datasets.append(feat_path + "/AAC.csv")
             datasets.append(feat_path + "/DPC.csv")
             datasets.append(feat_path + "/iFeature-features.csv")
@@ -139,7 +139,7 @@ def test_extraction(job_path, test_data, model, data_type):
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ComplexNetworks.csv", "-l", label,
                                 "-k", "3"],
                         ["python", "MathFeature/methods/Kgap.py", "-i",
-                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap_di.csv", "-l",
+                                os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/kGap.csv", "-l",
                                 label, "-k", "1", "-bef", "1",
                                 "-aft", "1", "-seq", "3"],
                         ["python", "other-methods/ExtractionTechniques-Protein.py", "-i",
@@ -328,6 +328,8 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
 
+    log_path = os.path.join(job_path, "subprocess.log")
+
     try:
         if training == "Load model":
             save_path = os.path.join(dataset_path, "trained_model.sav")
@@ -454,7 +456,8 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
 
-            subprocess.run(command, cwd="..")
+            with open(log_path, "w") as log_file:
+                subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
         try:
             if password:
@@ -494,6 +497,8 @@ def job_submitted_dialog(job_id):
         f'**https://bioautoml.icmc.usp.br/?id={job_id}**\n\n'
         f'Save this link securely.'
     )
+    st.markdown("**Job ID**")
+    st.code(job_id, language=None)
 
 def count_fasta_sequences(uploaded_files):
     """Counts total FASTA records across one or more uploaded files."""
@@ -512,6 +517,114 @@ def count_fasta_sequences(uploaded_files):
         f.seek(0)
 
     return total
+
+# Valid IUPAC nucleotide codes (DNA + RNA, including ambiguous)
+_FASTA_NT_CHARS = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
+# Valid IUPAC amino acid single-letter codes (including ambiguous/special)
+_FASTA_AA_CHARS = frozenset("ACDEFGHIKLMNPQRSTVWYUOBZXacdefghiklmnpqrstvwyuobzx*-")
+
+def validate_fasta(uploaded_file, data_type, task=None):
+    """
+    Validates a FASTA file's format and biological content.
+    Returns (is_valid, error_message_or_None).
+    """
+    name = uploaded_file.name
+
+    uploaded_file.seek(0)
+    raw = uploaded_file.read()
+    uploaded_file.seek(0)
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except Exception:
+            return False, f"**{name}**: could not be read as a text file. Make sure it is a plain-text FASTA file."
+
+    lines = text.splitlines()
+    non_empty = [l for l in lines if l.strip()]
+
+    if not non_empty:
+        return False, f"**{name}**: file is empty."
+
+    if not non_empty[0].startswith(">"):
+        return False, (
+            f"**{name}**: invalid FASTA format — the file must start with a header line "
+            f"beginning with '>'. Make sure you are uploading a FASTA file and not a CSV or other format."
+        )
+
+    valid_chars = _FASTA_NT_CHARS if data_type == "DNA/RNA" else _FASTA_AA_CHARS
+
+    seq_count = 0
+    current_header = None
+    header_line_no = 0
+    has_sequence = False
+
+    for line_no, raw_line in enumerate(lines, 1):
+        line = raw_line.rstrip()
+        if not line:
+            continue
+
+        if line.startswith(">"):
+            if current_header is not None and not has_sequence:
+                return False, (
+                    f"**{name}**: header '>{current_header}' at line {header_line_no} "
+                    f"has no sequence data."
+                )
+
+            header = line[1:].strip()
+            if not header:
+                return False, f"**{name}**: empty sequence header at line {line_no}."
+
+            if task == "Regression":
+                if "|" not in header:
+                    return False, (
+                        f"**{name}**: header '>{header}' at line {line_no} is missing the "
+                        f"required '|value' label. Regression FASTA headers must follow the "
+                        f"format '>sequence_name|numeric_value' (e.g. '>seq1|0.85')."
+                    )
+                value_str = header.rsplit("|", 1)[-1].strip()
+                try:
+                    float(value_str)
+                except ValueError:
+                    return False, (
+                        f"**{name}**: header '>{header}' at line {line_no} has "
+                        f"'|{value_str}' which is not a valid number."
+                    )
+
+            current_header = header
+            header_line_no = line_no
+            has_sequence = False
+            seq_count += 1
+
+        else:
+            if current_header is None:
+                return False, (
+                    f"**{name}**: sequence data at line {line_no} appears before any header."
+                )
+
+            invalid = set(line) - valid_chars
+            if invalid:
+                inv_str = ", ".join(f"'{c}'" for c in sorted(invalid))
+                dtype_label = "DNA/RNA" if data_type == "DNA/RNA" else "Protein"
+                return False, (
+                    f"**{name}**: unexpected character(s) {inv_str} in sequence at line {line_no} "
+                    f"— not valid for {dtype_label}."
+                )
+
+            has_sequence = True
+
+    if current_header is not None and not has_sequence:
+        return False, (
+            f"**{name}**: last header '>{current_header}' (line {header_line_no}) "
+            f"has no sequence data."
+        )
+
+    if seq_count == 0:
+        return False, f"**{name}**: no sequences found in file."
+
+    return True, None
 
 class InternalUploadedFile:
     def __init__(self, path: str):
@@ -847,6 +960,7 @@ def runUI():
             if not test_files:
                 with queue_info:
                     st.error("Please upload the required prediction file.")
+                st.stop()
             else:
                 prediction_seq_count = count_fasta_sequences(test_files)
                 if prediction_seq_count > MAX_SEQS:
@@ -867,6 +981,12 @@ def runUI():
                     data_type = "Protein"
                 elif dtype_str == "dnarna":
                     data_type = "DNA/RNA"
+
+                _ok, _err = validate_fasta(test_files, data_type, task=None)
+                if not _ok:
+                    with queue_info:
+                        st.error(_err)
+                    st.stop()
 
         dataset_path = os.path.join(os.path.abspath("datasets"), dataset_id, "runs/run_1")
 
