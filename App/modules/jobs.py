@@ -218,23 +218,16 @@ def dimensionality_reduction():
         else:
             reducer = PCA(n_components=3)
 
-    with dim_col2:
-        if reducer:
+        if st.button("Compute", type="primary", use_container_width=True, key="run_reduction"):
             with st.spinner(f'Computing {reduction}...'):
-                # Compute reduction with caching
-
-                # if "reducer" not in st.session_state:
-                #     if evaluation == "Training set":
-                #         st.session_state["reducer"] = reducer.fit(scaled_data)
-                #         reduced_data = reducer.transform(scaled_data)
-                # else:
-                #     reduced_data = st.session_state["reducer"].transform(scaled_data)
-
                 reduced_data = reducer.fit_transform(scaled_data)
+                st.session_state["_reduction_fig"] = create_reduction_plot(reduced_data, labels, names, reduction)
 
-                # Create plot with caching
-                fig = create_reduction_plot(reduced_data, labels, names, reduction)
-                st.plotly_chart(fig, use_container_width=True)
+    with dim_col2:
+        if "_reduction_fig" in st.session_state:
+            st.plotly_chart(st.session_state["_reduction_fig"], use_container_width=True)
+        else:
+            st.info("Adjust parameters on the left, then click **Compute** to generate the visualization.")
 
 def compute_correlation_matrix(features, method):
     """Compute correlation matrix for selected features"""
@@ -701,43 +694,43 @@ def performance_metrics(task):
             else:
                 df_cv = pd.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
 
-            metrics = []
+            st.caption("10-fold cross-validation — mean ± standard deviation")
 
             if task == "Classification":
                 if "F1_micro" not in df_cv.columns:
-                    metrics.extend([
-                        f"**Sensitivity:** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
-                        f"**Specificity:** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
-                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
-                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
-                        f"**AUC:** {df_cv['AUC'].item():.3f} ± {df_cv['std_AUC'].item():.3f}",
-                        f"**F1-score:** {df_cv['F1'].item():.3f} ± {df_cv['std_F1'].item():.3f}",
-                        f"**Balanced accuracy:** {df_cv['ACC_B'].item():.3f} ± {df_cv['std_ACC_B'].item():.3f}",
-                        f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}",
-                        f"**G-mean:** {df_cv['gmean'].item():.3f} ± {df_cv['std_gmean'].item():.3f}"
-                    ])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Sensitivity", f"{df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}")
+                    c2.metric("Specificity", f"{df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Accuracy", f"{df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}")
+                    c2.metric("MCC", f"{df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("AUC", f"{df_cv['AUC'].item():.3f} ± {df_cv['std_AUC'].item():.3f}")
+                    c2.metric("F1-score", f"{df_cv['F1'].item():.3f} ± {df_cv['std_F1'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Balanced Accuracy", f"{df_cv['ACC_B'].item():.3f} ± {df_cv['std_ACC_B'].item():.3f}")
+                    c2.metric("Kappa", f"{df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}")
+                    st.metric("G-mean", f"{df_cv['gmean'].item():.3f} ± {df_cv['std_gmean'].item():.3f}")
                 else:
-                    metrics.extend([
-                        f"**Sensitivity (macro avg.):** {df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}",
-                        f"**Specificity (macro avg.):** {df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}",
-                        f"**Accuracy:** {df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}",
-                        f"**MCC:** {df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}",
-                        f"**F1-score (micro avg.):** {df_cv['F1_micro'].item():.3f} ± {df_cv['std_F1_micro'].item():.3f}",
-                        f"**F1-score (macro avg.):** {df_cv['F1_macro'].item():.3f} ± {df_cv['std_F1_macro'].item():.3f}",
-                        f"**F1-score (weighted avg.):** {df_cv['F1_weighted'].item():.3f} ± {df_cv['std_F1_weighted'].item():.3f}",
-                        f"**Kappa:** {df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}"
-                    ])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Sensitivity (macro)", f"{df_cv['Sn'].item():.3f} ± {df_cv['std_Sn'].item():.3f}")
+                    c2.metric("Specificity (macro)", f"{df_cv['Sp'].item():.3f} ± {df_cv['std_Sp'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Accuracy", f"{df_cv['ACC'].item():.3f} ± {df_cv['std_ACC'].item():.3f}")
+                    c2.metric("MCC", f"{df_cv['MCC'].item():.3f} ± {df_cv['std_MCC'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("F1 (micro)", f"{df_cv['F1_micro'].item():.3f} ± {df_cv['std_F1_micro'].item():.3f}")
+                    c2.metric("F1 (macro)", f"{df_cv['F1_macro'].item():.3f} ± {df_cv['std_F1_macro'].item():.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("F1 (weighted)", f"{df_cv['F1_weighted'].item():.3f} ± {df_cv['std_F1_weighted'].item():.3f}")
+                    c2.metric("Kappa", f"{df_cv['kappa'].item():.3f} ± {df_cv['std_kappa'].item():.3f}")
 
             elif task == "Regression":
-                metrics.extend([
-                    f"**Mean Absolute Error:** {df_cv['MAE'].item():.3f} ± {df_cv['std_MAE'].item():.3f}",
-                    f"**Mean Squared Error:** {df_cv['MSE'].item():.3f} ± {df_cv['std_MSE'].item():.3f}",
-                    f"**Root Mean Squared Error:** {df_cv['RMSE'].item():.3f} ± {df_cv['std_RMSE'].item():.3f}",
-                    f"**R2:** {df_cv['R2'].item():.3f} ± {df_cv['std_R2'].item():.3f}"
-                ])
-            
-            for metric in metrics:
-                st.markdown(metric)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("MAE", f"{df_cv['MAE'].item():.3f} ± {df_cv['std_MAE'].item():.3f}", help="Mean Absolute Error")
+                c2.metric("MSE", f"{df_cv['MSE'].item():.3f} ± {df_cv['std_MSE'].item():.3f}", help="Mean Squared Error")
+                c3.metric("RMSE", f"{df_cv['RMSE'].item():.3f} ± {df_cv['std_RMSE'].item():.3f}", help="Root Mean Squared Error")
+                c4.metric("R²", f"{df_cv['R2'].item():.3f} ± {df_cv['std_R2'].item():.3f}", help="Coefficient of determination")
 
         else:
             if task == "Classification":
@@ -759,45 +752,34 @@ def performance_metrics(task):
 
                 metric_dict = calculate_metrics_from_confusion_matrix(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
 
-                metrics = []
-
                 if "Sn_macro_test" in metric_dict:
-                    metrics.extend([
-                        f"**Sensitivity (macro avg.):** {metric_dict['Sn_macro_test']:.3f}",
-                        f"**Specificity (macro avg.):** {metric_dict['Sp_macro_test']:.3f}",
-                        f"**Accuracy:** {metric_dict['ACC_test']:.3f}",
-                        f"**MCC:** {metric_dict['MCC_macro_test']:.3f}"
-                    ])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Sensitivity (macro)", f"{metric_dict['Sn_macro_test']:.3f}")
+                    c2.metric("Specificity (macro)", f"{metric_dict['Sp_macro_test']:.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Accuracy", f"{metric_dict['ACC_test']:.3f}")
+                    c2.metric("MCC", f"{metric_dict['MCC_macro_test']:.3f}")
                 else:
-                    metrics.extend([
-                        f"**Sensitivity:** {metric_dict['Sn_test']:.3f}",
-                        f"**Specificity:** {metric_dict['Sp_test']:.3f}",
-                        f"**Accuracy:** {metric_dict['ACC_test']:.3f}",
-                        f"**MCC:** {metric_dict['MCC_test']:.3f}"
-                    ])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Sensitivity", f"{metric_dict['Sn_test']:.3f}")
+                    c2.metric("Specificity", f"{metric_dict['Sp_test']:.3f}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Accuracy", f"{metric_dict['ACC_test']:.3f}")
+                    c2.metric("MCC", f"{metric_dict['MCC_test']:.3f}")
 
                 if os.path.exists(path_metrics_other):
                     df_metrics_other = pd.read_csv(path_metrics_other)
                     auc_value = df_metrics_other[df_metrics_other["Metric"] == "AUC"]["Value"].item()
-                    metrics.extend([f"**AUC:** {auc_value:.3f}"])
-
-                for metric in metrics:
-                    st.markdown(metric)
+                    st.metric("AUC", f"{auc_value:.3f}", help="Area Under the ROC Curve")
 
             elif task == "Regression":
                 df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
 
-                metrics = []
-
-                metrics.extend([
-                    f"**Mean Absolute Error:** {df_report.loc[df_report['Metric'] == 'MAE', 'Value'].iloc[0]:.3f}",
-                    f"**Mean Squared Error:** {df_report.loc[df_report['Metric'] == 'MSE', 'Value'].iloc[0]:.3f}",
-                    f"**Root Mean Squared Error:** {df_report.loc[df_report['Metric'] == 'RMSE', 'Value'].iloc[0]:.3f}",
-                    f"**R2:** {df_report.loc[df_report['Metric'] == 'R2', 'Value'].iloc[0]:.3f}"
-                ])
-                
-                for metric in metrics:
-                    st.markdown(metric)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("MAE", f"{df_report.loc[df_report['Metric'] == 'MAE', 'Value'].iloc[0]:.3f}", help="Mean Absolute Error")
+                c2.metric("MSE", f"{df_report.loc[df_report['Metric'] == 'MSE', 'Value'].iloc[0]:.3f}", help="Mean Squared Error")
+                c3.metric("RMSE", f"{df_report.loc[df_report['Metric'] == 'RMSE', 'Value'].iloc[0]:.3f}", help="Root Mean Squared Error")
+                c4.metric("R²", f"{df_report.loc[df_report['Metric'] == 'R2', 'Value'].iloc[0]:.3f}", help="Coefficient of determination")
 
     if task == "Classification":
         with col2:
@@ -982,7 +964,7 @@ def feature_importance():
             """
         )
 
-    feat_type = st.selectbox("Feature importance type", ["Tree-based", "SHAP (SHapley Additive exPlanations)"])
+    feat_type = st.radio("Feature importance type", ["Tree-based", "SHAP (SHapley Additive exPlanations)"], horizontal=True)
 
     if feat_type == "Tree-based":
         df = load_feature_importance(st.session_state["job_path"])
@@ -1279,44 +1261,52 @@ def model_information(data_type, task):
             with st.expander("**Descriptors information**"):
                 if data_type == "DNA/RNA":
                     st.markdown(
-                        """**DNC**: Dinucleotide composition;  \n"""
+                        """**DAC**: Incorporating the correlation of the same property between two dinucleotides;  \n"""
+                        """**DNC**: Dinucleotide composition (DNC);  \n"""
                         """**Fickett**: Fickett score based on positional nucleotide features;  \n"""
                         """**FourierBinary**: Binary numerical mapping using Fourier transform;  \n"""
                         """**FourierComplex**: Complex numerical mapping using Fourier transform;  \n"""
-                        """**NAC**: Nucleotide composition;  \n"""
+                        """**NAC**: Nucleic acid composition (NAC);  \n"""
                         """**ORF**: Open reading frame-based features;  \n"""
+                        """**PseDNC**: Combining dinucleotide composition and global sequence-order effects;  \n"""
+                        """**PseKNC**: Improving PseDNC by incorporating k-tuple nucleotide composition;  \n"""
+                        """**Revkmer**: Reverse complement kmer;  \n"""
+                        """**SC-PseDNC**: Combining dinucleotide composition and global sequence-order effects by series correlation;  \n"""
+                        """**SC-PseTNC**: Combining trinucleotide composition and global sequence-order effects by series correlation;  \n"""
                         """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
-                        """**TNC**: Trinucleotide composition;  \n"""
-                        """**Tsallis**: Tsallis entropy from 1-mer to 5-mer with q = 2.3;  \n"""
-                        """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 2 after 1-gap;  \n"""
-                        """**kGap_tri**: Xmer k-Spaced Ymer composition frequency with 3 after 1-gap;  \n"""
-                        """**repDNA**: Comprehensive representation of DNA sequences including k-mers, autocorrelations, and physicochemical features;  \n"""
+                        """**TAC**: Incorporating the correlation of the same property between two trinucleotides;  \n"""
+                        """**TACC**: Combination of TAC and TCC;  \n"""
+                        """**TCC**: Incorporating the correlation of the different properties between two trinucleotides;  \n"""
+                        """**TNC**: Trinucleotide composition (TNC);  \n"""
+                        """**Tsallis**: Tsallis' entropy from 1-mer to 5-mer with q = 2.3;  \n"""
+                        """**kGap_di**: Xmer k-Spaced Ymer composition (kGap) – frequency of 2 after 1-gap;  \n"""
+                        """**kGap_tri**: Xmer k-Spaced Ymer composition (kGap) – frequency of 3 after 1-gap;  \n"""
                     )
                 elif data_type == "Protein":
                     st.markdown(
-                        """**AAC**: Amino acid composition;  \n"""
+                        """**AAC**: Amino acid composition (AAC);  \n"""
                         """**CKSAAGP**: Composition of k-spaced amino acid group pairs;  \n"""
                         """**CKSAAP**: Composition of k-spaced amino acid pairs;  \n"""
-                        """**CTDC**: Composition;  \n"""
-                        """**CTDD**: Distribution;  \n"""
-                        """**CTDT**: Transition;  \n"""
+                        """**CTDC**: Composition (CTDC);  \n"""
+                        """**CTDD**: Distribution (CTDD);  \n"""
+                        """**CTDT**: Transition (CTDT);  \n"""
                         """**CTriad**: Conjoint triad;  \n"""
                         """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
                         """**DDE**: Dipeptide deviation from expected mean;  \n"""
-                        """**DPC**: Kmer dipeptides composition;  \n"""
+                        """**DPC**: Dipeptides composition (DPC);  \n"""
                         """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
                         """**Fourier_Integer**: Integer numerical mapping using Fourier transform;  \n"""
                         """**GAAC**: Grouped amino acid composition;  \n"""
                         """**GDPC**: Grouped dipeptide composition;  \n"""
                         """**GTPC**: Grouped tripeptide composition;  \n"""
-                        """**Global**: Global one-dimensional peptide descriptors calculated from the AA sequence;  \n"""
-                        """**KSCTriad**: Conjoint k-spaced Triad;  \n"""
+                        """**Global**: Global one-dimensional peptide descriptors;  \n"""
+                        """**KSCTriad**: Conjoint k-spaced triad;  \n"""
                         """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
                         """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
                         """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
                         """**Tsallis_30**: Tsallis's entropy from 1-mer to 5-mer with q = 3.0;  \n"""
                         """**Tsallis_40**: Tsallis's entropy from 1-mer to 5-mer with q = 4.0;  \n"""
-                        """**kGap_di**: Xmer k-Spaced Ymer composition frequency with 1 after 1-gap;  \n"""
+                        """**kGap**: Xmer k-Spaced Ymer composition (kGap) – frequency of 1 after 1-gap;  \n"""
                     )
     else:
         with st.container(border=True):
@@ -1428,7 +1418,7 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
 def job_tables():
     jobcol1, jobcol2 = st.columns(2)
 
-    debug = True
+    debug = False
 
     with jobcol1:
         st.markdown("**Pending jobs**", help="Table displaying the first five pending jobs.")
@@ -1643,25 +1633,21 @@ def runUI():
 
     try:
         if "job_path" in st.session_state:
-            st.success(f"Job was completed with the following results:")
-
-            if "model" in st.session_state:
-                del st.session_state["model"]
-
-            if "reducer" in st.session_state:
-                del st.session_state["reducer"]
-
-            if "mapper" in st.session_state:
-                del st.session_state["mapper"]
+            _job_banner = st.empty()
 
             path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
-            
+
+            if st.session_state.get("_loaded_job_path") != st.session_state["job_path"]:
+                st.session_state.pop("model", None)
+                st.session_state.pop("reducer", None)
+                st.session_state.pop("mapper", None)
+                st.session_state["_loaded_job_path"] = st.session_state["job_path"]
+
             if os.path.exists(path_model):
                 if "model" not in st.session_state:
                     with st.spinner("Loading trained model..."):
                         st.session_state["model"] = joblib.load(path_model)
-
-                    train_stats = st.session_state["model"]["train_stats"]
+                train_stats = st.session_state["model"]["train_stats"]
             else:
                 train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
 
@@ -1679,6 +1665,12 @@ def runUI():
                     data_type = "DNA/RNA"
                 else:
                     data_type = "Protein"
+
+            _job_banner.markdown(
+                f'<div class="job-result-banner">✅ &nbsp; Job completed successfully &nbsp;·&nbsp; '
+                f'<strong>{task}</strong> &nbsp;·&nbsp; <strong>{data_type}</strong></div>',
+                unsafe_allow_html=True,
+            )
 
             if "mapper" not in st.session_state:
                 if data_type == "DNA/RNA":
@@ -1730,7 +1722,7 @@ def runUI():
 
                 st.markdown(f"""
                 <div style="display: flex; justify-content: flex-end">
-                    <div class="tooltip"> 
+                    <div class="tooltip">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#66676e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -1738,6 +1730,9 @@ def runUI():
                         </svg>
                         <span class="tooltiptext">
                             {tooltip_text}
+                        </span>
+                    </div>
+                </div>
                 """, unsafe_allow_html=True)
                     
                 st.markdown("**Training set**")

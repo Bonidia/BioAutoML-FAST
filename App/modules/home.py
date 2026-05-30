@@ -873,16 +873,29 @@ def runUI():
     st.markdown(f"""
         <div style='text-align: center;'>
             <img src="data:image/png;base64,{data_url}" alt="logo" width="400">
-            <h5 style="color:gray">Empowering Breakthroughs in Life Sciences with End-to-End Machine Learning</h5>
+            <p class="hero-subtitle">Empowering Breakthroughs in Life Sciences with End-to-End Machine Learning</p>
         </div>
     """, unsafe_allow_html=True)
 
-    st.info("""**BioAutoML-FAST**, a **F**eature-based **A**utomated **S**ys**T**em, is a platform that enables users to upload raw 
-            biological sequences and automatically build customised classification models for sequence annotation, or regression 
-            models to predict quantitative biological activity, such as expression strength and binding affinity, with optional 
-            external validation. The platform summarises datasets through statistical metrics and dimensionality-reduction 
-            visualisations. It also includes an extensive repository of 60 trained models spanning diverse biological problems, 
-            such as anticancer and antimicrobial peptide prediction, non-coding RNA classification, and even taste prediction.""")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    _cards = [
+        ("🧬", "Multi-Omics Ready", "Nucleotide, amino acid, and structured biological data — all supported out of the box"),
+        ("🤖", "End-to-End AutoML", "Train classifiers or regressors with automatic feature extraction and model selection"),
+        ("📊", "Deep Explainability", "SHAP values, confusion matrices, feature distributions, and 3D dimensionality reduction"),
+        ("🗂️", "60+ Trained Models", "Ready-to-use models for anticancer peptides, non-coding RNAs, taste prediction, and more"),
+    ]
+    _c1, _c2, _c3, _c4 = st.columns(4)
+    for _col, (_icon, _title, _text) in zip([_c1, _c2, _c3, _c4], _cards):
+        with _col:
+            st.markdown(
+                f'<div class="feature-card">'
+                f'<span class="feature-icon">{_icon}</span>'
+                f'<div class="feature-title">{_title}</div>'
+                f'<div class="feature-text">{_text}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     st.divider()
 

@@ -898,24 +898,27 @@ def runUI():
             for k in keys
         )
 
-        st.info(
-            f"""
-            **Model chosen:** {model}
+        _task_label = 'Classification' if task == 0 else 'Regression'
+        _dtype_label = 'Nucleotide' if "gc_content" in df_train_stats.columns else 'Amino acid'
+        _labels = ", ".join(df_train_stats["class"].tolist())
+        _train_comp = ', '.join([f'{row["class"]}: {row["num_seqs"]}' for _, row in df_train_stats.iterrows()])
+        _test_comp = ', '.join([f'{row["class"]}: {row["num_seqs"]}' for _, row in df_test_stats.iterrows()]) if not df_test_stats.empty else "No test set"
 
-            **Task:** {'Classification' if task == 0 else 'Regression'}
-  
-            **Data type:** {'Nucleotide' if "gc_content" in df_train_stats.columns else 'Amino acid'}
-
-            **Possible labels:** {", ".join(df_train_stats["class"].tolist())}
-
-            **Training dataset composition:** {', '.join([str(row['class']) + ": " + str(row['num_seqs']) for _, row in df_train_stats.iterrows()])}
-
-            **Test dataset composition:** {', '.join([str(row['class']) + ": " + str(row['num_seqs']) for _, row in df_test_stats.iterrows()]) if not df_test_stats.empty else "No test set"}
-            
-            **Dataset from the following paper(s):** {citation_text}
-
-            You can consult experiments done with this dataset in **Jobs** using the following ID: **{dataset_id}**
-            """
+        _summary_items = [
+            f"🤖 <b>Task:</b> {_task_label}",
+            f"🧬 <b>Data type:</b> {_dtype_label}",
+            f"🏷️ <b>Labels:</b> {_labels}",
+            f"📂 <b>Train:</b> {_train_comp}",
+            f"🔬 <b>Test:</b> {_test_comp}",
+            f"📄 <b>Reference(s):</b> {citation_text}",
+            f"🔑 <b>Benchmark Job ID:</b> <code>{dataset_id}</code>",
+        ]
+        st.markdown(
+            '<div class="config-summary-card">'
+            '<strong class="card-title">Model Summary</strong>'
+            + "<br>".join(_summary_items)
+            + "</div>",
+            unsafe_allow_html=True,
         )
     else:
         st.warning("Selected model not found in mapping. Please contact the admin.")
