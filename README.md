@@ -11,14 +11,17 @@
 
 <p align="center">
   <a href="https://github.com/Bonidia/BioAutoML-FAST/">Home</a> •
+  <a href="https://bioautoml.icmc.usp.br/">Web Platform</a> •
   <a href="#installing-dependencies-and-package">Installing</a> •
+  <a href="#web-application">Web Application</a> •
   <a href="#how-to-use">How To Use</a> •
-  <a href="#citation">Citation</a> 
+  <a href="#trained-models">Trained Models</a> •
+  <a href="#citation">Citation</a>
 </p>
 
 ## Awards
 
-⭐ 2025 Google PhD Fellowship in Health Research awarded to support outstanding and innovative research in computer science and related fields, providing total funding of USD 30.000 over two years - [[Link](https://research.google/programs-and-events/phd-fellowship/recipients/?filtertab=2025)].
+⭐ 2025 Google PhD Fellowship in Health Research awarded to support outstanding and innovative research in computer science and related fields, providing total funding of USD 30.000 over two years — [[Link](https://research.google/programs-and-events/phd-fellowship/recipients/?filtertab=2025)]
 
 ⭐ ISME Scholar Mobility Fund awarded with funding of € 2.300 for a research period in July 2026 at the Helmholtz Centre for Environmental Research (UFZ) in Leipzig, Germany
 
@@ -29,6 +32,17 @@ The prediction of biological sequence properties has traditionally relied on ali
 <h1 align="center">
   <img src="https://raw.githubusercontent.com/Bonidia/BioAutoML-FAST/refs/heads/main/App/imgs/overview.png" alt="Overview" width="600">
 </h1>
+
+## Key Features
+
+- **Alignment-free** machine learning for nucleotide and amino acid sequences
+- **Automated feature engineering** — Bayesian optimization (Optuna) selects the best descriptor combination from a pool of 20 nucleotide descriptors and 23 protein descriptors
+- **Automated model training and hyperparameter optimization** — supports LightGBM, XGBoost, and Random Forest with Optuna-driven tuning
+- **Classification and regression** — binary, multiclass, and quantitative prediction tasks
+- **Structured data support** — `generation.py` can be used directly with pre-computed feature matrices (CSV), without FASTA input
+- **Pre-trained model repository** — 60+ community benchmarks spanning genomics, transcriptomics, and proteomics, browsable on the web platform
+- **Reusable models** — trained models can be saved and re-applied to new sequences for prediction
+- **Web platform** — hosted at [bioautoml.icmc.usp.br](https://bioautoml.icmc.usp.br/), no login required; can also be self-hosted
 
 ## Authors
 
@@ -72,7 +86,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 **2 - Preparing the virtual environment**
 
-With uv installed, inside the folder use following command to syncronize the virtual environment with the necessary dependencies:
+With uv installed, inside the folder use following command to synchronize the virtual environment with the necessary dependencies:
 
 ```sh
 uv sync
@@ -100,9 +114,62 @@ You can deactivate the environment using:
 deactivate
 ```
 
+## Web Application
+
+The hosted platform is freely available at **https://bioautoml.icmc.usp.br/** — no login required.
+
+If you prefer to run the web application locally or deploy it on your own server, follow the steps below.
+
+### Requirements
+
+The web app uses [Streamlit](https://streamlit.io/) for the interface and [Redis](https://redis.io/) + [RQ](https://python-rq.org/) to handle background jobs. Make sure Redis is installed and running before starting the app:
+
+```sh
+# Ubuntu/Debian
+sudo apt install redis-server
+sudo systemctl start redis-server
+
+# macOS (Homebrew)
+brew install redis
+brew services start redis
+```
+
+### Running the web app
+
+With the virtual environment activated and Redis running, open **two separate terminals** from the repository root:
+
+**Terminal 1 — start the RQ worker:**
+
+```sh
+cd App
+rq worker bioautoml
+```
+
+**Terminal 2 — start the Streamlit server:**
+
+```sh
+cd App
+streamlit run app.py
+```
+
+The app will be available at `http://localhost:8501` by default.
+
+### Deploying as a system service (Linux)
+
+For a persistent server deployment, you can use the provided systemd service files located in `App/services/`. Copy them to your systemd directory and enable them:
+
+```sh
+sudo cp App/services/bioautoml-web.service /etc/systemd/system/
+sudo cp App/services/bioautoml-worker.service /etc/systemd/system/
+
+sudo systemctl daemon-reload
+sudo systemctl enable bioautoml-web bioautoml-worker
+sudo systemctl start bioautoml-web bioautoml-worker
+```
+
 ## How to use
 
-There are two main scripts that are part of BioAutoML-FAST, `engineering.py` and `generation.py`. `engineering.py` is the first step of BioAutoML-FAST, with optimal descriptors selection, and `generation.py` is the second step, with hyperparamer optimization:
+BioAutoML-FAST uses a two-step pipeline: `engineering.py` handles feature extraction and descriptor selection, then automatically invokes `generation.py` for model training and hyperparameter optimization.
 
 <h1 align="center">
   <img src="https://raw.githubusercontent.com/Bonidia/BioAutoML-FAST/refs/heads/main/App/imgs/modules.png" alt="Modules" width="600">
@@ -157,6 +224,8 @@ python engineering.py \
 
 The `generation.py` script performs the second step of BioAutoML-FAST. It trains and optimizes machine learning models using the descriptors generated during the feature engineering step. The module supports both classification and regression tasks, including hyperparameter optimization and external test evaluation.
 
+> **Structured data:** `generation.py` can also be used as a standalone script with any pre-computed feature matrix in CSV format — no FASTA input or feature extraction required. This makes it suitable for general tabular ML tasks beyond biological sequences.
+
 | Option | Description | Default |
 |---|---|---|
 | `-path_model`, `--path_model` | Path to a previously trained model to be reused for prediction or evaluation. | `''` |
@@ -171,7 +240,28 @@ The `generation.py` script performs the second step of BioAutoML-FAST. It trains
 | `-n_cpu`, `--n_cpu` | Number of CPU cores to use. Use `-1` to use all available cores. | `-1` |
 | `-output`, `--output` | Output directory where models and results will be saved. | Required |
 
-**Note:** This script can be used directly with structured data, without the need of the first step.
+### Output files
+
+Both scripts write results to the directory specified by `-output`. Typical outputs include:
+
+| File | Description |
+|---|---|
+| `trained_model.sav` | Serialized model (joblib) — reusable for prediction on new sequences |
+| `training_kfold(10)_metrics.csv` | 10-fold cross-validation metrics on the training set |
+| `training_confusion_matrix.csv` | Confusion matrix for the training set (classification only) |
+| `metrics_test.csv` | Evaluation metrics on the held-out test set |
+| `test_confusion_matrix.csv` | Confusion matrix for the test set (classification only) |
+| `test_predictions.csv` | Per-sequence predictions on the test set |
+| `feature_importance.tsv` | Feature importance scores |
+| `best_descriptors/` | Best-selected descriptor matrices for train and test sets |
+
+## Trained Models
+
+The platform hosts a continuously expanding repository of pre-trained, benchmarked models for genomic, transcriptomic, and proteomic applications. You can browse and use these models directly through the web platform at https://bioautoml.icmc.usp.br/.
+
+To download all trained models for offline use, they are available on Zenodo:
+
+**[https://doi.org/10.5281/zenodo.20349210](https://doi.org/10.5281/zenodo.20349210)**
 
 ## Citation
 
@@ -179,7 +269,7 @@ If you use this code in a scientific publication, we would appreciate citations 
 
 Silva de Almeida, B. L., Bonidia, R., Bole, M., Avila-Santos, A., Stadler, P. F., Nunes da Rocha, U., & de Carvalho, A. C. L. F. (2026). BioAutoML-FAST: an automated machine-learning platform for reusable and benchmarked biological sequence models. bioRxiv, 2026-04. [DOI](https://doi.org/10.64898/2026.04.18.719383)
 
-```{latex}
+```bibtex
 @article{silva2026bioautoml,
   title={BioAutoML-FAST: an automated machine-learning platform for reusable and benchmarked biological sequence models},
   author={Silva de Almeida, Breno Livio and Bonidia, Robson and Bole, Martin and Avila-Santos, Anderson and Stadler, Peter F and Nunes da Rocha, Ulisses and de Carvalho, Andre CP L F},

@@ -1764,4 +1764,4 @@ def runUI():
                 with tabs["Dimensionality Reduction"]:
                     dimensionality_reduction()
     except Exception as e:
-        st.error(f"An error occurred. Submit a new job. {e}")
+        st.error(f"An error occurred. Submit a new job.") # {e}

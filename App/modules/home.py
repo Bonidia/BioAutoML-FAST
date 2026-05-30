@@ -299,6 +299,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
 
+    log_path = os.path.join(job_path, "subprocess.log")
+
     try:
         if training == "Training set":
             train_path = os.path.join(job_path, "train")
@@ -410,7 +412,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command.extend(["--n_cpu", "-1"])
                 command.extend(["--output", job_path])
 
-                subprocess.run(command, cwd="..")
+                with open(log_path, "w") as log_file:
+                    subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
                 utils.summary_stats(os.path.join(job_path, "train"), data_type, job_path, True)
 
@@ -483,7 +486,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command.extend(["--n_cpu", "-1"])
                 command.extend(["--output", job_path])
 
-                subprocess.run(command, cwd="..")
+                with open(log_path, "w") as log_file:
+                    subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
                 utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), data_type, job_path, False)
 
@@ -633,7 +637,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
 
-            subprocess.run(command, cwd="..")
+            with open(log_path, "w") as log_file:
+                subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
         try:
             if password:
                 encrypt_job_folder(job_path, password)
