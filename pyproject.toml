@@ -1,3 +1,28 @@
+[tool.ruff]
+exclude = [
+    "other-methods/",
+    "MathFeature/",
+    "manuscript/",
+    ".venv/",
+]
+line-length = 120
+
+[tool.ruff.lint]
+# Focus on real bugs; ignore patterns common in scientific Python scripts
+select = ["E", "F", "W"]
+ignore = [
+    "E402",  # module-import-not-at-top (common in CLI scripts with sys.path manipulation)
+    "F401",  # unused-import (common in ML scripts with conditional usage)
+    "F403",  # star-import (used in several modules)
+    "F405",  # star-import usage
+    "F811",  # redefined-while-unused
+    "E501",  # line-too-long (handled by formatter)
+    "E741",  # ambiguous variable name (l, O, I — common in math code)
+]
+
+[tool.ruff.format]
+# Only the App/ source is formatted; scripts in other dirs are excluded above
+
 [project]
 name = "BioAutoML-FAST"
 version = "1.0.0"

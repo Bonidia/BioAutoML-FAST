@@ -744,7 +744,7 @@ def check_structured_data(uploaded_files, task):
 # Valid IUPAC nucleotide codes (DNA + RNA, including ambiguous)
 _FASTA_NT_CHARS = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 # Valid IUPAC amino acid single-letter codes (including ambiguous/special)
-_FASTA_AA_CHARS = frozenset("ACDEFGHIKLMNPQRSTVWYUOBZXacdefghiklmnpqrstvwyuobzx*-")
+_FASTA_AA_CHARS = frozenset("ACDEFGHIKLMNPQRSTVWYUOBZXJacdefghiklmnpqrstvwyuobzxj*-")
 
 def validate_fasta(uploaded_file, data_type, task=None):
     """

@@ -1127,121 +1127,95 @@ def model_information(data_type, task):
             st.markdown("**Extracted features**", help="Here you can download the features extracted from the submitted datasets. Please note that for larger models from the repository, the process may take a little longer.")
 
             if st.button("Prepare datasets for download", use_container_width=True):
-                if has_test_set:
-                    download_col1, download_col2 = st.columns(2)
                 with st.spinner("Compressing datasets..."):
-                    
-                    with tempfile.NamedTemporaryFile(
-                        mode="wb",
-                        suffix=".csv.gz"
-                    ) as tmp:
-                        with gzip.open(tmp.name, mode="wt", newline="") as gz:
+                    buf_train = io.BytesIO()
+                    with gzip.open(buf_train, mode="wt", newline="") as gz:
+                        writer = csv.writer(gz)
+                        renamed_columns = [
+                            st.session_state["mapper"].get(col, col)
+                            for col in st.session_state["model"]["train"].columns
+                        ]
+                        writer.writerow(["Sample name"] + renamed_columns + ["label"])
+                        for name, row, label in zip(
+                            st.session_state["model"]["nameseq_train"],
+                            st.session_state["model"]["train"].itertuples(index=False),
+                            st.session_state["model"]["train_labels"],
+                        ):
+                            writer.writerow([name, *row, label])
+                    st.session_state["_dl_train"] = buf_train.getvalue()
+
+                    if has_test_set:
+                        test_fnameseq = os.path.join(
+                            st.session_state["job_path"],
+                            "feat_extraction/fnameseqtest.csv",
+                        )
+                        test_features = os.path.join(
+                            st.session_state["job_path"],
+                            "best_descriptors/best_test.csv",
+                        )
+                        test_labels = os.path.join(
+                            st.session_state["job_path"],
+                            "feat_extraction/flabeltest.csv",
+                        )
+
+                        buf_test = io.BytesIO()
+                        with gzip.open(buf_test, mode="wt", newline="") as gz:
                             writer = csv.writer(gz)
-
-                            renamed_columns = [
-                                st.session_state["mapper"].get(col, col)
-                                for col in st.session_state["model"]["train"].columns
-                            ]
-
-                            # Header
-                            writer.writerow(
-                                ["Sample name"]
-                                + renamed_columns
-                                + ["label"]
-                            )
-
-                            for name, row, label in zip(
-                                st.session_state["model"]["nameseq_train"],
-                                st.session_state["model"]["train"].itertuples(index=False),
-                                st.session_state["model"]["train_labels"],
+                            with (
+                                open(test_fnameseq, newline="") as f_name,
+                                open(test_features, newline="") as f_feat,
+                                open(test_labels, newline="") as f_label,
                             ):
-                                writer.writerow([name, *row, label])
+                                reader_name = csv.reader(f_name)
+                                reader_feat = csv.reader(f_feat)
+                                reader_label = csv.reader(f_label)
 
-                        if has_test_set:
-                            test_fnameseq = os.path.join(
-                                st.session_state["job_path"],
-                                "feat_extraction/fnameseqtest.csv",
-                            )
-                            test_features = os.path.join(
-                                st.session_state["job_path"],
-                                "best_descriptors/best_test.csv",
-                            )
-                            test_labels = os.path.join(
-                                st.session_state["job_path"],
-                                "feat_extraction/flabeltest.csv",
-                            )
+                                next(reader_name, None)
+                                test_feature_header = next(reader_feat)
+                                next(reader_label, None)
 
-                            with tempfile.NamedTemporaryFile(
-                                mode="wb",
-                                suffix=".csv.gz"
-                            ) as tmp_test:
-                                with gzip.open(tmp_test.name, mode="wt", newline="") as gz:
-                                    writer = csv.writer(gz)
-
-                                    with (
-                                        open(test_fnameseq, newline="") as f_name,
-                                        open(test_features, newline="") as f_feat,
-                                        open(test_labels, newline="") as f_label,
-                                    ):
-                                        reader_name = csv.reader(f_name)
-                                        reader_feat = csv.reader(f_feat)
-                                        reader_label = csv.reader(f_label)
-
-                                        # --- Read and rename test feature header ---
-                                        next(reader_name, None)
-                                        test_feature_header = next(reader_feat)
-                                        next(reader_label, None)
-
-                                        renamed_test_columns = [
-                                            st.session_state["mapper"].get(col, col)
-                                            for col in test_feature_header
-                                        ]
-
-                                        # Write final header
-                                        writer.writerow(
-                                            ["Sample name"]
-                                            + renamed_test_columns
-                                            + ["label"]
-                                        )
-
-                                        # Stream rows
-                                        for name_row, feat_row, label_row in zip(
-                                            reader_name, reader_feat, reader_label
-                                        ):
-                                            writer.writerow(
-                                                [name_row[0], *feat_row, label_row[0]]
-                                            )
-
-                                with download_col1:
-                                    with open(tmp.name, "rb") as f:
-                                        st.download_button(
-                                            label="Download training set (.csv.gz)",
-                                            data=f,
-                                            file_name="train_dataset.csv.gz",
-                                            mime="application/gzip",
-                                            use_container_width=True
-                                        )
-
-                                with download_col2:
-                                    with open(tmp_test.name, "rb") as f:
-                                        st.download_button(
-                                            label="Download test/prediction set (.csv.gz)",
-                                            data=f,
-                                            file_name="test_dataset.csv.gz",
-                                            mime="application/gzip",
-                                            use_container_width=True,
-                                        )
-                        else:
-                            with open(tmp.name, "rb") as f:
-                                st.download_button(
-                                    label="Download training set (.csv.gz)",
-                                    data=f,
-                                    file_name="train_dataset.csv.gz",
-                                    mime="application/gzip",
-                                    use_container_width=True
+                                renamed_test_columns = [
+                                    st.session_state["mapper"].get(col, col)
+                                    for col in test_feature_header
+                                ]
+                                writer.writerow(
+                                    ["Sample name"] + renamed_test_columns + ["label"]
                                 )
-                        
-                        st.success("Datasets compressed successfully!")
+                                for name_row, feat_row, label_row in zip(
+                                    reader_name, reader_feat, reader_label
+                                ):
+                                    writer.writerow([name_row[0], *feat_row, label_row[0]])
+                        st.session_state["_dl_test"] = buf_test.getvalue()
+
+                    st.success("Datasets compressed successfully!")
+
+            if "_dl_train" in st.session_state:
+                if has_test_set and "_dl_test" in st.session_state:
+                    download_col1, download_col2 = st.columns(2)
+                    with download_col1:
+                        st.download_button(
+                            label="Download training set (.csv.gz)",
+                            data=st.session_state["_dl_train"],
+                            file_name="train_dataset.csv.gz",
+                            mime="application/gzip",
+                            use_container_width=True,
+                        )
+                    with download_col2:
+                        st.download_button(
+                            label="Download test/prediction set (.csv.gz)",
+                            data=st.session_state["_dl_test"],
+                            file_name="test_dataset.csv.gz",
+                            mime="application/gzip",
+                            use_container_width=True,
+                        )
+                else:
+                    st.download_button(
+                        label="Download training set (.csv.gz)",
+                        data=st.session_state["_dl_train"],
+                        file_name="train_dataset.csv.gz",
+                        mime="application/gzip",
+                        use_container_width=True,
+                    )
 
             st.markdown("**Descriptors selected**", help="Descriptors selected as the most suitable for the training dataset")
 
@@ -1540,7 +1514,7 @@ def runUI():
             st.session_state["job_input"] = job_id
 
     def get_job_example():
-        st.session_state["job_input"] = "2d8abeb1-5606-4371-b613-c59a45df0f1e"
+        st.session_state["job_input"] = "f3cce5fc-9d48-42a7-9e71-d66aaead89ca"
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
@@ -1666,9 +1640,10 @@ def runUI():
                 else:
                     data_type = "Protein"
 
+            _data_type_label = {"DNA/RNA": "Nucleotide", "Protein": "Amino acid"}.get(data_type, data_type)
             _job_banner.markdown(
                 f'<div class="job-result-banner">✅ &nbsp; Job completed successfully &nbsp;·&nbsp; '
-                f'<strong>{task}</strong> &nbsp;·&nbsp; <strong>{data_type}</strong></div>',
+                f'<strong>{task}</strong> &nbsp;·&nbsp; <strong>{_data_type_label}</strong></div>',
                 unsafe_allow_html=True,
             )
 
@@ -1806,4 +1781,4 @@ def runUI():
                 with tabs["Dimensionality Reduction"]:
                     dimensionality_reduction()
     except Exception as e:
-        st.error(f"An error occurred: {e}. Submit a new job.")
+        st.error(f"An error occurred. Submit a new job.")
