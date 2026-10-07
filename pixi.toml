@@ -1,0 +1,26 @@
+# Pixi locks the native tooling; uv.lock remains the sole Python-package lock.
+# Python is installed by uv from .python-version into an isolated environment.
+[workspace]
+name = "bioautoml-fast"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+requires-pixi = "==0.81.0"
+
+[dependencies]
+uv = "==0.7.3"
+redis-server = "==7.2.11"
+mmseqs2 = "==15.6f452"
+
+[activation.env]
+UV_PROJECT_ENVIRONMENT = ".venv-repro"
+UV_PYTHON_PREFERENCE = "only-managed"
+UV_LINK_MODE = "copy"
+
+[tasks]
+sync = "uv sync --locked --no-dev"
+check-lock = "uv lock --check"
+test = "uv run --locked --no-dev python -m unittest discover -s tests -v"
+check-runtime = "uv run --locked --no-dev python scripts/check_runtime.py"
+environment = "uv run --locked --no-dev python scripts/environment_report.py"
+check-environment = "uv run --locked --no-dev python scripts/check_environment.py --reference-python .venv/bin/python --output results/environment_validation/comparison.json"
+web = "uv run --locked --no-dev bash start.sh"

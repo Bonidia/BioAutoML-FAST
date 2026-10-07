@@ -61,7 +61,6 @@ def CKSAAGP(fastas, gap = 5, **kw):
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
 
-		# If sequence is too short, fill with nulls (or zeros)
 		if len(sequence) < gap + 2:
 			null_values = [None] * ((gap + 1) * len(gPairIndex))
 			encodings.append([name] + null_values)

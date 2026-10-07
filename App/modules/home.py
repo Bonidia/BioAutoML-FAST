@@ -28,6 +28,8 @@ import base64
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
+from utils.feature_extraction import test_extraction as extract_selected_test_features
+from homology import DEFAULT_IDENTITY, DEFAULT_COVERAGE, validate_homology_settings, homology_warnings
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -84,13 +86,13 @@ def test_extraction(job_path, test_data, model, data_type):
                                 "-aft", "3", "-seq", "1"],
                         ["python", "MathFeature/methods/CodingClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ORF.csv", "-l", label],
-                        ["python", "MathFeature/methods/FickettScore.py", "-i",
+                        ["python", "other-methods/mathfeature-modified/methods/FickettScore.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
                                 "-seq", "1"],
                         ["python", "other-methods/EntropyClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
-                        ["python", "MathFeature/methods/FourierClass.py", "-i",
+                        ["python", "other-methods/mathfeature-modified/methods/FourierClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierBinary.csv", "-l", label,
                                 "-r", "1"],
                         ["python", "other-methods/FourierClass.py", "-i",
@@ -171,7 +173,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         dataset = feat_path + '/Fourier_Integer.csv'
 
-        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
                         '-n', str(len(test_data)), '-o',
                         dataset, '-r', '6'], cwd="..", text=True, input=text_input,
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -188,7 +190,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         dataset = feat_path + '/Fourier_EIIP.csv'
 
-        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
                         '-n', str(len(test_data)), '-o',
                         dataset, '-r', '8'], cwd="..", text=True, input=text_input,
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -289,7 +291,41 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
-def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None):
+def homology_controls(data_type):
+    """Percent-based sequence training controls; keep validation shared with CLI."""
+    identity = st.number_input('Minimum sequence identity (%)', min_value=1.0, max_value=100.0,
+                               value=DEFAULT_IDENTITY, step=1.0, key='homology_identity')
+    coverage = st.number_input('Minimum alignment coverage of each sequence (%)', min_value=1.0, max_value=100.0,
+                               value=DEFAULT_COVERAGE, step=1.0, key='homology_coverage')
+    for message in homology_warnings(identity, coverage, data_type):
+        st.warning(message)
+    if data_type == 'Protein':
+        st.caption('For short peptides, low identity alone is weak evidence of evolutionary relatedness.')
+    st.caption('Defaults: 90% identity and 80% coverage of both sequences, for close-sequence redundancy control. '
+               'Lower thresholds create broader groups. External overlap is reported, not removed. '
+               'Post-selection CV is not nested evaluation. Highly connected datasets may not support the required folds.')
+    return identity, coverage
+
+
+def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, stage2_gate=False, stage2_gate_margin_sd=0.5, homology_aware=False,
+                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
+    """Use the same explicit training controls for sequence and structured jobs."""
+    arguments = ['--n_cpu', str(n_cpu), '--seed', str(seed),
+                 '--search_seed', str(seed if search_seed is None else search_seed),
+                 '--search_jobs', str(search_jobs),
+                 '--stage2_gate_margin_sd', str(stage2_gate_margin_sd)]
+    if stage2_gate:
+        arguments.append('--stage2_gate')
+    if homology_aware:
+        validate_homology_settings(homology_identity, homology_coverage)
+        arguments.extend(['--homology_aware', '--homology_identity', str(homology_identity),
+                          '--homology_coverage', str(homology_coverage)])
+    return arguments
+
+
+def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None,
+               stage2_gate=False, stage2_gate_margin_sd=0.5, seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
+               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -302,6 +338,10 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     log_path = os.path.join(job_path, "subprocess.log")
 
     try:
+        if homology_aware and (training != 'Training set' or data_type == 'Structured data'):
+            raise ValueError('Homology-aware CV requires training from sequence FASTA inputs.')
+        if homology_aware:
+            validate_homology_settings(homology_identity, homology_coverage)
         if training == "Training set":
             train_path = os.path.join(job_path, "train")
             os.makedirs(train_path)
@@ -409,7 +449,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("--test_nameseq")
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
-                command.extend(["--n_cpu", "-1"])
+                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, stage2_gate, stage2_gate_margin_sd, homology_aware,
+                                                  homology_identity, homology_coverage))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -483,7 +524,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("--fasta_label_test")
                         command.append("Predicted")
 
-                command.extend(["--n_cpu", "-1"])
+                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, stage2_gate, stage2_gate_margin_sd, homology_aware,
+                                                  homology_identity, homology_coverage))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -612,7 +654,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-                        test_extraction(job_path, test_fasta, model, data_type)
+                        extract_selected_test_features(job_path, test_fasta, model, data_type, n_cpu)
 
                         utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 
@@ -626,7 +668,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         
                         test_fasta = {"Predicted" : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-                        test_extraction(job_path, test_fasta, model, data_type)
+                        extract_selected_test_features(job_path, test_fasta, model, data_type, n_cpu)
 
                         utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 
@@ -938,6 +980,10 @@ def runUI():
     st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
 
     tuning = False  # default; overridden by the checkbox widget below when applicable
+    stage2_gate = False
+    stage2_gate_margin_sd = 0.5
+    homology_aware = False
+    homology_identity, homology_coverage = DEFAULT_IDENTITY, DEFAULT_COVERAGE
 
     col1, col2 = st.columns(2)
 
@@ -1013,6 +1059,24 @@ def runUI():
         
         with checkcol2:
             password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+
+    if training == 'Training set' and (tuning or data_type == 'Structured data'):
+        stage2_gate = st.checkbox(
+            'Use conservative Stage 2 gate', value=False,
+            help='Retain default LightGBM unless the tuned winner improves training CV by more than the chosen multiple of the default fold-score SD. This adds evaluation work.')
+        if stage2_gate:
+            stage2_gate_margin_sd = st.number_input(
+                'Stage 2 gate margin (SD multiplier)', min_value=0.0, value=0.5, step=0.1)
+            if task == 'Regression':
+                st.caption('The gate uses lower-is-better RMSE; its benefit for regression has not been validated.')
+
+    if training == 'Training set' and data_type in ('Protein', 'DNA/RNA'):
+        homology_aware = st.checkbox(
+            'Homology-aware cross-validation', value=False,
+            help='Automatically keeps detected similar sequences in the same CV fold using MMseqs2. '
+                 'Also audits supplied test sequences without changing their membership. Adds processing time.')
+        if homology_aware:
+            homology_identity, homology_coverage = homology_controls(data_type)
 
     # ── Configuration summary ──────────────────────────────────────────────
     _summary = []
@@ -1130,6 +1194,8 @@ def runUI():
             data_type = "Nucleotide"
             task = "Classification"
             tuning = False
+            stage2_gate = False
+            homology_aware = False
         else:
             # For non-structured sequence classification, require >= 2 class files
             if task and data_type != "Structured data":
@@ -1274,6 +1340,12 @@ def runUI():
 
                 tuning = True
 
+        if homology_aware:
+            try:
+                validate_homology_settings(homology_identity, homology_coverage)
+            except ValueError as error:
+                st.error(str(error))
+                st.stop()
         fn_kwargs = {
             "train_files": train_files,
             "test_files": test_files,
@@ -1283,6 +1355,15 @@ def runUI():
             "training":  training,
             "testing":   testing,
             "tuning": tuning,
+            "stage2_gate": stage2_gate,
+            "homology_aware": homology_aware,
+            "homology_identity": homology_identity,
+            "homology_coverage": homology_coverage,
+            "stage2_gate_margin_sd": stage2_gate_margin_sd,
+            "seed": 63,
+            "search_seed": 63,
+            "n_cpu": 8,
+            "search_jobs": 1,
             "email":     email,
             "password":  password
         }

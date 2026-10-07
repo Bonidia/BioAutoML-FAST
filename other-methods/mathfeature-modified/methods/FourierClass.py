@@ -18,11 +18,11 @@ warnings.filterwarnings("ignore")
 
 def header():
 	dataset = open(foutput, 'a')
-	dataset.write("nameseq,faverage,fmedian,fmaximum,fminimum,fpeak,"
-                  + "fnon_elevated_peak,fpopulation_standard_deviation,fsample_standard_deviation,"
-				  + "fpercentile15,fpercentile25,fpercentile50,fpercentile75,famplitude,"
-				  + "fvariance,finterquartile_range,fsemi_interquartile_range,fcoefficient_of_variation,"
-				  + "fpearson_second_skewness,fpercentile_kurtosis,label")
+	dataset.write("nameseq,average,median,maximum,minimum,peak,"
+                  + "non_elevated_peak,population_standard_deviation,sample_standard_deviation,"
+				  + "percentile15,percentile25,percentile50,percentile75,amplitude,"
+				  + "variance,interquartile_range,semi_interquartile_range,coefficient_of_variation,"
+				  + "pearson_second_skewness,percentile_kurtosis,label")
 	dataset.write("\n")
 	return
 

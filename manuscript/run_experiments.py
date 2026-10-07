@@ -1,19 +1,41 @@
 import subprocess
+import sys
 import polars as pl
 import pandas as pd
 import os
 import time
 import joblib
-from App.utils.stats import summary_stats
+import argparse
+import math
+from pathlib import Path
+
+# Import the statistics helper without initializing the web queue/database.
+PROJECT_PATH = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_PATH / 'App' / 'utils'))
+from stats import summary_stats
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Run five sequential, seeded searches per dataset.')
+    parser.add_argument('--stage2_gate', action='store_true', help='Enable the optional default LightGBM fallback')
+    parser.add_argument('--stage2_gate_margin_sd', type=float, default=0.5)
+    parser.add_argument('--n_cpu', type=int, default=8)
+    parser.add_argument('--seed', type=int, default=63)
+    args = parser.parse_args()
+    if not math.isfinite(args.stage2_gate_margin_sd) or args.stage2_gate_margin_sd < 0:
+        parser.error('--stage2_gate_margin_sd must be finite and nonnegative')
+    return args
 
 def main():
+    args = parse_arguments()
+    os.chdir(PROJECT_PATH)
     start_all = time.time()  # Start measuring total time of main()
 
     full_datasets_path = "App/datasets"
     num_runs = 5  # Number of times to run each dataset
 
-    datasets_list = [item for item in os.listdir(full_datasets_path) 
-                    if os.path.isdir(os.path.join(full_datasets_path, item))]
+    datasets_list = sorted(item for item in os.listdir(full_datasets_path)
+                           if os.path.isdir(os.path.join(full_datasets_path, item)))
 
     for dataset in datasets_list:
         dataset_path = os.path.join(full_datasets_path, dataset)
@@ -31,13 +53,15 @@ def main():
             data_type = "DNA/RNA"
 
         train_path = os.path.join(dataset_path, "train")
-        train_files = [os.path.join(train_path, file) for file in os.listdir(train_path)]
+        train_files = [os.path.join(train_path, file) for file in sorted(os.listdir(train_path))
+                       if file.lower().endswith(('.fasta', '.fa', '.fna', '.faa')) and os.path.isfile(os.path.join(train_path, file))]
         train_labels = [os.path.splitext(os.path.basename(file))[0] for file in train_files]
 
         test_path = os.path.join(dataset_path, "test")
 
         if os.path.exists(test_path):
-            test_files = [os.path.join(test_path, file) for file in os.listdir(test_path)]
+            test_files = [os.path.join(test_path, file) for file in sorted(os.listdir(test_path))
+                          if file.lower().endswith(('.fasta', '.fa', '.fna', '.faa')) and os.path.isfile(os.path.join(test_path, file))]
             test_labels = [os.path.splitext(os.path.basename(file))[0] for file in test_files]
 
         # Create a runs folder for this dataset
@@ -52,7 +76,7 @@ def main():
                 classifier = False
 
                 command = [
-                    "python",
+                    sys.executable,
                     "engineering.py",
                     "--dtype",
                     dtype_str,
@@ -83,7 +107,13 @@ def main():
                     command.append("--fasta_label_test")
                     command.extend(test_labels)
 
-                command.extend(["--n_cpu", "8"])
+                command.extend(["--n_cpu", str(args.n_cpu)])
+                command.extend(["--seed", str(args.seed)])
+                command.extend(["--search_seed", str(6300 + run_num)])
+                command.extend(["--search_jobs", "1"])
+                command.extend(["--stage2_gate_margin_sd", str(args.stage2_gate_margin_sd)])
+                if args.stage2_gate:
+                    command.append('--stage2_gate')
                 command.extend(["--output", run_folder])  # Output to the run-specific folder
 
                 print(f"Running dataset {dataset}, iteration {run_num}")

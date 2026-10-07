@@ -1,4 +1,5 @@
 import time
+import os
 import streamlit as st
 from enum import Enum
 from redis import Redis
@@ -6,10 +7,10 @@ from rq import Queue
 from .db import TaskResultManager, TaskStatus
 import requests
 
-redis_conn = Redis(host="localhost", port=6379)
+redis_conn = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
 q = Queue("bioautoml", connection=redis_conn)
 
-manager = TaskResultManager("task_results.db")
+manager = TaskResultManager(os.environ.get("TASK_RESULTS_DB", "task_results.db"))
 
 class JobStatus(Enum):
     PENDING = "pending"

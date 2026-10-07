@@ -38,7 +38,6 @@ def CKSAAP(fastas, gap=5, **kw):
 	for i in fastas:
 		name, sequence = i[0], i[1]
 
-		# If sequence is too short, fill with nulls (or zeros)
 		if len(sequence) < gap + 2:
 			null_values = [None] * ((gap + 1) * len(aaPairs))
 			encodings.append([name] + null_values)

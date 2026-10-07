@@ -5,17 +5,15 @@ import pandas as pd
 import numpy as np
 import random
 import argparse
+import json
 import sys
 import os.path
 import time
 import lightgbm as lgb
 import joblib
 import xgboost as xgb
-import matplotlib.pyplot as plt
-import shap
 import optuna
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import cross_val_predict
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_validate
@@ -37,6 +35,75 @@ from numpy.random import default_rng
 from functools import partial
 from sklearn.metrics import mean_absolute_error, mean_squared_error, root_mean_squared_error
 from sklearn.metrics import median_absolute_error, r2_score
+from feature_execution import get_available_cpus
+from homology import get_homology_folds, add_homology_arguments, resolve_homology_arguments, validate_report_settings
+
+random_seed = 63
+optimization_seed = 63
+stage2_gate_report = None
+
+
+def compare_stage2_gate(tuned_score, anchor_folds, task, margin_sd=0.5):
+    """Compare training-CV scores; equality retains the default learner."""
+    scores = np.asarray(anchor_folds, dtype=float)
+    if task not in (0, 1) or scores.ndim != 1 or len(scores) < 2:
+        raise ValueError('The gate requires a valid task and at least two fold scores.')
+    if not np.isfinite(margin_sd) or margin_sd < 0:
+        raise ValueError('The gate margin must be finite and nonnegative.')
+    if not np.isfinite(tuned_score) or not np.isfinite(scores).all():
+        raise ValueError('The gate requires finite tuned and default CV scores.')
+    anchor_mean = float(np.mean(scores))
+    anchor_sd = float(np.std(scores, ddof=1))
+    threshold = anchor_mean + margin_sd * anchor_sd if task == 0 else anchor_mean - margin_sd * anchor_sd
+    improved = tuned_score > threshold if task == 0 else tuned_score < threshold
+    return {
+        'anchor_cv_mean': anchor_mean,
+        'anchor_cv_sd': anchor_sd,
+        'anchor_fold_scores': scores.tolist(),
+        'margin_sd_multiple': float(margin_sd),
+        'gate_keeps_default': not bool(improved),
+    }
+
+
+def validate_feature_alignment(train, train_labels, train_nameseq, test, test_labels, test_nameseq, columns):
+    """Validate parallel row metadata and enforce the saved feature order."""
+    if len(train) != len(train_labels):
+        raise ValueError('Training features and labels have different row counts.')
+    if len(train_nameseq) and len(train_nameseq) != len(train):
+        raise ValueError('Training features and sequence IDs have different row counts.')
+    if len(train_nameseq) and pd.Index(train_nameseq).has_duplicates:
+        raise ValueError('Training sequence IDs must be unique.')
+    if train.columns.has_duplicates or pd.Index(columns).has_duplicates or list(train.columns) != list(columns):
+        raise ValueError('Training feature columns do not match the model schema.')
+    if not isinstance(test, pd.DataFrame):
+        return test
+    if len(test_nameseq) != len(test) or pd.Index(test_nameseq).has_duplicates:
+        raise ValueError('Test sequence IDs must be unique and match the feature rows.')
+    if len(test_labels) and len(test_labels) != len(test):
+        raise ValueError('Test features and labels have different row counts.')
+    if test.columns.has_duplicates or set(test.columns) != set(columns):
+        raise ValueError('Test feature columns do not match the training schema.')
+    return test.loc[:, columns].copy()
+
+
+def evaluate_default_anchor(X, y, task, model_jobs, folds=None):
+	"""Cross-validate the untuned default LightGBM anchor on the Stage 2 folds."""
+
+	if task == 0:
+		model = lgb.LGBMClassifier(random_state=random_seed, verbosity=-1, n_jobs=model_jobs)
+	else:
+		model = lgb.LGBMRegressor(random_state=random_seed, verbosity=-1, n_jobs=model_jobs)
+	anchor_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", model)])
+	if task == 0:
+		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
+	else:
+		cv = KFold(n_splits=5, shuffle=True, random_state=random_seed)
+	fold_scores = []
+	for train_idx, val_idx in (cv.split(X, y) if folds is None else folds):
+		anchor_pipeline.fit(X.iloc[train_idx], y[train_idx])
+		fold_scores.append(root_mean_squared_error(y[val_idx], anchor_pipeline.predict(X.iloc[val_idx])) if task == 1
+						   else matthews_corrcoef(y[val_idx], anchor_pipeline.predict(X.iloc[val_idx])))
+	return fold_scores
 
 def save_measures(output_measures, scores):
     """
@@ -93,7 +160,18 @@ def save_measures(output_measures, scores):
         index=False,
     )
 
-def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
+def get_cpu_parameters(n_cpu, requested_search_jobs=None):
+    """Return total CPUs, Optuna workers, and threads available to each trial."""
+
+    total_cpus = get_available_cpus(n_cpu)
+    if requested_search_jobs is None:
+        search_jobs = min(16, total_cpus)
+    else:
+        search_jobs = min(max(1, requested_search_jobs), total_cpus)
+    model_jobs = max(1, total_cpus // search_jobs)
+    return total_cpus, search_jobs, model_jobs
+
+def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=None):
     """Run 10-fold cross-validation and write metrics and confusion matrix to CSV.
 
     task=0: classification — binary uses Sn/Sp/AUC/gmean/MCC; multiclass uses macro metrics.
@@ -141,12 +219,17 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
                 'gmean': make_scorer(geometric_mean_score)
             }
 
-        kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=63)
-        scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
+        kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=random_seed)
+        if folds is None:
+            folds = list(kfold.split(X, y))
+        scores = cross_validate(model, X, y, cv=folds, scoring=scoring, return_estimator=True)
 
         save_measures(output_cross, scores)
 
-        y_pred = cross_val_predict(model, X, y, cv=kfold)
+        y_pred = np.empty_like(np.asarray(y))
+        for fitted_model, (_, validation_idx) in zip(scores["estimator"], folds):
+            y_pred[validation_idx] = fitted_model.predict(X.iloc[validation_idx])
+
         conf_mat = pd.crosstab(
             lb_encoder.inverse_transform(y),
             lb_encoder.inverse_transform(y_pred),
@@ -160,8 +243,8 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output):
             'RMSE': 'neg_root_mean_squared_error',
             'R2': 'r2'}
 
-        kfold = KFold(n_splits=10, shuffle=True, random_state=63)
-        scores = cross_validate(model, X, y, cv=kfold, scoring=scoring)
+        kfold = KFold(n_splits=10, shuffle=True, random_state=random_seed)
+        scores = cross_validate(model, X, y, cv=kfold if folds is None else folds, scoring=scoring)
 
         save_measures(output_cross, scores)
 
@@ -217,7 +300,7 @@ def save_prediction(task, prediction, nameseqs, pred_output):
 
     preds_df.to_csv(pred_output, index=False)
 
-def get_best_model_optuna(X, y, task, n_trials):
+def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, stage2_gate=False, stage2_gate_margin_sd=0.5, folds=None):
     """
     Runs Optuna optimization and returns the best configured pipeline.
     task: 0 = Classification, 1 = Regression
@@ -226,6 +309,18 @@ def get_best_model_optuna(X, y, task, n_trials):
 
     if isinstance(y, list):
         y = np.array(y)
+
+    global stage2_gate_report
+    if not np.isfinite(stage2_gate_margin_sd) or stage2_gate_margin_sd < 0:
+        raise ValueError('The gate margin must be finite and nonnegative.')
+    stage2_gate_report = {
+        'enabled': bool(stage2_gate), 'applied': False,
+        'reason': 'tuning_disabled' if n_trials <= 0 else 'disabled',
+        'margin_sd_multiple': float(stage2_gate_margin_sd),
+        'task': task, 'n_trials': n_trials,
+    }
+
+    total_cpus, search_jobs, model_jobs = get_cpu_parameters(n_cpu, search_jobs)
     
     def objective(trial):
         # Define base pipeline components
@@ -241,9 +336,9 @@ def get_best_model_optuna(X, y, task, n_trials):
                     'max_depth': trial.suggest_int('max_depth_rf', 3, 20),
                     'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
                     'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 5),
-                    'random_state': 63
+                    'random_state': random_seed
                 }
-                model = RandomForestClassifier(**params)
+                model = RandomForestClassifier(n_jobs=model_jobs, **params)
                 
             elif classifier_type == 1: # XGBoost
                 params = {
@@ -252,10 +347,10 @@ def get_best_model_optuna(X, y, task, n_trials):
                     'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.3),
                     'subsample': trial.suggest_float('subsample', 0.5, 1.0),
                     'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-                    'random_state': 63,
+                    'random_state': random_seed,
                     'eval_metric': 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
                 }
-                model = xgb.XGBClassifier(**params)
+                model = xgb.XGBClassifier(n_jobs=model_jobs, **params)
                 
             elif classifier_type == 2: # LightGBM
                 params = {
@@ -265,16 +360,16 @@ def get_best_model_optuna(X, y, task, n_trials):
                     'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 1.0),
                     'bagging_fraction': trial.suggest_float('bagging_fraction', 0.4, 1.0),
                     'bagging_freq': trial.suggest_int('bagging_freq', 1, 7),
-                    'random_state': 63,
+                    'random_state': random_seed,
                     'verbosity': -1
                 }
-                model = lgb.LGBMClassifier(**params)
+                model = lgb.LGBMClassifier(n_jobs=model_jobs, **params)
 
             clf_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
-            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=63)
+            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
 
             fold_scores = []
-            for step, (train_idx, val_idx) in enumerate(cv.split(X, y)):
+            for step, (train_idx, val_idx) in enumerate(cv.split(X, y) if folds is None else folds):
                 # Split data
                 X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
                 y_train, y_val = y[train_idx], y[val_idx]
@@ -303,9 +398,9 @@ def get_best_model_optuna(X, y, task, n_trials):
                 'n_estimators': trial.suggest_int('n_estimators', 50, 500),
                 'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
                 'num_leaves': trial.suggest_int('num_leaves', 20, 100),
-                'random_state': 63,
+                'random_state': random_seed,
                 'verbosity': -1,
-                'n_jobs': 1
+                'n_jobs': model_jobs
             }
 
             if classifier_type == 0: # LightGBM (RF Mode)
@@ -336,10 +431,10 @@ def get_best_model_optuna(X, y, task, n_trials):
 
             # Metric: Negative RMSE for regression (Optuna maximizes return value)
             reg_pipeline = Pipeline(steps=[("imputer", imputer), ("clf", model)])
-            cv = KFold(n_splits=5, shuffle=True, random_state=63)
+            cv = KFold(n_splits=5, shuffle=True, random_state=random_seed)
 
             fold_scores = []
-            for step, (train_idx, val_idx) in enumerate(cv.split(X, y)):
+            for step, (train_idx, val_idx) in enumerate(cv.split(X, y) if folds is None else folds):
                 # Split data
                 X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
                 y_train, y_val = y[train_idx], y[val_idx]
@@ -369,8 +464,14 @@ def get_best_model_optuna(X, y, task, n_trials):
         direction = "minimize"
 
     if n_trials > 0:
-        study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True))
-        study.optimize(objective, n_trials=n_trials, timeout=10_800, show_progress_bar=True, n_jobs=16)
+        study = optuna.create_study(
+            direction=direction,
+            sampler=optuna.samplers.TPESampler(
+                multivariate=True, group=True, constant_liar=True,
+                seed=optimization_seed
+            )
+        )
+        study.optimize(objective, n_trials=n_trials, timeout=10_800, show_progress_bar=True, n_jobs=search_jobs)
         
         print(f"Best Trial Score: {study.best_value:.4f}")
         print("Best Params Raw:", study.best_params)
@@ -380,6 +481,29 @@ def get_best_model_optuna(X, y, task, n_trials):
         
         # 1. Extract and remove the classifier selector key
         best_clf_type = best_params.pop('Classifier')
+
+        # --- PROTECTION GATE ---
+        # Optional heuristic: require improvement beyond a multiple of the
+        # default LightGBM's fold SD. This is not a significance test.
+        stage2_gate_report.update({
+            'tuned_best_cv': float(study.best_value),
+            'tuned_best_trial': int(study.best_trial.number),
+            'tuned_best_type': int(best_clf_type),
+            'tuned_best_params': study.best_params.copy(),
+        })
+        if stage2_gate:
+            anchor_folds = evaluate_default_anchor(X, y, task, model_jobs, folds)
+            stage2_gate_report.update(compare_stage2_gate(study.best_value, anchor_folds, task, stage2_gate_margin_sd))
+            stage2_gate_report.update(applied=True, reason='compared')
+            anchor_mean = stage2_gate_report['anchor_cv_mean']
+            anchor_sd = stage2_gate_report['anchor_cv_sd']
+            clear_improvement = not stage2_gate_report['gate_keeps_default']
+            print(f"Stage 2 protection gate: tuned {study.best_value:.4f} vs anchor {anchor_mean:.4f} "
+                  f"+/- {anchor_sd:.4f} -> "
+                  f"{'default LightGBM retained' if not clear_improvement else 'tuned model retained'}")
+            if not clear_improvement:
+                best_params = {}
+                best_clf_type = 2
     else:
         best_clf_type = 2
     
@@ -389,33 +513,36 @@ def get_best_model_optuna(X, y, task, n_trials):
         if best_clf_type == 0: # Random Forest
             if 'max_depth_rf' in best_params:
                 best_params['max_depth'] = best_params.pop('max_depth_rf')
-            final_model = RandomForestClassifier(random_state=63, **best_params if n_trials > 0 else {})
+            final_model = RandomForestClassifier(random_state=random_seed, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
             
         elif best_clf_type == 1: # XGBoost
             if 'max_depth_xgb' in best_params:
                 best_params['max_depth'] = best_params.pop('max_depth_xgb')
             
             metric = 'mlogloss' if len(np.unique(y)) > 2 else 'logloss'
-            final_model = xgb.XGBClassifier(random_state=63, eval_metric=metric, **best_params if n_trials > 0 else {})
+            final_model = xgb.XGBClassifier(random_state=random_seed, eval_metric=metric, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
             
         elif best_clf_type == 2: # LightGBM
-            final_model = lgb.LGBMClassifier(random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            final_model = lgb.LGBMClassifier(random_state=random_seed, verbosity=-1, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
 
     else: # Regression (Task 1)
         if best_clf_type == 0: # LGBM (RF Mode)
-            final_model = lgb.LGBMRegressor(boosting_type='rf', random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            final_model = lgb.LGBMRegressor(boosting_type='rf', random_state=random_seed, verbosity=-1, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
             
         elif best_clf_type == 1: # LGBM (GBDT Mode)
-            final_model = lgb.LGBMRegressor(boosting_type='gbdt', random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            final_model = lgb.LGBMRegressor(boosting_type='gbdt', random_state=random_seed, verbosity=-1, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
             
         elif best_clf_type == 2: # LGBM (Standard)
-            final_model = lgb.LGBMRegressor(random_state=63, verbosity=-1, **best_params if n_trials > 0 else {})
+            final_model = lgb.LGBMRegressor(random_state=random_seed, verbosity=-1, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
 
     final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
+    stage2_gate_report['shipped_type'] = int(best_clf_type)
+    stage2_gate_report['shipped_model'] = type(final_model).__name__
+    stage2_gate_report['shipped_params'] = final_model.get_params()
     
     return final_pipeline, best_clf_type
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output):
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, stage2_gate=False, stage2_gate_margin_sd=0.5, homology_report=None):
     """End-to-end training and prediction pipeline.
 
     When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
@@ -434,11 +561,28 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         train = model["train"]
         train_labels = model["train_labels"]
         column_train = model["column_train"]
+        train_nameseq = model.get('nameseq_train', [])
     else:
         column_train = train.columns
 
-        model_dict = {"train": train, "train_labels": train_labels, "column_train": column_train}
+        model_dict = {
+            "train": train,
+            "train_labels": train_labels,
+            "column_train": column_train,
+            "feature_schema_version": 1,
+        }
     
+    test = validate_feature_alignment(train, train_labels, train_nameseq, test, test_labels, test_nameseq, column_train)
+    search_folds, reporting_folds = None, None
+    if not model:
+        if homology_report:
+            search_folds = get_homology_folds(homology_report, train_nameseq, task, random_seed, 5)
+            reporting_folds = get_homology_folds(homology_report, train_nameseq, task, random_seed, 10)
+            model_dict['homology_report'] = homology_report
+        overlap_path = os.path.join(output, 'homology', 'overlap_report.json')
+        if os.path.isfile(overlap_path):
+            with open(overlap_path) as handle:
+                model_dict['overlap_report'] = json.load(handle)
     column_test = ''
 
     """Basic Info"""
@@ -455,14 +599,11 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     if model:
         if "label_encoder" in model:
             lb_encoder = model["label_encoder"]
-            train_labels = lb_encoder.transform(train_labels)
 
         if "ordinal_encoder" in model:
             ord_encoder = model["ordinal_encoder"]
-            string_cols = train.select_dtypes(include=["object"]).columns
-            if not string_cols.empty:
-                train[string_cols] = ord_encoder.transform(train[string_cols])
-
+            # Prediction uses only test rows; do not transform or mutate the
+            # training frame retained for the web app's model inspection.
             if os.path.exists(ftest) is True:
                 string_cols = test.select_dtypes(include=["object"]).columns
                 if not string_cols.empty:
@@ -518,10 +659,16 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
-        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning)
+        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, stage2_gate, stage2_gate_margin_sd, search_folds)
 
         print('--- Optimization Complete ---')
-        
+
+        if stage2_gate_report is not None:
+            stage2_gate_report["shipped_type"] = int(selected_type_id)
+            with open(os.path.join(output, 'stage2_gate_report.json'), 'w') as gate_file:
+                json.dump(stage2_gate_report, gate_file, indent=2)
+            model_dict['stage2_gate_report'] = stage2_gate_report.copy()
+
         if task == 0:
             names = {0: "Random Forest", 1: "XGBoost", 2: "LightGBM"}
             print(f"Optuna Selected Classifier: {names[selected_type_id]}")
@@ -533,7 +680,8 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         
     """Training - StratifiedKFold (cross-validation = 10)..."""
 
-    print('Training: StratifiedKFold (cross-validation = 10)...')
+    print('Training: post-selection homology-aware CV (10 folds, not nested)...' if homology_report and not model
+          else 'Training: StratifiedKFold (cross-validation = 10)...')
     
     train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
     matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
@@ -544,7 +692,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     if model:
         clf = model["clf"]
     else:
-        evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output)
+        evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output, reporting_folds)
 
         clf.fit(train, train_labels)
         model_dict["clf"] = clf
@@ -604,7 +752,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                 if not len(np.unique(train_labels)) > 2:
                     metrics_other_output = os.path.join(output, "metrics_other.csv")
                     accu = accuracy_score(test_labels, preds)
-                    auc = roc_auc_score(test_labels, clf.predict_proba(test)[:, 1])
+                    auc = roc_auc_score(test_labels, probs[:, 1])
                     balanced = balanced_accuracy_score(test_labels, preds)
                     gmean = geometric_mean_score(test_labels, preds)
                     mcc = matthews_corrcoef(test_labels, preds)
@@ -672,8 +820,20 @@ if __name__ == '__main__':
     parser.add_argument('-test_label', '--test_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
+    parser.add_argument('-search_jobs', '--search_jobs', default=1, help='parallel Optuna workers; default 1 for repeatable trial ordering')
+    parser.add_argument('--stage2_gate', action='store_true', help='Opt in to the training-CV default LightGBM fallback')
+    parser.add_argument('--homology_aware', action='store_true', help='Use the automatic assignments prepared by engineering.py in output/homology; raw sequences are required upstream')
+    add_homology_arguments(parser)
+    parser.add_argument('--stage2_gate_margin_sd', type=float, default=0.5, help='Nonnegative default-model fold SD multiplier (default: 0.5)')
+    parser.add_argument('-seed', '--seed', default=63, help='random seed for cross-validation and learners - default = 63')
+    parser.add_argument('-search_seed', '--search_seed', default=None, help='Optuna sampler seed; defaults to --seed')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
     args = parser.parse_args()
+    resolve_homology_arguments(parser, args)
+    if args.homology_aware and args.path_model:
+        parser.error('--homology_aware is a training option, not an inference option.')
+    if not np.isfinite(args.stage2_gate_margin_sd) or args.stage2_gate_margin_sd < 0:
+        parser.error('--stage2_gate_margin_sd must be finite and nonnegative')
     path_model = args.path_model
     task = int(args.task)
     tuning = int(args.tuning)
@@ -684,6 +844,11 @@ if __name__ == '__main__':
     ftest_labels = str(args.test_label)
     nameseq_test = str(args.test_nameseq)
     n_cpu = int(args.n_cpu)
+    search_jobs = int(args.search_jobs) if args.search_jobs is not None else None
+    random_seed = int(args.seed)
+    optimization_seed = int(args.search_seed) if args.search_seed is not None else random_seed
+    random.seed(random_seed)
+    np.random.seed(random_seed)
     foutput = str(args.output)
     start_time = time.time()
 
@@ -758,9 +923,25 @@ if __name__ == '__main__':
                 print('Test_labels - %s: File not exists' % ftest_labels)
                 sys.exit()
 
+    homology_report = None
+    if args.homology_aware:
+        if path_model:
+            parser.error('--homology_aware is a training option, not an inference option.')
+        report_path = os.path.join(foutput, 'homology', 'homology_report.json')
+        if not os.path.isfile(report_path):
+            parser.error('Run engineering.py --homology_aware with FASTA inputs first; feature tables alone cannot establish homology.')
+        with open(report_path) as handle:
+            homology_report = json.load(handle)
+        if not homology_report.get('enabled'):
+            parser.error('No enabled homology-aware assignments were found.')
+        try:
+            validate_report_settings(homology_report, args.homology_identity, args.homology_coverage)
+        except (KeyError, ValueError) as error:
+            parser.error(str(error))
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
-        test_read, test_labels_read, test_nameseq_read, foutput
+        test_read, test_labels_read, test_nameseq_read, foutput, n_cpu,
+        search_jobs, args.stage2_gate, args.stage2_gate_margin_sd, homology_report
     )
 
     cost = (time.time() - start_time) / 60

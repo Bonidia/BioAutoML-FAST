@@ -25,6 +25,7 @@ import base64
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
+from utils.feature_extraction import test_extraction as extract_selected_test_features
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -81,13 +82,13 @@ def test_extraction(job_path, test_data, model, data_type):
                                 "-aft", "3", "-seq", "1"],
                         ["python", "MathFeature/methods/CodingClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/ORF.csv", "-l", label],
-                        ["python", "MathFeature/methods/FickettScore.py", "-i",
+                        ["python", "other-methods/mathfeature-modified/methods/FickettScore.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Fickett.csv", "-l", label,
                                 "-seq", "1"],
                         ["python", "other-methods/EntropyClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/Shannon.csv", "-l", label,
                                 "-k", "5", "-e", "Shannon"],
-                        ["python", "MathFeature/methods/FourierClass.py", "-i",
+                        ["python", "other-methods/mathfeature-modified/methods/FourierClass.py", "-i",
                                 os.path.join(path, f"pre_{label}.fasta"), "-o", feat_path + "/FourierBinary.csv", "-l", label,
                                 "-r", "1"],
                         ["python", "other-methods/FourierClass.py", "-i",
@@ -168,7 +169,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         dataset = feat_path + '/Fourier_Integer.csv'
 
-        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
                         '-n', str(len(test_data)), '-o',
                         dataset, '-r', '6'], cwd="..", text=True, input=text_input,
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -185,7 +186,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         dataset = feat_path + '/Fourier_EIIP.csv'
 
-        subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
                         '-n', str(len(test_data)), '-o',
                         dataset, '-r', '8'], cwd="..", text=True, input=text_input,
                         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -202,7 +203,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         # dataset = feat_path + '/EIIP.csv'
 
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        # subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
         #                 '-n', str(len(test_data)), '-o',
         #                 dataset, '-r', '7'], cwd="..", text=True, input=text_input,
         #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -219,7 +220,7 @@ def test_extraction(job_path, test_data, model, data_type):
 
         # dataset = feat_path + '/AAAF.csv'
 
-        # subprocess.run(['python', 'MathFeature/methods/Mappings-Protein.py',
+        # subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
         #                 '-n', str(len(test_data)), '-o',
         #                 dataset, '-r', '1'], cwd="..", text=True, input=text_input,
         #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -431,7 +432,7 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-                        test_extraction(job_path, test_fasta, model, data_type)
+                        extract_selected_test_features(job_path, test_fasta, model, data_type)
 
                         utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 
@@ -445,7 +446,7 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                         
                         test_fasta = {"Predicted" : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
-                        test_extraction(job_path, test_fasta, model, data_type)
+                        extract_selected_test_features(job_path, test_fasta, model, data_type)
 
                         utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
 

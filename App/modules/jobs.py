@@ -30,6 +30,7 @@ from cryptography.fernet import Fernet
 from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
 import shap
 import csv
+import json
 import gzip
 
 def _cleanup_previous_temp():
@@ -644,7 +645,65 @@ def calculate_metrics_from_confusion_matrix(matrix_path):
         "MCC_macro_test": MCC
     }
 
+def sequence_overlap_report():
+    """Display job-local audits, never substitute a loaded model's old test audit."""
+    path = os.path.join(st.session_state['job_path'], 'homology')
+    homology_path = os.path.join(path, 'homology_report.json')
+    overlap_path = os.path.join(path, 'overlap_report.json')
+    if not os.path.isfile(homology_path) and not os.path.isfile(overlap_path):
+        st.caption('Sequence overlap audit: not assessed for this job.')
+        return
+    with st.expander('Sequence separation and train–test overlap', expanded=True):
+        if os.path.isfile(homology_path):
+            with open(homology_path) as handle:
+                report = json.load(handle)
+            if report.get('enabled'):
+                st.write(f'**CV separation:** {report["groups"]} groups across {report["training_samples"]} training sequences.')
+                st.caption(f'MMseqs2 {report["mmseqs_version"]}; identity ≥{report["minimum_identity"] * 100:g}%; '
+                           f'coverage ≥{report["minimum_query_and_target_coverage"] * 100:g}% of both sequences.')
+                st.write(f'Detected cross-fold violations: {report["detected_cross_fold_violations"]}')
+                st.dataframe(pd.DataFrame(report['fold_summary']['10']), hide_index=True)
+                st.info('Post-selection homology-aware CV is not nested evaluation of the entire AutoML search. '
+                        'No qualifying matches detected does not prove absence of homology.')
+                st.caption(report['limitation'])
+                for filename in ('homology_report.json', 'fold_assignments.csv'):
+                    with open(os.path.join(path, filename), 'rb') as handle:
+                        st.download_button(f'Download {filename}', handle.read(), file_name=filename,
+                                           key=f'homology_{filename}')
+            else:
+                st.write('**CV separation:** homology-aware grouping disabled.')
+        if os.path.isfile(overlap_path):
+            with open(overlap_path) as handle:
+                audit = json.load(handle)
+            st.write('**External-test overlap**')
+            if audit['test_samples']:
+                st.write(f'Exact matches: {audit["exact_test_sequences"]}/{audit["test_samples"]} '
+                         f'({audit["exact_test_percent"]:.1f}%).')
+                if audit['similarity_status'] == 'assessed':
+                    st.write(f'Qualifying similarity matches, including exact: '
+                             f'{audit["similar_test_sequences_including_exact"]}/{audit["test_samples"]} '
+                             f'({audit["similar_test_percent_including_exact"]:.1f}%).')
+                else:
+                    st.caption('Near-duplicate similarity: not assessed.')
+                st.write(f'Conflicting labels among exact matched pairs: {audit["conflicting_exact_pairs"]}.')
+                st.caption(audit.get('label_conflicts_status', ''))
+                if audit['exact_test_sequences'] or audit['similar_test_sequences_including_exact']:
+                    st.warning('Detected train–test sequence overlap. External scores may benefit from similarity; '
+                               'original train/test membership was preserved.')
+                else:
+                    st.caption('No qualifying matches detected in the checks performed.')
+                st.caption(audit['exact_definition'])
+            else:
+                st.caption('Not assessed: no external test sequences supplied.')
+            for filename in ('overlap_report.json', 'overlap_matches.csv'):
+                with open(os.path.join(path, filename), 'rb') as handle:
+                    st.download_button(f'Download {filename}', handle.read(), file_name=filename,
+                                       key=f'homology_{filename}')
+
+
 def performance_metrics(task):
+
+    sequence_overlap_report()
 
     with st.expander("What **Performance Metrics** shows"):
         st.info(
@@ -1249,7 +1308,6 @@ def model_information(data_type, task):
                         """**SC-PseTNC**: Combining trinucleotide composition and global sequence-order effects by series correlation;  \n"""
                         """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
                         """**TAC**: Incorporating the correlation of the same property between two trinucleotides;  \n"""
-                        """**TACC**: Combination of TAC and TCC;  \n"""
                         """**TCC**: Incorporating the correlation of the different properties between two trinucleotides;  \n"""
                         """**TNC**: Trinucleotide composition (TNC);  \n"""
                         """**Tsallis**: Tsallis' entropy from 1-mer to 5-mer with q = 2.3;  \n"""
@@ -1265,7 +1323,7 @@ def model_information(data_type, task):
                         """**CTDD**: Distribution (CTDD);  \n"""
                         """**CTDT**: Transition (CTDT);  \n"""
                         """**CTriad**: Conjoint triad;  \n"""
-                        """**ComplexNetworks**: Complex network features from 1-mer to 5-mer;  \n"""
+                        """**ComplexNetworks**: Complex network features from 1-mer to 3-mer;  \n"""
                         """**DDE**: Dipeptide deviation from expected mean;  \n"""
                         """**DPC**: Dipeptides composition (DPC);  \n"""
                         """**Fourier_EIIP**: Electron-ion interaction potential numerical mapping using Fourier transform;  \n"""
@@ -1274,7 +1332,6 @@ def model_information(data_type, task):
                         """**GDPC**: Grouped dipeptide composition;  \n"""
                         """**GTPC**: Grouped tripeptide composition;  \n"""
                         """**Global**: Global one-dimensional peptide descriptors;  \n"""
-                        """**KSCTriad**: Conjoint k-spaced triad;  \n"""
                         """**Peptide**: AA scale based global or convoluted descriptors (auto-/cross-correlated);  \n"""
                         """**Shannon**: Shannon's entropy from 1-mer to 5-mer;  \n"""
                         """**Tsallis_23**: Tsallis's entropy from 1-mer to 5-mer with q = 2.3;  \n"""
