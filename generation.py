@@ -11,6 +11,7 @@ import os.path
 import time
 import lightgbm as lgb
 import joblib
+from bioautoml.model_artifacts import get_training_count, load_model, save_model
 import xgboost as xgb
 import optuna
 from sklearn.metrics import roc_auc_score
@@ -35,33 +36,61 @@ from numpy.random import default_rng
 from functools import partial
 from sklearn.metrics import mean_absolute_error, mean_squared_error, root_mean_squared_error
 from sklearn.metrics import median_absolute_error, r2_score
-from feature_execution import get_available_cpus
-from homology import get_homology_folds, add_homology_arguments, resolve_homology_arguments, validate_report_settings
+from bioautoml.feature_execution import get_available_cpus
+from bioautoml.homology import get_homology_folds, add_homology_arguments, resolve_homology_arguments, validate_report_settings
+from bioautoml.calibration import (get_base_pipeline, prepare_calibration_folds, make_calibrated_model,
+                         probability_metrics, save_probability_report)
 
 random_seed = 63
 optimization_seed = 63
-stage2_gate_report = None
+
+PEARSON_REASONS = (
+    'ok', 'fewer than two observations', 'constant targets',
+    'constant predictions', 'near-constant targets', 'near-constant predictions'
+)
 
 
-def compare_stage2_gate(tuned_score, anchor_folds, task, margin_sd=0.5):
-    """Compare training-CV scores; equality retains the default learner."""
-    scores = np.asarray(anchor_folds, dtype=float)
-    if task not in (0, 1) or scores.ndim != 1 or len(scores) < 2:
-        raise ValueError('The gate requires a valid task and at least two fold scores.')
-    if not np.isfinite(margin_sd) or margin_sd < 0:
-        raise ValueError('The gate margin must be finite and nonnegative.')
-    if not np.isfinite(tuned_score) or not np.isfinite(scores).all():
-        raise ValueError('The gate requires finite tuned and default CV scores.')
-    anchor_mean = float(np.mean(scores))
-    anchor_sd = float(np.std(scores, ddof=1))
-    threshold = anchor_mean + margin_sd * anchor_sd if task == 0 else anchor_mean - margin_sd * anchor_sd
-    improved = tuned_score > threshold if task == 0 else tuned_score < threshold
+def pearson_score(y_true, y_pred):
+    """Return signed Pearson r and a reason when correlation is undefined.
+
+    Scale before centering to avoid overflow. Near-constant inputs are treated
+    conservatively as undefined at a relative float64 tolerance of eps**0.75.
+    Invalid input raises rather than silently changing evaluation membership.
+    """
+    arrays = [np.asarray(values, dtype=np.float64) for values in (y_true, y_pred)]
+    if any(values.ndim != 1 for values in arrays):
+        raise ValueError('Pearson requires one-dimensional targets and predictions.')
+    if len(arrays[0]) != len(arrays[1]):
+        raise ValueError('Pearson targets and predictions have different lengths.')
+    if any(not np.isfinite(values).all() for values in arrays):
+        raise ValueError('Pearson requires finite targets and predictions.')
+    if len(arrays[0]) < 2:
+        return np.nan, PEARSON_REASONS[1]
+    normalized = []
+    for values, name in zip(arrays, ('targets', 'predictions')):
+        if np.all(values == values[0]):
+            return np.nan, f'constant {name}'
+        values = values / np.max(np.abs(values))
+        mean = np.mean(values)
+        centered = values - mean
+        norm = np.linalg.norm(centered)
+        if norm <= np.finfo(np.float64).eps ** 0.75 * abs(mean):
+            return np.nan, f'near-constant {name}'
+        normalized.append(centered / norm)
+    return float(np.clip(np.dot(*normalized), -1.0, 1.0)), PEARSON_REASONS[0]
+
+
+def regression_scores(model, X, y):
+    """Score all regression metrics from one prediction call per CV fold."""
+    predictions = model.predict(X)
+    pearson, reason = pearson_score(y, predictions)
     return {
-        'anchor_cv_mean': anchor_mean,
-        'anchor_cv_sd': anchor_sd,
-        'anchor_fold_scores': scores.tolist(),
-        'margin_sd_multiple': float(margin_sd),
-        'gate_keeps_default': not bool(improved),
+        'MAE': -mean_absolute_error(y, predictions),
+        'MSE': -mean_squared_error(y, predictions),
+        'RMSE': -root_mean_squared_error(y, predictions),
+        'R2': r2_score(y, predictions),
+        'Pearson': pearson,
+        'Pearson_status': PEARSON_REASONS.index(reason),
     }
 
 
@@ -75,6 +104,13 @@ def validate_feature_alignment(train, train_labels, train_nameseq, test, test_la
         raise ValueError('Training sequence IDs must be unique.')
     if train.columns.has_duplicates or pd.Index(columns).has_duplicates or list(train.columns) != list(columns):
         raise ValueError('Training feature columns do not match the model schema.')
+    return validate_test_alignment(test, test_labels, test_nameseq, columns)
+
+
+def validate_test_alignment(test, test_labels, test_nameseq, columns):
+    """Inference needs the saved schema, not the original training matrix."""
+    if pd.Index(columns).has_duplicates:
+        raise ValueError('Model feature columns must be unique.')
     if not isinstance(test, pd.DataFrame):
         return test
     if len(test_nameseq) != len(test) or pd.Index(test_nameseq).has_duplicates:
@@ -85,25 +121,6 @@ def validate_feature_alignment(train, train_labels, train_nameseq, test, test_la
         raise ValueError('Test feature columns do not match the training schema.')
     return test.loc[:, columns].copy()
 
-
-def evaluate_default_anchor(X, y, task, model_jobs, folds=None):
-	"""Cross-validate the untuned default LightGBM anchor on the Stage 2 folds."""
-
-	if task == 0:
-		model = lgb.LGBMClassifier(random_state=random_seed, verbosity=-1, n_jobs=model_jobs)
-	else:
-		model = lgb.LGBMRegressor(random_state=random_seed, verbosity=-1, n_jobs=model_jobs)
-	anchor_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", model)])
-	if task == 0:
-		cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
-	else:
-		cv = KFold(n_splits=5, shuffle=True, random_state=random_seed)
-	fold_scores = []
-	for train_idx, val_idx in (cv.split(X, y) if folds is None else folds):
-		anchor_pipeline.fit(X.iloc[train_idx], y[train_idx])
-		fold_scores.append(root_mean_squared_error(y[val_idx], anchor_pipeline.predict(X.iloc[val_idx])) if task == 1
-						   else matthews_corrcoef(y[val_idx], anchor_pipeline.predict(X.iloc[val_idx])))
-	return fold_scores
 
 def save_measures(output_measures, scores):
     """
@@ -117,7 +134,7 @@ def save_measures(output_measures, scores):
     preferred_metrics = [
         "ACC", "Sn", "Sp", "F1", "F1_macro", "F1_micro", "F1_weighted",
         "MCC", "AUC", "ACC_B", "kappa", "gmean",
-        "MAE", "MSE", "RMSE", "R2"
+        "MAE", "MSE", "RMSE", "R2", "Pearson"
     ]
 
     results = {}
@@ -150,6 +167,9 @@ def save_measures(output_measures, scores):
 
         results[metric] = round(mean_val, 4)
         results[f"std_{metric}"] = round(std_val, 4)
+        if metric == 'Pearson':
+            results['Pearson_valid_folds'] = int(np.isfinite(values).sum())
+            results['Pearson_total_folds'] = len(values)
 
     # Build DataFrame (single-row)
     df = pd.DataFrame([results])
@@ -171,11 +191,11 @@ def get_cpu_parameters(n_cpu, requested_search_jobs=None):
     model_jobs = max(1, total_cpus // search_jobs)
     return total_cpus, search_jobs, model_jobs
 
-def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=None):
+def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=None, calibration_folds=None):
     """Run 10-fold cross-validation and write metrics and confusion matrix to CSV.
 
     task=0: classification — binary uses Sn/Sp/AUC/gmean/MCC; multiclass uses macro metrics.
-    task=1: regression — writes MAE/MSE/RMSE/R2; skips confusion matrix.
+    task=1: regression — writes MAE/MSE/RMSE/R2/Pearson; skips confusion matrix.
     Confusion matrix rows/columns are decoded through the global lb_encoder.
     """
 
@@ -222,7 +242,32 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=N
         kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=random_seed)
         if folds is None:
             folds = list(kfold.split(X, y))
-        scores = cross_validate(model, X, y, cv=folds, scoring=scoring, return_estimator=True)
+        if calibration_folds is None:
+            scores = cross_validate(model, X, y, cv=folds, scoring=scoring, return_estimator=True)
+        else:
+            from sklearn.metrics import get_scorer
+            folds = calibration_folds['reporting']
+            scores = {f'test_{name}': [] for name in [*scoring, 'Log_loss', 'Brier']}
+            scores['estimator'] = []
+            probabilities = np.empty((len(y), len(lb_encoder.classes_)))
+            raw_probabilities = np.empty_like(probabilities)
+            for number, (train_idx, validation_idx) in enumerate(folds):
+                fitted = make_calibrated_model(model, X, calibration_folds['inner'][number])
+                fitted.fit(X.iloc[train_idx], np.asarray(y)[train_idx])
+                validation = X.iloc[validation_idx]
+                values = fitted.predict_proba(validation)
+                probabilities[validation_idx] = values
+                raw_probabilities[validation_idx] = get_base_pipeline(fitted).predict_proba(validation)
+                for name, scorer in scoring.items():
+                    scorer = get_scorer(scorer) if isinstance(scorer, str) else scorer
+                    scores[f'test_{name}'].append(scorer(fitted, validation, np.asarray(y)[validation_idx]))
+                for name, value in probability_metrics(np.asarray(y)[validation_idx], values).items():
+                    scores[f'test_{name}'].append(value)
+                scores['estimator'].append(fitted)
+            calibration_output = os.path.join(os.path.dirname(output_cross), 'calibration')
+            save_probability_report(y, probabilities, lb_encoder.classes_, calibration_output, 'cv', raw_probabilities)
+            pd.DataFrame(probabilities, columns=lb_encoder.classes_).to_csv(
+                os.path.join(calibration_output, 'cv_probabilities.csv'), index=False)
 
         save_measures(output_cross, scores)
 
@@ -238,13 +283,15 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=N
 
         conf_mat.to_csv(matrix_output)
     else:
-        scoring = {'MAE': 'neg_mean_absolute_error',
-            'MSE': 'neg_mean_squared_error',
-            'RMSE': 'neg_root_mean_squared_error',
-            'R2': 'r2'}
-
         kfold = KFold(n_splits=10, shuffle=True, random_state=random_seed)
-        scores = cross_validate(model, X, y, cv=kfold if folds is None else folds, scoring=scoring)
+        scores = cross_validate(model, X, y, cv=kfold if folds is None else folds,
+                                scoring=regression_scores, error_score='raise')
+        reasons = [PEARSON_REASONS[int(code)] for code in scores.pop('test_Pearson_status')]
+        pearson = scores['test_Pearson']
+        pd.DataFrame({
+            'fold': np.arange(1, len(pearson) + 1), 'Pearson': pearson,
+            'Pearson_r2': pearson ** 2, 'reason': reasons,
+        }).to_csv(os.path.splitext(output_cross)[0] + '_pearson_folds.csv', index=False)
 
         save_measures(output_cross, scores)
 
@@ -267,7 +314,7 @@ def features_importance_ensembles(model, features, output_importances):
         Feature names sorted by descending importance
     """
 
-    importances = model.named_steps["clf"].feature_importances_
+    importances = get_base_pipeline(model).named_steps["clf"].feature_importances_
     indices = np.argsort(importances)[::-1]
 
     df = pd.DataFrame({
@@ -300,7 +347,7 @@ def save_prediction(task, prediction, nameseqs, pred_output):
 
     preds_df.to_csv(pred_output, index=False)
 
-def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, stage2_gate=False, stage2_gate_margin_sd=0.5, folds=None):
+def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None):
     """
     Runs Optuna optimization and returns the best configured pipeline.
     task: 0 = Classification, 1 = Regression
@@ -309,16 +356,6 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, stag
 
     if isinstance(y, list):
         y = np.array(y)
-
-    global stage2_gate_report
-    if not np.isfinite(stage2_gate_margin_sd) or stage2_gate_margin_sd < 0:
-        raise ValueError('The gate margin must be finite and nonnegative.')
-    stage2_gate_report = {
-        'enabled': bool(stage2_gate), 'applied': False,
-        'reason': 'tuning_disabled' if n_trials <= 0 else 'disabled',
-        'margin_sd_multiple': float(stage2_gate_margin_sd),
-        'task': task, 'n_trials': n_trials,
-    }
 
     total_cpus, search_jobs, model_jobs = get_cpu_parameters(n_cpu, search_jobs)
     
@@ -482,28 +519,6 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, stag
         # 1. Extract and remove the classifier selector key
         best_clf_type = best_params.pop('Classifier')
 
-        # --- PROTECTION GATE ---
-        # Optional heuristic: require improvement beyond a multiple of the
-        # default LightGBM's fold SD. This is not a significance test.
-        stage2_gate_report.update({
-            'tuned_best_cv': float(study.best_value),
-            'tuned_best_trial': int(study.best_trial.number),
-            'tuned_best_type': int(best_clf_type),
-            'tuned_best_params': study.best_params.copy(),
-        })
-        if stage2_gate:
-            anchor_folds = evaluate_default_anchor(X, y, task, model_jobs, folds)
-            stage2_gate_report.update(compare_stage2_gate(study.best_value, anchor_folds, task, stage2_gate_margin_sd))
-            stage2_gate_report.update(applied=True, reason='compared')
-            anchor_mean = stage2_gate_report['anchor_cv_mean']
-            anchor_sd = stage2_gate_report['anchor_cv_sd']
-            clear_improvement = not stage2_gate_report['gate_keeps_default']
-            print(f"Stage 2 protection gate: tuned {study.best_value:.4f} vs anchor {anchor_mean:.4f} "
-                  f"+/- {anchor_sd:.4f} -> "
-                  f"{'default LightGBM retained' if not clear_improvement else 'tuned model retained'}")
-            if not clear_improvement:
-                best_params = {}
-                best_clf_type = 2
     else:
         best_clf_type = 2
     
@@ -536,13 +551,9 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, stag
             final_model = lgb.LGBMRegressor(random_state=random_seed, verbosity=-1, n_jobs=total_cpus, **best_params if n_trials > 0 else {})
 
     final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
-    stage2_gate_report['shipped_type'] = int(best_clf_type)
-    stage2_gate_report['shipped_model'] = type(final_model).__name__
-    stage2_gate_report['shipped_params'] = final_model.get_params()
-    
     return final_pipeline, best_clf_type
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, stage2_gate=False, stage2_gate_margin_sd=0.5, homology_report=None):
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None, calibrate_probabilities=False):
     """End-to-end training and prediction pipeline.
 
     When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
@@ -554,14 +565,18 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
     global clf, lb_encoder, ord_encoder
 
+    if calibrate_probabilities and (task != 0 or model):
+        raise ValueError('Probability calibration is an option for new classification training only.')
+    calibrated_prediction = bool(model and model.get('calibration', {}).get('enabled'))
+    if calibrated_prediction and task != 0:
+        raise ValueError('A calibrated classifier cannot be used for regression.')
+
     if not os.path.exists(output):
         os.mkdir(output)
 
     if model:
-        train = model["train"]
-        train_labels = model["train_labels"]
         column_train = model["column_train"]
-        train_nameseq = model.get('nameseq_train', [])
+        test = validate_test_alignment(test, test_labels, test_nameseq, column_train)
     else:
         column_train = train.columns
 
@@ -572,7 +587,10 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
             "feature_schema_version": 1,
         }
     
-    test = validate_feature_alignment(train, train_labels, train_nameseq, test, test_labels, test_nameseq, column_train)
+    if not model:
+        test = validate_feature_alignment(train, train_labels, train_nameseq, test, test_labels, test_nameseq, column_train)
+    raw_train = train.copy() if calibrate_probabilities else None
+    raw_test = test.copy() if (calibrate_probabilities or calibrated_prediction) and isinstance(test, pd.DataFrame) else None
     search_folds, reporting_folds = None, None
     if not model:
         if homology_report:
@@ -586,7 +604,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     column_test = ''
 
     """Basic Info"""
-    print(f'Number of samples (train): {len(train)}')
+    print(f'Number of samples (train): {get_training_count(model) if model else len(train)}')
     print(f'Number of features (train): {len(column_train)}')
 
     if os.path.exists(ftest):
@@ -600,7 +618,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         if "label_encoder" in model:
             lb_encoder = model["label_encoder"]
 
-        if "ordinal_encoder" in model:
+        if "ordinal_encoder" in model and not calibrated_prediction:
             ord_encoder = model["ordinal_encoder"]
             # Prediction uses only test rows; do not transform or mutate the
             # training frame retained for the web app's model inspection.
@@ -632,7 +650,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     print('Checking missing values...')
 
     if model:
-        if "imputer" in model:
+        if "imputer" in model and not calibrated_prediction:
             imp = model["imputer"]
             print('Applying SimpleImputer - strategy (mean)...')
 
@@ -653,21 +671,19 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
     """Choosing Classifier """
 
+    calibration_folds = None
+    if calibrate_probabilities:
+        calibration_folds = prepare_calibration_folds(train_labels, random_seed, homology_report, train_nameseq)
+
     if not model:
         sc = StandardScaler()
         model_dict["scaler"] = sc.fit(train)
 
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
-        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, stage2_gate, stage2_gate_margin_sd, search_folds)
+        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds)
 
         print('--- Optimization Complete ---')
-
-        if stage2_gate_report is not None:
-            stage2_gate_report["shipped_type"] = int(selected_type_id)
-            with open(os.path.join(output, 'stage2_gate_report.json'), 'w') as gate_file:
-                json.dump(stage2_gate_report, gate_file, indent=2)
-            model_dict['stage2_gate_report'] = stage2_gate_report.copy()
 
         if task == 0:
             names = {0: "Random Forest", 1: "XGBoost", 2: "LightGBM"}
@@ -692,12 +708,33 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     if model:
         clf = model["clf"]
     else:
-        evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output, reporting_folds)
-
-        clf.fit(train, train_labels)
+        if calibrate_probabilities:
+            calibration_started = time.monotonic()
+            raw_train = raw_train.replace([np.inf, -np.inf], np.nan)
+            evaluate_model_cross(raw_train, train_labels, clf, task, train_output, matrix_output,
+                                 reporting_folds, calibration_folds)
+            calibration_cv_minutes = (time.monotonic() - calibration_started) / 60
+            final_fit_started = time.monotonic()
+            clf = make_calibrated_model(clf, raw_train, calibration_folds['final'])
+            clf.fit(raw_train, train_labels)
+            model_dict['train'] = raw_train
+            model_dict['calibration'] = {'enabled': True, 'method': 'sigmoid', 'ensemble': False,
+                'folds': 5, 'reporting_folds': 10, 'seed': random_seed, 'group_aware': bool(homology_report),
+                'classes': lb_encoder.classes_.tolist(), 'minutes': (time.monotonic() - calibration_started) / 60,
+                'reporting_cv_minutes': calibration_cv_minutes,
+                'final_fit_minutes': (time.monotonic() - final_fit_started) / 60,
+                'evaluation': 'calibration nested within reporting folds; AutoML selection is not nested'}
+            with open(os.path.join(output, 'calibration', 'settings.json'), 'w') as handle:
+                json.dump(model_dict['calibration'], handle, indent=2)
+        else:
+            evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output, reporting_folds)
+            clf.fit(train, train_labels)
         model_dict["clf"] = clf
 
         model_dict["cross_validation"] = pd.read_csv(train_output)
+        if task == 1:
+            model_dict['pearson_folds'] = pd.read_csv(
+                os.path.splitext(train_output)[0] + '_pearson_folds.csv')
 
         if task == 0:
             model_dict["confusion_matrix"] = pd.read_csv(matrix_output)
@@ -719,16 +756,23 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
         model_dict["feature_importance"] = pd.read_csv(importance_output, sep='\t')
 
-        joblib.dump(model_dict, model_output)
+        save_model(model_dict, model_output)
 
     """Testing model..."""
 
     if os.path.exists(ftest) is True:
         print('Generating Performance Test...')
 
+        if calibrate_probabilities or calibrated_prediction:
+            test = raw_test.replace([np.inf, -np.inf], np.nan)
+
         if task == 0:
             preds = lb_encoder.inverse_transform(clf.predict(test))
             probs = clf.predict_proba(test)
+            if (calibrate_probabilities or calibrated_prediction) and len(test_labels) == len(test) and 'Predicted' not in test_labels:
+                save_probability_report(lb_encoder.transform(test_labels), probs, lb_encoder.classes_,
+                                        os.path.join(output, 'calibration'), 'external',
+                                        get_base_pipeline(clf).predict_proba(test))
             pred_output = os.path.join(output, "test_predictions.csv")
             print('Saving prediction in ' + pred_output + '...')
             save_prediction(task, probs, test_nameseq, pred_output)
@@ -749,7 +793,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                 metr_report = pd.DataFrame(report).transpose()
                 metr_report.to_csv(metrics_output)
                 
-                if not len(np.unique(train_labels)) > 2:
+                if len(lb_encoder.classes_) <= 2:
                     metrics_other_output = os.path.join(output, "metrics_other.csv")
                     accu = accuracy_score(test_labels, preds)
                     auc = roc_auc_score(test_labels, probs[:, 1])
@@ -775,12 +819,16 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                 MSE = mean_squared_error(test_labels, preds)
                 RMSE = root_mean_squared_error(test_labels, preds)
                 R2 = r2_score(test_labels, preds)
+                pearson, reason = pearson_score(test_labels, preds)
                 metrics = pd.DataFrame({
-                    "Metric": ["MAE", "MSE", "RMSE", "R2"],
-                    "Value": [MAE, MSE, RMSE, R2]
+                    "Metric": ["MAE", "MSE", "RMSE", "R2", "Pearson"],
+                    "Value": [MAE, MSE, RMSE, R2, pearson]
                 })
                 metrics_output = os.path.join(output, 'metrics_test.csv')
                 metrics.to_csv(metrics_output, index=False)
+                pd.DataFrame({'Pearson': [pearson], 'Pearson_r2': [pearson ** 2],
+                              'reason': [reason], 'n_observations': [len(test_labels)]}).to_csv(
+                    os.path.join(output, 'metrics_test_pearson.csv'), index=False)
                 print(f'Saving test metrics → {metrics_output}')
                 print('Task completed successfully!')
         else:
@@ -810,6 +858,7 @@ if __name__ == '__main__':
 ####################################################################################################
     ''')
     parser = argparse.ArgumentParser()
+    parser.add_argument('--calibrate_probabilities', action='store_true', help='Optional training-only sigmoid probability calibration for classification (off by default)')
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
     parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 150')
@@ -821,19 +870,17 @@ if __name__ == '__main__':
     parser.add_argument('-test_nameseq', '--test_nameseq', default='', help='csv with sequence names')
     parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
     parser.add_argument('-search_jobs', '--search_jobs', default=1, help='parallel Optuna workers; default 1 for repeatable trial ordering')
-    parser.add_argument('--stage2_gate', action='store_true', help='Opt in to the training-CV default LightGBM fallback')
     parser.add_argument('--homology_aware', action='store_true', help='Use the automatic assignments prepared by engineering.py in output/homology; raw sequences are required upstream')
     add_homology_arguments(parser)
-    parser.add_argument('--stage2_gate_margin_sd', type=float, default=0.5, help='Nonnegative default-model fold SD multiplier (default: 0.5)')
     parser.add_argument('-seed', '--seed', default=63, help='random seed for cross-validation and learners - default = 63')
     parser.add_argument('-search_seed', '--search_seed', default=None, help='Optuna sampler seed; defaults to --seed')
     parser.add_argument('-output', '--output', help='results directory, e.g., result/')
     args = parser.parse_args()
+    if args.calibrate_probabilities and (int(args.task) != 0 or args.path_model):
+        parser.error('--calibrate_probabilities requires new classification training; saved models retain their calibration automatically.')
     resolve_homology_arguments(parser, args)
     if args.homology_aware and args.path_model:
         parser.error('--homology_aware is a training option, not an inference option.')
-    if not np.isfinite(args.stage2_gate_margin_sd) or args.stage2_gate_margin_sd < 0:
-        parser.error('--stage2_gate_margin_sd must be finite and nonnegative')
     path_model = args.path_model
     task = int(args.task)
     tuning = int(args.tuning)
@@ -855,7 +902,7 @@ if __name__ == '__main__':
     model = ''
     train_read, train_labels_read, train_nameseq_read = '', '', ''
     if path_model:
-        model = joblib.load(path_model)
+        model = load_model(path_model)
     else:
         if os.path.exists(ftrain):
             train_read = pd.read_csv(ftrain)
@@ -941,7 +988,7 @@ if __name__ == '__main__':
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
         test_read, test_labels_read, test_nameseq_read, foutput, n_cpu,
-        search_jobs, args.stage2_gate, args.stage2_gate_margin_sd, homology_report
+        search_jobs, homology_report=homology_report, calibrate_probabilities=args.calibrate_probabilities
     )
 
     cost = (time.time() - start_time) / 60

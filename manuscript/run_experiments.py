@@ -6,24 +6,22 @@ import os
 import time
 import joblib
 import argparse
-import math
 from pathlib import Path
 
 # Import the statistics helper without initializing the web queue/database.
 PROJECT_PATH = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_PATH))
+from bioautoml.model_artifacts import update_model_summary
 sys.path.insert(0, str(PROJECT_PATH / 'App' / 'utils'))
 from stats import summary_stats
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Run five sequential, seeded searches per dataset.')
-    parser.add_argument('--stage2_gate', action='store_true', help='Enable the optional default LightGBM fallback')
-    parser.add_argument('--stage2_gate_margin_sd', type=float, default=0.5)
     parser.add_argument('--n_cpu', type=int, default=8)
     parser.add_argument('--seed', type=int, default=63)
+    parser.add_argument('--calibrate_probabilities', action='store_true', help='Enable sigmoid calibration for classification datasets only')
     args = parser.parse_args()
-    if not math.isfinite(args.stage2_gate_margin_sd) or args.stage2_gate_margin_sd < 0:
-        parser.error('--stage2_gate_margin_sd must be finite and nonnegative')
     return args
 
 def main():
@@ -95,6 +93,9 @@ def main():
 
                 command.extend(train_files)
 
+                if args.calibrate_probabilities and int(task) == 0:
+                    command.append('--calibrate_probabilities')
+
                 command.append("--fasta_label_train")
                 command.extend(train_labels)
 
@@ -111,9 +112,6 @@ def main():
                 command.extend(["--seed", str(args.seed)])
                 command.extend(["--search_seed", str(6300 + run_num)])
                 command.extend(["--search_jobs", "1"])
-                command.extend(["--stage2_gate_margin_sd", str(args.stage2_gate_margin_sd)])
-                if args.stage2_gate:
-                    command.append('--stage2_gate')
                 command.extend(["--output", run_folder])  # Output to the run-specific folder
 
                 print(f"Running dataset {dataset}, iteration {run_num}")
@@ -157,9 +155,7 @@ def main():
 
                 model_path = os.path.join(run_folder, "trained_model.sav")
                 if os.path.exists(model_path):
-                    model = joblib.load(model_path)
-                    model["train_stats"] = pd.read_csv(os.path.join(run_folder, "train_stats.csv"))
-                    joblib.dump(model, model_path)
+                    update_model_summary(model_path, train_stats=pd.read_csv(os.path.join(run_folder, "train_stats.csv")))
 
     # End total time
     total_time = round(time.time() - start_all, 2)

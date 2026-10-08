@@ -102,7 +102,8 @@ echo "Redis ready."
 setsid python worker.py &
 worker_pid=$!
 setsid streamlit run app.py --server.address=0.0.0.0 \
-    --server.port="${PORT:-8501}" --server.headless=true --server.runOnSave=false &
+    --server.port="${PORT:-8501}" --server.headless=true \
+    --server.runOnSave="${STREAMLIT_SERVER_RUN_ON_SAVE:-false}" &
 web_pid=$!
 
 # If any service exits, stop the others and fail the container so a restart

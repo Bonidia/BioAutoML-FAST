@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 from utils.feature_extraction import test_extraction as extract_selected_test_features
+from bioautoml.model_artifacts import load_model
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -274,7 +275,7 @@ def derive_key_from_password(password: str, salt: bytes, iterations: int = 39000
 # Create a tar archive in memory from a directory path and return bytes
 def make_tar_bytes_from_dir(folder_path: str) -> bytes:
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+    with tarfile.open(fileobj=buf, mode="w:gz", dereference=True) as tar:
         # Add all files and subdirectories
         tar.add(folder_path, arcname=".")
     buf.seek(0)
@@ -336,7 +337,7 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
             save_path = os.path.join(dataset_path, "trained_model.sav")
             link_path = os.path.join(job_path, "trained_model.sav")
 
-            model = joblib.load(save_path)
+            model = load_model(save_path)
 
             # Create symbolic link
             os.symlink(save_path, link_path)

@@ -32,6 +32,60 @@ import shap
 import csv
 import json
 import gzip
+from bioautoml.calibration import get_base_pipeline
+from bioautoml.model_artifacts import get_model_info, load_model, model_fingerprint
+
+
+def clear_job_data():
+    """Never reuse private model data, downloads or figures across jobs."""
+    for key in list(st.session_state):
+        if key in {'model', 'mapper', 'reducer', '_reduction_fig', '_model_download_ready',
+                   '_result_section', '_model_fingerprint', '_loaded_job_path'} or key.startswith(('_dl_', '_shap_')):
+            st.session_state.pop(key, None)
+
+
+def model_download():
+    # A file passed directly to download_button is read into memory on render.
+    # Keep this separate from simply opening the results page.
+    if st.button('Prepare model download', use_container_width=True):
+        st.session_state['_model_download_ready'] = True
+    if st.session_state.get('_model_download_ready'):
+        with open(os.path.join(st.session_state['job_path'], 'trained_model.sav'), 'rb') as handle:
+            st.download_button('Download model', data=handle, file_name='trained_model.sav',
+                               mime='application/octet-stream', use_container_width=True,
+                               help='Complete model, including exploration data. Load only trusted model files.')
+
+def show_pearson_metric(report, cross_validation=False):
+    """Display regression correlation, including older or incomplete reports."""
+    help_text = ('Signed linear correlation, not predictive R². A high correlation '
+                 'can coexist with large prediction errors.')
+    if cross_validation:
+        if 'Pearson' not in report or 'std_Pearson' not in report:
+            st.metric('Pearson r', 'N/A', help=help_text)
+            st.caption('Pearson r was not recorded in this older result.')
+            return
+        value = report['Pearson'].iloc[0]
+        deviation = report['std_Pearson'].iloc[0]
+        valid = np.isfinite(value) and np.isfinite(deviation)
+        display = f'{value:.3f} ± {deviation:.3f}' if valid else 'N/A'
+    else:
+        values = report.loc[report['Metric'] == 'Pearson', 'Value']
+        if values.empty:
+            st.metric('Pearson r', 'N/A', help=help_text)
+            st.caption('Pearson r was not recorded in this older result.')
+            return
+        value = values.iloc[0]
+        valid = np.isfinite(value)
+        display = f'{value:.3f}' if valid else 'N/A'
+    st.metric('Pearson r', display, help=help_text)
+    if cross_validation:
+        st.caption('Mean ± population SD across reporting CV folds, not repeated searches.')
+    if not valid:
+        message = 'Correlation is undefined for short or constant/near-constant data.'
+        if cross_validation and {'Pearson_valid_folds', 'Pearson_total_folds'} <= set(report):
+            message += (f" Valid folds: {int(report['Pearson_valid_folds'].iloc[0])}/"
+                        f"{int(report['Pearson_total_folds'].iloc[0])}; no folds were dropped.")
+        st.caption(message + ' See the Pearson CSV sidecar for details.')
 
 def _cleanup_previous_temp():
     prev = st.session_state.get("temp_extract_path")
@@ -67,6 +121,13 @@ def load_reduction_data(job_path, evaluation):
 
 def scale_features(features):
     """Scale features with caching"""
+
+    features = features.copy(deep=False)
+
+    if st.session_state['model'].get('calibration', {}).get('enabled'):
+        pipeline = get_base_pipeline(st.session_state['model']['clf'])
+        values = pipeline[:-1].transform(features.replace([np.inf, -np.inf], np.nan))
+        return st.session_state['model']['scaler'].transform(values)
 
     string_cols = features.select_dtypes(include=["object"]).columns
     if not string_cols.empty:
@@ -323,15 +384,17 @@ def feature_correlation():
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
-    string_cols = features.select_dtypes(include=["object"]).columns
-    if not string_cols.empty:
-        features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
-
-    if "imputer" in st.session_state["model"]:
-        features = pd.DataFrame(
-            st.session_state["model"]["imputer"].transform(features),
-            columns=features.columns
-        )
+    if st.session_state['model'].get('calibration', {}).get('enabled'):
+        pipeline = get_base_pipeline(st.session_state['model']['clf'])
+        features = pd.DataFrame(pipeline[:-1].transform(features.replace([np.inf, -np.inf], np.nan)),
+                                columns=features.columns)
+    else:
+        string_cols = features.select_dtypes(include=["object"]).columns
+        if not string_cols.empty:
+            features = features.copy(deep=False)
+            features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
+        if "imputer" in st.session_state["model"]:
+            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     if "mapper" in st.session_state:
         features = features.rename(columns=st.session_state["mapper"])
@@ -701,9 +764,41 @@ def sequence_overlap_report():
                                        key=f'homology_{filename}')
 
 
+def probability_calibration_report():
+    model = st.session_state.get('model', {})
+    if not model.get('calibration', {}).get('enabled'):
+        return
+    with st.expander('Probability calibration'):
+        st.json(model['calibration'])
+        st.caption('Sigmoid calibration uses training data only. Lower log loss and Brier score are better. '
+                   'CV calibrators are fitted inside each reporting fold, but AutoML selection is not nested. '
+                   'Calibration may change predicted classes; improvement is not guaranteed.')
+        path = os.path.join(st.session_state['job_path'], 'calibration')
+        for prefix, title in (('cv', 'Post-selection cross-validation'), ('external', 'External test set')):
+            filename = os.path.join(path, f'{prefix}_probability_metrics.json')
+            if not os.path.isfile(filename):
+                continue
+            st.write(title)
+            with open(filename) as handle:
+                st.json(json.load(handle))
+            bins = pd.read_csv(os.path.join(path, f'{prefix}_reliability.csv'))
+            points = bins[bins['count'] > 0]
+            fig = px.line(points, x='mean_probability', y='observed_frequency',
+                          color='label', line_dash='mode', markers=True, hover_data=['count'])
+            fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=1, line=dict(dash='dash'))
+            fig.update_xaxes(range=[0, 1])
+            fig.update_yaxes(range=[0, 1])
+            st.plotly_chart(fig, use_container_width=True)
+            for suffix in ('probability_metrics.json', 'reliability.csv', 'reliability.svg'):
+                name = f'{prefix}_{suffix}'
+                with open(os.path.join(path, name), 'rb') as handle:
+                    st.download_button(f'Download {name}', handle.read(), file_name=name, key=f'calibration_{name}')
+
+
 def performance_metrics(task):
 
     sequence_overlap_report()
+    probability_calibration_report()
 
     with st.expander("What **Performance Metrics** shows"):
         st.info(
@@ -790,6 +885,7 @@ def performance_metrics(task):
                 c2.metric("MSE", f"{df_cv['MSE'].item():.3f} ± {df_cv['std_MSE'].item():.3f}", help="Mean Squared Error")
                 c3.metric("RMSE", f"{df_cv['RMSE'].item():.3f} ± {df_cv['std_RMSE'].item():.3f}", help="Root Mean Squared Error")
                 c4.metric("R²", f"{df_cv['R2'].item():.3f} ± {df_cv['std_R2'].item():.3f}", help="Coefficient of determination")
+                show_pearson_metric(df_cv, cross_validation=True)
 
         else:
             if task == "Classification":
@@ -839,6 +935,7 @@ def performance_metrics(task):
                 c2.metric("MSE", f"{df_report.loc[df_report['Metric'] == 'MSE', 'Value'].iloc[0]:.3f}", help="Mean Squared Error")
                 c3.metric("RMSE", f"{df_report.loc[df_report['Metric'] == 'RMSE', 'Value'].iloc[0]:.3f}", help="Root Mean Squared Error")
                 c4.metric("R²", f"{df_report.loc[df_report['Metric'] == 'R2', 'Value'].iloc[0]:.3f}", help="Coefficient of determination")
+                show_pearson_metric(df_report)
 
     if task == "Classification":
         with col2:
@@ -913,7 +1010,7 @@ def load_feature_importance(job_path):
     else:
         df_feat = pd.read_csv(os.path.join(job_path, "feature_importance.tsv"))
 
-    return df_feat
+    return df_feat.copy()
 
 def create_feature_importance_figure(df):
     """Create and cache the feature importance plot"""
@@ -937,23 +1034,36 @@ def get_shap_data(max_samples=500):
     Prepare background data for SHAP with subsampling.
     """
     X = st.session_state["model"]["train"]
+    calibrated = st.session_state['model'].get('calibration', {}).get('enabled')
+    if 'scaler' in st.session_state['model'] or 'imputer' in st.session_state['model'] or calibrated:
+        X = X.set_axis(pd.RangeIndex(len(X)), copy=False)
+    # Fitted transformations act row-by-row. Select the same deterministic rows
+    # first, avoiding a full-matrix copy/transformation for a 500-row plot.
+    if len(X) > max_samples:
+        X = X.sample(max_samples, random_state=42)
+    X = X.copy()
+    sampled_index = X.index
 
-    if "imputer" in st.session_state["model"]:
+    if calibrated:
+        pipeline = get_base_pipeline(st.session_state['model']['clf'])
+        X = pd.DataFrame(pipeline[:-1].transform(X.replace([np.inf, -np.inf], np.nan)), columns=X.columns)
+    elif "imputer" in st.session_state["model"]:
         X = pd.DataFrame(
             st.session_state["model"]["imputer"].transform(X),
             columns=X.columns
         )
 
-    if "scaler" in st.session_state["model"]:
+    if "scaler" in st.session_state["model"] and not calibrated:
         X = st.session_state["model"]["scaler"].transform(X)
         X = pd.DataFrame(X, columns=st.session_state["model"]["train"].columns)
 
     if "mapper" in st.session_state:
         X = X.rename(columns=st.session_state["mapper"])
 
-    # Subsample for performance
-    if len(X) > max_samples:
-        X = X.sample(max_samples, random_state=42)
+    # Previous code rebuilt frames with a RangeIndex before sampling.
+    # Preserve those positional row labels in the explanation display.
+    if "scaler" in st.session_state["model"] or "imputer" in st.session_state["model"] or calibrated:
+        X.index = sampled_index
 
     return X
 
@@ -964,7 +1074,7 @@ def compute_shap_values(model, X):
     - Binary / regression: (n_samples, n_features)
     - Multiclass: (n_samples, n_features, n_classes)
     """
-    explainer = shap.TreeExplainer(model["clf"])
+    explainer = shap.TreeExplainer(get_base_pipeline(model).named_steps['clf'])
     shap_values = explainer.shap_values(X)
 
     # --- FIX multiclass output ---
@@ -991,6 +1101,8 @@ def shap_global_importance(shap_values, X):
     )
 
 def feature_importance():
+    if st.session_state.get('model', {}).get('calibration', {}).get('enabled'):
+        st.caption('Feature importance and SHAP explain the underlying classifier, not the sigmoid calibration mapping.')
 
     with st.expander("What **Feature Importance** shows"):
         st.info(
@@ -1048,12 +1160,11 @@ def feature_importance():
             st.dataframe(df, hide_index=True)
     elif feat_type == "SHAP (SHapley Additive exPlanations)":
         with st.spinner("Computing SHAP values..."):
-            X_shap = get_shap_data(max_samples=500)
-
-            explainer, shap_values = compute_shap_values(
-                st.session_state["model"]["clf"],
-                X_shap
-            )
+            if '_shap_result' not in st.session_state:
+                X_shap = get_shap_data(max_samples=500)
+                explainer, shap_values = compute_shap_values(st.session_state['model']['clf'], X_shap)
+                st.session_state['_shap_result'] = X_shap, explainer, shap_values
+            X_shap, explainer, shap_values = st.session_state['_shap_result']
 
             col1, col2 = st.columns(2)
         
@@ -1131,8 +1242,9 @@ def model_information(data_type, task):
                             if k in params and params[k] is not None:
                                 st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
 
-                    clf_str = str(st.session_state["model"]["clf"])
-                    params = st.session_state["model"]["clf"]["clf"].get_params()
+                    model_info = get_model_info(st.session_state["model"])
+                    clf_str = model_info['estimator_name']
+                    params = model_info['params']
 
                     if "RandomForest" in clf_str:
                         show_params(
@@ -1165,21 +1277,13 @@ def model_information(data_type, task):
                             ]
                         )
                 with cont2:
-                    with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
-                        st.download_button(
-                            label="Download model",
-                            data=model_file,
-                            file_name="trained_model.sav",
-                            mime="application/octet-stream",
-                            use_container_width=True,
-                            help="SAV file can be loaded into the application"
-                        )
+                    model_download()
 
-                    if "RandomForest" in str(st.session_state["model"]["clf"]):
+                    if "RandomForest" in clf_str:
                         st.image("imgs/models/rf.png", use_container_width=True)
-                    elif "XGB" in str(st.session_state["model"]["clf"]):
+                    elif "XGB" in clf_str:
                         st.image("imgs/models/xgboost.png", use_container_width=True)
-                    elif "LGBM" in str(st.session_state["model"]["clf"]):
+                    elif "LGBM" in clf_str:
                         st.image("imgs/models/lightgbm.png", use_container_width=True)
 
         with col2:
@@ -1354,8 +1458,9 @@ def model_information(data_type, task):
                         if k in params and params[k] is not None:
                             st.markdown(f"**{k.replace('_', ' ').title()}:** {params[k]}")
 
-                clf_str = str(st.session_state["model"]["clf"])
-                params = st.session_state["model"]["clf"]["clf"].get_params()
+                model_info = get_model_info(st.session_state["model"])
+                clf_str = model_info['estimator_name']
+                params = model_info['params']
 
                 if "RandomForest" in clf_str:
                     show_params(
@@ -1388,21 +1493,13 @@ def model_information(data_type, task):
                         ]
                     )
             with cont2:
-                with open(os.path.join(st.session_state["job_path"], "trained_model.sav"), "rb") as model_file:
-                    st.download_button(
-                        label="Download model",
-                        data=model_file,
-                        file_name="trained_model.sav",
-                        mime="application/octet-stream",
-                        use_container_width=True,
-                        help="SAV file can be loaded into the application"
-                    )
+                model_download()
 
-                if "RandomForest" in str(st.session_state["model"]["clf"]):
+                if "RandomForest" in clf_str:
                     st.image("imgs/models/rf.png", use_container_width=True)
-                elif "XGB" in str(st.session_state["model"]["clf"]):
+                elif "XGB" in clf_str:
                     st.image("imgs/models/xgboost.png", use_container_width=True)
-                elif "LGBM" in str(st.session_state["model"]["clf"]):
+                elif "LGBM" in clf_str:
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
 
@@ -1438,10 +1535,12 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
 
     # Write tar bytes to memory and extract
     buf = io.BytesIO(decrypted)
-    with tarfile.open(fileobj=buf, mode="r:gz") as tar:
-        # Ensure target directory exists
-        os.makedirs(target_extract_path, exist_ok=True)
-        tar.extractall(path=target_extract_path)
+    try:
+        with tarfile.open(fileobj=buf, mode="r:gz") as tar:
+            os.makedirs(target_extract_path, exist_ok=True)
+            tar.extractall(path=target_extract_path, filter='data')
+    except (tarfile.TarError, OSError):
+        return False
 
     return True
 
@@ -1556,7 +1655,7 @@ def runUI():
 
             Results are organized into interactive tabs, including model details, performance metrics, predictions, feature importance, and exploratory analyses.
             
-            **Note that models from the repository with more than 5,000 training or testing/prediction sequences may have limited visualizations.**
+            All analysis tabs are available regardless of sequence count. Analyses load only when their tab is selected; large datasets may take longer to visualize.
 	    """
         )
 
@@ -1600,6 +1699,8 @@ def runUI():
 
     if submitted:
         if job_id:
+            clear_job_data()
+            _cleanup_previous_temp()
             job_path = ""
             if os.path.exists(os.path.join(predict_path, job_id)):
                 job_path = os.path.join(predict_path, job_id)
@@ -1621,7 +1722,9 @@ def runUI():
 
                             if succeeded:
                                 st.session_state["job_path"] = temp_dir
+                                st.session_state["temp_extract_path"] = temp_dir
                             else:
+                                shutil.rmtree(temp_dir)
                                 st.error(f"Wrong password for decryption.")
                                 if "job_path" in st.session_state:
                                     del st.session_state["job_path"]
@@ -1668,19 +1771,25 @@ def runUI():
 
             path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
 
-            if st.session_state.get("_loaded_job_path") != st.session_state["job_path"]:
-                st.session_state.pop("model", None)
-                st.session_state.pop("reducer", None)
-                st.session_state.pop("mapper", None)
+            fingerprint = model_fingerprint(path_model) if os.path.isfile(path_model) else None
+            if (st.session_state.get("_loaded_job_path") != st.session_state["job_path"]
+                    or st.session_state.get('_model_fingerprint') != fingerprint):
+                clear_job_data()
                 st.session_state["_loaded_job_path"] = st.session_state["job_path"]
+                st.session_state['_model_fingerprint'] = fingerprint
 
             if os.path.exists(path_model):
                 if "model" not in st.session_state:
                     with st.spinner("Loading trained model..."):
-                        st.session_state["model"] = joblib.load(path_model)
-                train_stats = st.session_state["model"]["train_stats"]
+                        st.session_state["model"] = load_model(path_model, mmap_mode='r')
+                model = st.session_state['model']
+                if 'train_stats' in model:
+                    train_stats = model['train_stats']
+                else:
+                    train_stats = pd.read_csv(os.path.join(st.session_state['job_path'], 'train_stats.csv'))
             else:
-                train_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "train_stats.csv"))
+                st.error('The trained model file is missing from this job.')
+                return
 
             if "label_encoder" in st.session_state["model"]:
                 task = "Classification"
@@ -1712,7 +1821,8 @@ def runUI():
 
             df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
-            with st.expander("**Summary Statistics**"):
+            with st.container(border=True):
+                st.markdown("**Summary Statistics**")
                 st.info(
                 """
                 This section summarizes the **basic characteristics of your dataset**.
@@ -1766,9 +1876,9 @@ def runUI():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                    
+
                 st.markdown("**Training set**")
-            
+
                 train_stats_formatted = train_stats.style.format(thousands=",")
                 st.dataframe(train_stats_formatted, hide_index=True, use_container_width=True)
 
@@ -1778,64 +1888,26 @@ def runUI():
                     test_stats_formatted = test_stats.style.format(thousands=",")
                     st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 
-            tabs = {}
+            tab_list = ["Model Information", "Performance Metrics"]
+            if df_job_info["testing_set"].item() != "No test set":
+                tab_list.append("Predictions")
+            tab_list.extend(["Feature Importance", "Feature Distribution",
+                             "Feature Correlation", "Dimensionality Reduction"])
 
-            if data_type != "Structured data":
-                if df_job_info["testing_set"].item() != "No test set":
-                    if sum(train_stats["num_seqs"].to_list()) > 5_000 or sum(test_stats["num_seqs"].to_list()) > 5_000:
-                        tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                                    "Feature Importance"]
-                    else:
-                        tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                                    "Feature Importance", "Feature Distribution",
-                                    "Feature Correlation", "Dimensionality Reduction"]
-                else:
-                    if sum(train_stats["num_seqs"].to_list()) > 5_000:
-                        tab_list = ["Model Information", "Performance Metrics",
-                                    "Feature Importance"]
-                    else:
-                        tab_list = ["Model Information", "Performance Metrics",
-                                    "Feature Importance", "Feature Distribution",
-                                    "Feature Correlation", "Dimensionality Reduction"]
-            else:
-                if df_job_info["testing_set"].item() != "No test set":
-                    tab_list = ["Model Information", "Performance Metrics", "Predictions",
-                                "Feature Importance", "Feature Distribution",
-                                "Feature Correlation", "Dimensionality Reduction"]
-                else:
-                    tab_list = ["Model Information", "Performance Metrics",
-                                "Feature Importance", "Feature Distribution",
-                                "Feature Correlation", "Dimensionality Reduction"]
-
-            # Create the tabs dynamically
-            streamlit_tabs = st.tabs(tab_list)
-
-            # Map tab names to Streamlit tab objects
-            tabs = {name: tab for name, tab in zip(tab_list, streamlit_tabs)}
-
-            with tabs["Model Information"]:
-                model_information(data_type, task)
-
-            with tabs["Performance Metrics"]:
-                performance_metrics(task)
-
-            if "Predictions" in tabs:
-                with tabs["Predictions"]:
-                    show_predictions()
-
-            with tabs["Feature Importance"]:
-                feature_importance()
-
-            if "Feature Distribution" in tabs:
-                with tabs["Feature Distribution"]:
-                    feature_distribution()
-
-            if "Feature Correlation" in tabs:
-                with tabs["Feature Correlation"]:
-                    feature_correlation()
-
-            if "Dimensionality Reduction" in tabs:
-                with tabs["Dimensionality Reduction"]:
-                    dimensionality_reduction()
+            # Track the active tab so hidden sections do no I/O or plotting.
+            tabs = st.tabs(tab_list, key='_result_section', on_change='rerun')
+            renderers = {
+                'Model Information': lambda: model_information(data_type, task),
+                'Performance Metrics': lambda: performance_metrics(task),
+                'Predictions': show_predictions,
+                'Feature Importance': feature_importance,
+                'Feature Distribution': feature_distribution,
+                'Feature Correlation': feature_correlation,
+                'Dimensionality Reduction': dimensionality_reduction,
+            }
+            for section, tab in zip(tab_list, tabs):
+                if tab.open:
+                    with tab:
+                        renderers[section]()
     except Exception as e:
         st.error(f"An error occurred. Submit a new job.")

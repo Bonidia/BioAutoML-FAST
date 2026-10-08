@@ -129,18 +129,78 @@ worker, and Streamlit together. No separate host Redis is needed.
 MMseqs2 and its native libraries are installed from `pixi.lock` in a build stage;
 the runtime does not need Pixi to run the homology-aware option.
 
+For a rebuild and background startup with **local bind mounts and live UI reload**:
+
+```sh
+./run-docker.sh
+```
+
+Every invocation rebuilds the image and replaces the container created by the
+script, but never deletes your data. Running training jobs in that
+container are interrupted, so run it when idle. A failed build leaves the
+application stopped. The defaults are:
+
+- Image/container: `bioautoml-fast:local` / `bioautoml-fast`.
+- Web interface: `http://127.0.0.1:8501` (local access only).
+- Jobs: local `App/jobs/` ↔ container `/app/App/jobs/`.
+- Database/state: local `App/task-results/` ↔ container `/app/App/task-results/`.
+  SQLite is `task_results.db`; Redis persists in the `redis/` subdirectory.
+- Model repository: local `App/datasets/` ↔ container `/app/App/datasets/` (read-only).
+  Override with `DATASETS_DIR=/path/to/datasets`. This folder must already exist
+  and contain `references.bib` and the repository's model/metadata files. The
+  launcher checks the directory and bibliography before stopping the existing app.
+
+The container runs under your local user/group IDs to keep bind-mounted files
+accessible without recursive permission changes. Run as a non-root user with
+Docker access. An existing container not created by this script is not removed
+automatically. Previous named Docker volumes are **not** migrated into these local
+folders. Do not share the folders with another running app instance, and keep
+the complete database directory (including SQLite journal/WAL files) together.
+
+Override settings if needed (use absolute paths for custom storage):
+
+```sh
+JOBS_DIR=/data/bioautoml/jobs STATE_DIR=/data/bioautoml/state HOST_PORT=8502 ./run-docker.sh
+docker logs --follow bioautoml-fast
+docker stop --time 40 bioautoml-fast
+```
+
+Set `BIND_ADDRESS=0.0.0.0` only if you intend to expose the app to other machines.
+No development flag is needed. If your current shell lacks Docker group permissions:
+
+```bash
+sg docker -c './run-docker.sh'
+```
+
+After rebuilding, the container mounts
+`App/app.py`, `App/modules`, and `start.sh` read-only from the host, and enables
+Streamlit automatic reload with polling. Local UI edits become visible without
+another build; jobs, database storage, and dataset mounts remain unchanged.
+Recreating the container still interrupts running jobs. Modules also contain
+job-processing functions: avoid editing those during jobs and restart the worker
+after changing them. Other source files and dependency changes still require a
+rebuild by running `./run-docker.sh` again. Build options are accepted directly,
+for example `./run-docker.sh --no-cache-filter mathfeature`. Docker's build cache
+can reuse unchanged layers; live UI edits do not require rerunning the launcher.
+For image-only deployments or benchmark runs, use the manual Docker
+commands below without source-code mounts.
+Removing an image does not clear Docker's build cache.
+
+Alternatively, build/run manually with Docker-managed named volumes:
+
 ```sh
 docker build -t bioautoml-fast:local .
 docker run --rm --name bioautoml-fast --stop-timeout 40 \
   -p 127.0.0.1:8501:8501 \
   -v bioautoml-jobs:/app/App/jobs \
   -v bioautoml-state:/app/App/task-results \
+  --mount "type=bind,source=$(pwd)/App/datasets,target=/app/App/datasets,readonly" \
   bioautoml-fast:local
 ```
 
 Open `http://localhost:8501`. The named volumes retain jobs, SQLite records, and
 Redis state between container runs. Do not share these volumes between concurrent
-instances. Production model-repository datasets must be supplied separately at
+instances. Model-repository datasets are mounted from the host at
 `/app/App/datasets`; they are not included in the image.
 
 MathFeature is cloned from its default branch during the build. Docker may reuse
@@ -212,6 +272,11 @@ sudo systemctl start bioautoml-web bioautoml-worker
 
 BioAutoML-FAST uses a two-step pipeline: `engineering.py` handles feature extraction and descriptor selection, then automatically invokes `generation.py` for model training and hyperparameter optimization.
 
+The two entry scripts remain at the repository root. Shared helpers live in the
+`bioautoml/` package: `feature_execution.py`, `homology.py`, `calibration.py`, and
+`model_artifacts.py`. Run CLI commands from the repository root; the web app
+continues to start from `App/`.
+
 <h1 align="center">
   <img src="https://raw.githubusercontent.com/Bonidia/BioAutoML-FAST/refs/heads/main/App/imgs/modules.png" alt="Modules" width="600">
 </h1>
@@ -281,7 +346,7 @@ The `generation.py` script performs the second step of BioAutoML-FAST. It trains
 | `-n_cpu`, `--n_cpu` | Number of CPU cores to use. Use `-1` to use all available cores. | `-1` |
 | `-output`, `--output` | Output directory where models and results will be saved. | Required |
 
-### Repeatable training and optional Stage 2 gate
+### Repeatable training
 
 #### CPU use and prediction efficiency
 
@@ -326,11 +391,66 @@ Both training scripts accept these options:
 | `--seed` | Seed for learners and shuffled CV folds. | `63` |
 | `--search_seed` | Optuna sampler seed. | Same as `--seed` |
 | `--search_jobs` | Concurrent Optuna trials; keep at `1` for repeatable trial ordering. | `1` |
-| `--stage2_gate` | Opt in to comparison with default LightGBM after tuning. | Off |
-| `--stage2_gate_margin_sd` | Nonnegative multiple of the default learner's fold-score SD. Has no effect with the gate off. | `0.5` |
 | `--homology_aware` | Automatic MMseqs2 sequence grouping for CV and train–test similarity auditing. Start from FASTA inputs with `engineering.py`; `generation.py` reuses its assignments. | Off |
 | `--homology_identity` | Minimum identity in percent (1–100); requires `--homology_aware`. | 90 |
 | `--homology_coverage` | Minimum alignment coverage of **each** sequence in percent (1–100); requires `--homology_aware`. | 80 |
+
+#### Regression reporting
+
+Regression reports include MAE, MSE, RMSE, predictive R² (`r2_score`), and signed
+**Pearson r**. Pearson measures linear association, not absolute accuracy: an
+offset prediction can have r = 1 but poor R². Training and both search objectives
+remain unchanged (RMSE); reporting uses the existing folds and predictions.
+
+The CV CSV adds `Pearson`, `std_Pearson` (fold mean and population SD), and
+valid/total fold counts. The adjacent `*_pearson_folds.csv` preserves unrounded
+per-fold r, `Pearson_r2`, and reasons. External evaluation adds a `Pearson` row to
+`metrics_test.csv` and a `metrics_test_pearson.csv` detail file. `Pearson_r2` is
+correlation squared for source-study comparisons, **not** predictive R²;
+mean(fold r²) is not mean(fold r)². No additional model fits are performed.
+
+Correlation is undefined (blank CSV value / N/A in Jobs) for fewer than two
+observations, constant arrays, or numerically near-constant arrays (centered norm
+at most `float64 eps**0.75` times the absolute mean). If any CV fold is undefined,
+the aggregate is N/A rather than silently averaging the remaining folds. Invalid
+lengths, nonfinite values, and non-vector inputs are rejected. Older model reports
+without Pearson still load and display “not recorded”; they are not backfilled.
+
+#### Optional probability calibration (classification)
+
+Add `--calibrate_probabilities` to `engineering.py` or `generation.py`, or select
+**Probability calibration** when training a classifier in the web app. This option
+is **off by default**, supports binary/multiclass and sequence/structured inputs,
+and works with or without hyperparameter tuning. Regression is not supported.
+Stage 1 descriptor selection and Stage 2 model selection are unchanged.
+
+The selected classifier is calibrated using five-fold out-of-fold training
+predictions and a fixed sigmoid method (`CalibratedClassifierCV`, `ensemble=False`).
+One underlying classifier is refitted on all training rows for deployment; this is
+not a five-model prediction ensemble. Encoding and imputation are fitted inside
+the calibration folds. With homology-aware CV enabled, calibration folds also
+keep similarity groups together. Infeasible class/group assignments fail explicitly;
+the software does not silently substitute ordinary folds.
+
+For ten-fold reporting CV, calibration is fitted separately *inside each training
+fold*. External labels never fit or select the calibrator. This protects the
+calibration step, but reporting remains **post-selection CV, not fully nested
+evaluation of the entire AutoML procedure**. Calibration can change predicted
+classes and does not guarantee better accuracy, MCC, or probability quality.
+
+The `calibration/` directory contains settings, separate CV/external log loss and
+Brier scores, reliability plots and bin counts, and held-out CV probabilities.
+Binary Brier uses the positive-class squared error; multiclass Brier is the mean
+sum of class-wise squared errors (unscaled, range 0–2). Reports compare calibrated
+probabilities with those of the same underlying classifier. Jobs displays these
+reports; SHAP/feature importance explain the underlying classifier, not calibration.
+Saved models automatically retain calibration on reload; do not pass the training
+flag again for prediction. Older, uncalibrated model artifacts remain supported.
+
+Calibration adds five fold fits plus one full fit per reporting/final model:
+66 classifier fits instead of 11 for this phase. It does **not** multiply the
+AutoML search budget by six. Actual added minutes depend on the selected learner
+and data; inference uses a single classifier plus the sigmoid mapping.
 
 #### Optional homology-aware cross-validation and overlap audit
 
@@ -367,7 +487,7 @@ sequences in the forward orientation (not reverse-complement equivalence).
 
 Training-only similarity links, plus exact duplicates, form connected groups.
 All sequences are retained. One frozen five-fold assignment is shared by Stage 1,
-Stage 2 and the optional gate; the reporting ten-fold CV also respects those
+Stage 2; the reporting ten-fold CV also respects those
 groups. Group tie-breaking uses the training seed. Inputs, settings and environment
 must be fixed to repeat assignments. Highly connected datasets or classes confined
 to too few groups can make CV infeasible: the job stops instead of dropping
@@ -395,7 +515,7 @@ option off; near-duplicate similarity is then explicitly **not assessed**. With
 the option on, MMseqs2 also searches test sequences against training sequences.
 Counts refer to unique test sequences, and the similarity count includes exact
 matches. Label conflicts are reported for identical pairs when labels are known.
-Test sequences never participate in training grouping, tuning or the gate. Audits
+Test sequences never participate in training grouping or tuning. Audits
 do not remove samples or modify original test membership. Loaded-model prediction
 does not rerun the audit or display an old training job's audit as a new result.
 
@@ -414,7 +534,8 @@ The reported CV is **post-selection CV, not nested evaluation of the full AutoML
 procedure**. Homology-aware folds reduce detected sequence overlap but do not
 remove model-selection optimism or redundancy in the preserved external test set.
 These fixed thresholds are a documented policy, not a universal definition of
-homology. No calibration or new holdout creation is performed.
+homology. The homology-aware option itself neither calibrates probabilities nor
+creates a new holdout. Probability calibration is a separate, optional training control.
 
 Native sensitivity/integration checks (small fixtures, not benchmark accuracy):
 
@@ -423,7 +544,7 @@ pixi run uv run --locked --no-dev python scripts/check_homology_search.py --outp
 BIOAUTOML_TEST_MMSEQS=1 pixi run test
 ```
 
-#### Repeatability and gate behavior
+#### Repeatability
 
 For a repeatability check, keep inputs, row order, environment/image, CPU allocation,
 seeds, and trial budgets identical. Add `--n_cpu 8 --seed 63 --search_seed 63
@@ -432,32 +553,16 @@ feature/label/ID row counts and feature schemas are checked. Prediction columns
 are aligned to the saved training schema. CSV rows must still be correctly paired
 with their labels and IDs; count checks cannot detect incorrectly assigned labels.
 
-The default is the **ungated** two-stage method. To enable the optional gate,
-add `--stage2_gate --stage2_gate_margin_sd 0.5`. On the same five training-CV
-folds used by Stage 2, the tuned winner must exceed the default LightGBM mean
-MCC by **more than** 0.5 times its sample fold SD (`ddof=1`). For regression,
-its mean RMSE must instead be lower by more than that margin. Otherwise the
-default learner is fitted on the selected descriptors. Equality retains the
-default, including when SD is zero. No test labels enter this decision.
-With `--tuning 0`, the gate is not applied. Saved-model prediction does not
-rerun tuning or the gate.
-
-This is a conservative selection heuristic, **not** a significance test or a
-guarantee of improved external performance; its benefit for regression has not
-been established. `STAGE2_GATE` and `STAGE2_GATE_MARGIN_SD` environment variables
-no longer activate or configure it. The web Training form exposes the same
-default-off option and margin, with seed/search seed `63`, one search worker,
-and eight requested CPUs.
+Stage 2 uses the tuning winner; with `--tuning 0`, it uses default LightGBM.
+Saved-model prediction does not rerun tuning.
 
 The benchmark runner retains model/fold seed `63` and search seeds `6301`–`6305`:
 
 ```sh
 python manuscript/run_experiments.py --n_cpu 8 --seed 63
-# Alternative gated experiment; use separate result directories/dataset copies:
-python manuscript/run_experiments.py --n_cpu 8 --seed 63 --stage2_gate --stage2_gate_margin_sd 0.5
 ```
 
-The runner still skips existing run directories; changing gate options does not
+The runner still skips existing run directories; changing training settings does not
 invalidate or replace old results. Five different-search-seed runs measure search
 variability and are separate from repeating the **same** seed in fresh containers.
 Do not assume bitwise reproducibility across hardware, package versions, CPU/thread
@@ -469,11 +574,10 @@ Validation commands (run pipeline checks twice in fresh containers of the same i
 ```sh
 python -m unittest discover -s tests -v
 python scripts/check_pipeline.py --output /tmp/repeat-off
-python scripts/check_pipeline.py --stage2_gate --output /tmp/repeat-on
 # Full bundled nucleotide dataset, 200/150 trial budgets and unchanged early stopping:
-python scripts/check_pipeline.py --full_budget --stage2_gate --output /tmp/repeat-full
+python scripts/check_pipeline.py --full_budget --output /tmp/repeat-full
 # Recheck preserved artifacts without retraining:
-python scripts/check_pipeline.py --verify_saved /tmp/repeat-full --full_budget --stage2_gate --output /tmp/reuse-full
+python scripts/check_pipeline.py --verify_saved /tmp/repeat-full --full_budget --output /tmp/reuse-full
 ```
 
 The pipeline check exercises training, the web selected-descriptor extractor,
@@ -489,17 +593,53 @@ Both scripts write results to the directory specified by `-output`. Typical outp
 
 | File | Description |
 |---|---|
-| `trained_model.sav` | Serialized model (joblib) — reusable for prediction on new sequences |
+| `trained_model.sav` | Self-contained, uncompressed model bundle — reusable for prediction and exploration |
 | `training_kfold(10)_metrics.csv` | 10-fold cross-validation metrics on the training set |
 | `training_confusion_matrix.csv` | Confusion matrix for the training set (classification only) |
 | `metrics_test.csv` | Evaluation metrics on the held-out test set |
 | `test_confusion_matrix.csv` | Confusion matrix for the test set (classification only) |
 | `test_predictions.csv` | Per-sequence predictions on the test set |
 | `feature_importance.tsv` | Feature importance scores |
-| `stage2_gate_report.json` | Gate settings and decision (including disabled/not-applied cases); also stored in the model artifact |
 | `best_descriptors/` | Best-selected descriptor matrices for train and test sets |
 
 ## Trained Models
+
+New `.sav` files keep summary information, the prediction pipeline, and the complete
+training/exploration data in independently loadable sections inside one file.
+The Jobs page opens the summary first; prediction does not load the training matrix.
+Analysis sections and model downloads are prepared on demand. No training data,
+fitted parameters, calibration, or feature precision is discarded.
+Jobs uses native lazy tabs with Streamlit 1.55.0 (pinned in `pyproject.toml` and `uv.lock`): only the
+selected tab executes its analysis. Hidden tabs do not load data or generate plots.
+All Jobs analysis tabs remain available above 5,000 sequences, although individual
+analyses can take longer on large datasets. Submission upload limits are unchanged.
+
+Existing joblib `.sav` files remain supported. Jobs uses read-only memory mapping
+where supported by uncompressed legacy arrays, but must still deserialize the
+legacy estimator and object metadata. Compressed legacy files cannot be mapped.
+To convert a trusted model once, without retraining or
+overwriting the original:
+
+```bash
+python -m bioautoml.model_artifacts old/trained_model.sav new/trained_model.sav --trust-model
+```
+
+The destination directory must exist and the destination file must not exist.
+New files work with the updated web app and CLI, not older BioAutoML-FAST versions
+or a direct `joblib.load()` call. Python integrations should use:
+
+```python
+from bioautoml.model_artifacts import load_model
+model = load_model("trained_model.sav")  # Supports both formats; mapping loads sections lazily.
+```
+
+Only open model files from trusted sources: the fitted objects still use joblib/
+pickle, which can execute code when loaded. The bundle format is not a security
+sandbox. Models and decrypted data are kept session-local, not in a shared model
+cache. Encrypted legacy job archives still require full decryption before opening.
+
+After updating this code, rebuild/recreate the Docker container: live UI mounts
+alone do not update the Streamlit dependency, `bioautoml/` package, or CLI code.
 
 The platform hosts a continuously expanding repository of pre-trained, benchmarked models for genomic, transcriptomic, and proteomic applications. You can browse and use these models directly through the web platform at https://bioautoml.icmc.usp.br/.
 

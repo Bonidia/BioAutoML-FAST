@@ -29,7 +29,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 from utils.feature_extraction import test_extraction as extract_selected_test_features
-from homology import DEFAULT_IDENTITY, DEFAULT_COVERAGE, validate_homology_settings, homology_warnings
+from bioautoml.homology import DEFAULT_IDENTITY, DEFAULT_COVERAGE, validate_homology_settings, homology_warnings
+from bioautoml.model_artifacts import load_model, update_model_summary
 
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
@@ -244,7 +245,7 @@ def derive_key_from_password(password: str, salt: bytes, iterations: int = 39000
 # Create a tar archive in memory from a directory path and return bytes
 def make_tar_bytes_from_dir(folder_path: str) -> bytes:
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+    with tarfile.open(fileobj=buf, mode="w:gz", dereference=True) as tar:
         # Add all files and subdirectories
         tar.add(folder_path, arcname=".")
     buf.seek(0)
@@ -307,25 +308,24 @@ def homology_controls(data_type):
     return identity, coverage
 
 
-def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, stage2_gate=False, stage2_gate_margin_sd=0.5, homology_aware=False,
-                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
+def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homology_aware=False,
+                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, calibrate_probabilities=False):
     """Use the same explicit training controls for sequence and structured jobs."""
     arguments = ['--n_cpu', str(n_cpu), '--seed', str(seed),
                  '--search_seed', str(seed if search_seed is None else search_seed),
-                 '--search_jobs', str(search_jobs),
-                 '--stage2_gate_margin_sd', str(stage2_gate_margin_sd)]
-    if stage2_gate:
-        arguments.append('--stage2_gate')
+                 '--search_jobs', str(search_jobs)]
     if homology_aware:
         validate_homology_settings(homology_identity, homology_coverage)
         arguments.extend(['--homology_aware', '--homology_identity', str(homology_identity),
                           '--homology_coverage', str(homology_coverage)])
+    if calibrate_probabilities:
+        arguments.append('--calibrate_probabilities')
     return arguments
 
 
 def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None,
-               stage2_gate=False, stage2_gate_margin_sd=0.5, seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
-               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
+               seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
+               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, calibrate_probabilities=False):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -340,6 +340,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     try:
         if homology_aware and (training != 'Training set' or data_type == 'Structured data'):
             raise ValueError('Homology-aware CV requires training from sequence FASTA inputs.')
+        if calibrate_probabilities and (training != 'Training set' or task != 'Classification'):
+            raise ValueError('Probability calibration requires new classification training.')
         if homology_aware:
             validate_homology_settings(homology_identity, homology_coverage)
         if training == "Training set":
@@ -449,8 +451,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("--test_nameseq")
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
-                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, stage2_gate, stage2_gate_margin_sd, homology_aware,
-                                                  homology_identity, homology_coverage))
+                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
+                                                  homology_identity, homology_coverage, calibrate_probabilities))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -461,9 +463,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 if test_files:
                     utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
             
-                model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-                model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
-                joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+                update_model_summary(os.path.join(job_path, "trained_model.sav"),
+                                     train_stats=pd.read_csv(os.path.join(job_path, "train_stats.csv")))
             else:
                 if task == "Classification":
                     for file in train_files:
@@ -524,8 +525,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("--fasta_label_test")
                         command.append("Predicted")
 
-                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, stage2_gate, stage2_gate_margin_sd, homology_aware,
-                                                  homology_identity, homology_coverage))
+                command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
+                                                  homology_identity, homology_coverage, calibrate_probabilities))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -536,16 +537,15 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 if test_files:
                     utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
             
-                model = joblib.load(os.path.join(job_path, "trained_model.sav"))
-                model["train_stats"] = pd.read_csv(os.path.join(job_path, "train_stats.csv"))
-                joblib.dump(model, os.path.join(job_path, "trained_model.sav"))
+                update_model_summary(os.path.join(job_path, "trained_model.sav"),
+                                     train_stats=pd.read_csv(os.path.join(job_path, "train_stats.csv")))
 
         elif training == "Load model":
             save_path = os.path.join(job_path, "trained_model.sav")
             with open(save_path, mode="wb") as f:
                 f.write(train_files.getvalue())
 
-            model = joblib.load(save_path)
+            model = load_model(save_path)
 
             command = [
                 "python",
@@ -980,8 +980,7 @@ def runUI():
     st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
 
     tuning = False  # default; overridden by the checkbox widget below when applicable
-    stage2_gate = False
-    stage2_gate_margin_sd = 0.5
+    calibrate_probabilities = False
     homology_aware = False
     homology_identity, homology_coverage = DEFAULT_IDENTITY, DEFAULT_COVERAGE
 
@@ -1020,63 +1019,40 @@ def runUI():
 
         with checkcol1:
             tuning = st.checkbox("Hyperparameter tuning", help="Whether to use hyperparameter tuning for the model (this can make the training take longer).")
-        
-        with checkcol2:
-            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
 
-            # Simple validation (not strict): show warning if looks invalid
-            if email:
-                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-                    st.warning("That doesn't look like a valid email address.")
+        with checkcol2:
+            homology_aware = st.checkbox(
+                'Homology-aware cross-validation', value=False,
+                help='Automatically keeps detected similar sequences in the same CV fold using MMseqs2. '
+                     'Also audits supplied test sequences without changing their membership. Adds processing time.')
 
         with checkcol3:
-            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-    elif training == "Training set" and data_type == "Structured data":
-        checkcol1, checkcol2 = st.columns(2)
+            if task == 'Classification':
+                calibrate_probabilities = st.checkbox(
+                    'Probability calibration', value=False,
+                    help='Fits sigmoid calibration using training-only, five-fold predictions. Respects homology groups. '
+                         'Adds classifier fits, not additional AutoML trials. May change predicted classes and does not guarantee improvement.')
 
-        with checkcol1:
-            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
-
-            # Simple validation (not strict): show warning if looks invalid
-            if email:
-                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-                    st.warning("That doesn't look like a valid email address.")
-
-        with checkcol2:
-            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-    elif training == "Load model":
-        tuning = False
-
-        checkcol1, checkcol2 = st.columns(2)
-
-        with checkcol1:
-            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
-
-            # Simple validation (not strict): show warning if looks invalid
-            if email:
-                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-                    st.warning("That doesn't look like a valid email address.")
-        
-        with checkcol2:
-            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
-
-    if training == 'Training set' and (tuning or data_type == 'Structured data'):
-        stage2_gate = st.checkbox(
-            'Use conservative Stage 2 gate', value=False,
-            help='Retain default LightGBM unless the tuned winner improves training CV by more than the chosen multiple of the default fold-score SD. This adds evaluation work.')
-        if stage2_gate:
-            stage2_gate_margin_sd = st.number_input(
-                'Stage 2 gate margin (SD multiplier)', min_value=0.0, value=0.5, step=0.1)
-            if task == 'Regression':
-                st.caption('The gate uses lower-is-better RMSE; its benefit for regression has not been validated.')
-
-    if training == 'Training set' and data_type in ('Protein', 'DNA/RNA'):
-        homology_aware = st.checkbox(
-            'Homology-aware cross-validation', value=False,
-            help='Automatically keeps detected similar sequences in the same CV fold using MMseqs2. '
-                 'Also audits supplied test sequences without changing their membership. Adds processing time.')
         if homology_aware:
             homology_identity, homology_coverage = homology_controls(data_type)
+    elif training == 'Training set' and task == 'Classification':
+        calibrate_probabilities = st.checkbox(
+            'Probability calibration', value=False,
+            help='Fits sigmoid calibration using training-only, five-fold predictions. Respects homology groups. '
+                 'Adds classifier fits, not additional AutoML trials. May change predicted classes and does not guarantee improvement.')
+
+    checkcol1, checkcol2 = st.columns(2)
+
+    with checkcol1:
+        email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+
+        # Simple validation (not strict): show warning if looks invalid
+        if email:
+            if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                st.warning("That doesn't look like a valid email address.")
+
+    with checkcol2:
+        password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
 
     # ── Configuration summary ──────────────────────────────────────────────
     _summary = []
@@ -1194,8 +1170,8 @@ def runUI():
             data_type = "Nucleotide"
             task = "Classification"
             tuning = False
-            stage2_gate = False
             homology_aware = False
+            calibrate_probabilities = False
         else:
             # For non-structured sequence classification, require >= 2 class files
             if task and data_type != "Structured data":
@@ -1355,11 +1331,10 @@ def runUI():
             "training":  training,
             "testing":   testing,
             "tuning": tuning,
-            "stage2_gate": stage2_gate,
             "homology_aware": homology_aware,
+            "calibrate_probabilities": calibrate_probabilities,
             "homology_identity": homology_identity,
             "homology_coverage": homology_coverage,
-            "stage2_gate_margin_sd": stage2_gate_margin_sd,
             "seed": 63,
             "search_seed": 63,
             "n_cpu": 8,

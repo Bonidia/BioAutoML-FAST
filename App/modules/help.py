@@ -159,7 +159,12 @@ CLASSIFICATION METRICS:
 - Confusion matrix (row-normalized by class)
 
 REGRESSION METRICS:
-- MAE, MSE, RMSE, R²
+- MAE, MSE, RMSE, predictive R², and signed Pearson r
+- Pearson r measures linear association, not absolute prediction accuracy or R².
+- CV shows mean ± fold SD; undefined folds make aggregate Pearson N/A.
+- Constant/near-constant or fewer than two observations yield N/A, not zero.
+- Older results without Pearson show N/A (not recorded).
+- Pearson CSV sidecars retain unrounded values and undefined-value reasons.
 
 INTERPRETATION:
 - Training metrics are estimated via 10-fold cross-validation.

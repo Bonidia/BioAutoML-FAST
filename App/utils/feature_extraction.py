@@ -10,7 +10,7 @@ PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 # The web process starts in App; the CLI starts in the project directory.
 if PROJECT_PATH not in sys.path:
     sys.path.insert(0, PROJECT_PATH)
-from feature_execution import run_feature_commands as run_descriptor_commands
+from bioautoml.feature_execution import run_feature_commands as run_descriptor_commands
 SELF_PREFIXED_DATASETS = {"iFeature-features", "repDNA"}
 
 
@@ -117,7 +117,7 @@ def save_selected_test(datasets, model, feat_path, job_path):
 
     dataframes = combine_feature_datasets(datasets)
 
-    train_columns = list(model["train"].columns)
+    train_columns = list(model['column_train'] if 'column_train' in model else model['train'].columns)
     missing_columns = [
         column for column in train_columns if column not in dataframes.columns
     ]

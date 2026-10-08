@@ -19,7 +19,7 @@ import numpy as np
 from Bio import SeqIO
 from sklearn.model_selection import GroupKFold, KFold, StratifiedGroupKFold, StratifiedKFold
 
-from feature_execution import get_available_cpus
+from bioautoml.feature_execution import get_available_cpus
 
 MMSEQS_VERSION = '15.6f452'
 DEFAULT_IDENTITY = 90.0

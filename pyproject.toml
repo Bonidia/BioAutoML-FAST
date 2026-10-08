@@ -57,7 +57,7 @@ dependencies = [
     "shap>=0.47.1",
     "sklearn-genetic>=0.6.0",
     "sklearn-genetic-opt>=0.11.1",
-    "streamlit>=1.44.1",
+    "streamlit==1.55.0",
     "streamlit-aggrid>=1.2.1",
     "streamlit-option-menu>=0.4.0",
     "tpot>=0.12.2",

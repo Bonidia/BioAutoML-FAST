@@ -13,7 +13,6 @@ App/task-results/
 tests
 logs
 logs_tmp
-manuscript
 scripts
 results
 .fuse_hidden*
@@ -21,3 +20,5 @@ secrets.toml
 task_results.db
 jobs
 /datasets
+/manuscript/*
+!/manuscript/tables/*

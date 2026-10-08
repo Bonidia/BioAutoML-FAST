@@ -4,7 +4,7 @@ warnings.filterwarnings('ignore')
 import pandas as pd
 import polars as pl
 import argparse
-from homology import get_homology_folds, prepare_homology, add_homology_arguments, resolve_homology_arguments
+from bioautoml.homology import get_homology_folds, prepare_homology, add_homology_arguments, resolve_homology_arguments
 import subprocess
 import shutil
 import sys
@@ -24,7 +24,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 import numpy as np
 from Bio import SeqIO
-from feature_execution import get_available_cpus, run_feature_commands
+from bioautoml.feature_execution import get_available_cpus, run_feature_commands
 
 
 NUCLEOTIDE_DESCRIPTORS = [
@@ -1246,18 +1246,17 @@ if __name__ == '__main__':
 	parser.add_argument('-difference', '--difference', default=0.001, help='difference before early stopping - default = 0.001')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-search_jobs', '--search_jobs', default=1, help='parallel Optuna workers; default 1 for repeatable trial ordering')
-	parser.add_argument('--stage2_gate', action='store_true', help='Opt in to the training-CV default LightGBM fallback')
 	parser.add_argument('--homology_aware', action='store_true', help='Automatically group sequence CV folds using MMseqs2 and audit train-test similarity')
+	parser.add_argument('--calibrate_probabilities', action='store_true', help='Optional sigmoid probability calibration for classification (off by default)')
 	add_homology_arguments(parser)
-	parser.add_argument('--stage2_gate_margin_sd', type=float, default=0.5, help='Nonnegative default-model fold SD multiplier (default: 0.5)')
 	parser.add_argument('-seed', '--seed', default=63, help='random seed for cross-validation and learners - default = 63')
 	parser.add_argument('-search_seed', '--search_seed', default=None, help='Optuna sampler seed; defaults to --seed')
 	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
 
 	args = parser.parse_args()
+	if args.calibrate_probabilities and int(args.task) != 0:
+		parser.error('--calibrate_probabilities is available for classification only.')
 	homology_identity, homology_coverage = resolve_homology_arguments(parser, args)
-	if not np.isfinite(args.stage2_gate_margin_sd) or args.stage2_gate_margin_sd < 0:
-		parser.error('--stage2_gate_margin_sd must be finite and nonnegative')
 	try:
 		fasta_train, fasta_label_train = prepare_fasta_inputs(args.fasta_train, args.fasta_label_train)
 	except ValueError as error:
@@ -1302,6 +1301,12 @@ if __name__ == '__main__':
 	homology_report = prepare_homology(
 		fasta_train, fasta_label_train, fasta_test, fasta_label_test, dtype, task,
 		random_seed, os.path.join(foutput, 'homology'), args.homology_aware, n_cpu, homology_identity, homology_coverage)
+	if args.calibrate_probabilities:
+		from bioautoml.calibration import prepare_calibration_folds
+		from bioautoml.homology import read_sequences
+		records = read_sequences(fasta_train, fasta_label_train, 'train', dtype, task)
+		prepare_calibration_folds([record['label'] for record in records], random_seed,
+			 homology_report if args.homology_aware else None, [record['sequence_id'] for record in records])
 
 	folder_name = foutput.split("/")[-1]
 
@@ -1353,8 +1358,7 @@ if __name__ == '__main__':
 					'-seed', str(random_seed), '-search_seed', str(optimization_seed),
 					'-output', foutput]
 						+ (['-search_jobs', str(search_jobs)] if search_jobs is not None else [])
-						+ ['--stage2_gate_margin_sd', str(args.stage2_gate_margin_sd)]
-						+ (['--stage2_gate'] if args.stage2_gate else [])
+						+ (['--calibrate_probabilities'] if args.calibrate_probabilities else [])
 						+ (['--homology_aware', '--homology_identity', str(homology_identity),
 						    '--homology_coverage', str(homology_coverage)] if args.homology_aware else []), check=True)
 
