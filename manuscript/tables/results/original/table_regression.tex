@@ -1,0 +1,16 @@
+\multicolumn{2}{l}{} & \multicolumn{5}{c}{Cross-validation} & \multicolumn{5}{c}{Test evaluation} \\
+\cmidrule(lr){3-7}\cmidrule(lr){8-12}
+Task & Method & MAE & MSE & RMSE & $R^2$ & Pearson $r$ & MAE & MSE & RMSE & $R^2$ & Pearson $r$ \\
+\midrule
+\multirow{2}{=}{Model 58 - antibody peptides} 
+ & Valeri et al. \cite{valeri2023bioautomated}, TPOT & 0.3954 $\pm$ 0.0008 & - & - & - & 0.6519 $\pm$ 0.0053 & - & - & - & - & 0.6593 \\
+  & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multirow{2}{=}{Model 59 - ribosome binding site sequences} 
+ & Valeri et al. \cite{valeri2023bioautomated}, AutoKeras & 0.0672 $\pm$ 0.0003 & - & - & - & 0.9241 $\pm$ 0.0003 & - & - & - & - & 0.9309 \\
+  & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multirow{2}{=}{Model 60 - toehold switch sequences; Green test set} 
+ & Valeri et al. \cite{valeri2023bioautomated}, AutoKeras & 0.1345 $\pm$ 0.0013 & - & - & - & 0.8249 $\pm$ 0.0031 & - & - & - & - & 0.3287 \\
+  & BioAutoML-FAST & & & & & & & & & & \\
+\midrule

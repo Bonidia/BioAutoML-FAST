@@ -21,4 +21,5 @@ task_results.db
 jobs
 /datasets
 /manuscript/*
-!/manuscript/tables/*
+!/manuscript/tables/
+!/manuscript/tables/**

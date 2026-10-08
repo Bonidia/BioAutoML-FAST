@@ -1,0 +1,157 @@
+\begin{longtable}{
+  % *{2}{>{\raggedright\arraybackslash}p{3cm}}
+  % >{\raggedright\arraybackslash}p{3cm}
+  *{6}{>{\raggedright\arraybackslash}p{3cm}}
+}
+\caption{\textbf{Benchmark datasets used to train and evaluate the models available in BioAutoML-FAST.} The table summarizes the prediction task (binary classification, multiclass classification, or regression), sequence type, and the size of the training and external test datasets for each model, along with the original reference from which the data were derived. A dash (–) indicates that the dataset was not available or not reported in the original study.} \\
+\toprule
+\textbf{Model} & 
+\textbf{Task} & 
+\textbf{Sequence type} & 
+\textbf{Training dataset} & 
+\textbf{Test dataset} &
+\textbf{Reference} 
+\\
+\midrule
+\endfirsthead
+
+\caption[]{(continued)}\\
+\toprule
+\textbf{Model} & 
+\textbf{Task} & 
+\textbf{Sequence type} & 
+\textbf{Training dataset} & 
+\textbf{Test dataset} &
+\textbf{Reference} 
+\\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{6}{r}{\textit{Continued on next page}}\\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+Model 1: antibody peptides & Binary & Amino acid & 8,959 positives / 54,441 negatives & 207 positives / 264 negatives & \cite{liu2020antibody} \\
+\midrule
+Model 2: anticancer peptides & Binary & Amino acid & 250 positives / 250 negatives & 82 positives / 82 negatives & \cite{wei2018acpred} \\
+\midrule
+Model 3: anticancer peptides & Binary & Amino acid & 138 positives / 206 negatives & - & \cite{hajisharifi2014predicting} \\
+\midrule
+Model 4: anticancer peptides & Binary & Amino acid & 776 positives / 776 negatives & 194 positives / 194 negatives & \cite{agrawal2021anticp} \\
+\midrule
+Model 5: anticancer peptides & Binary & Amino acid & 689 positives / 689 negatives & 172 positives / 172 negatives & \cite{agrawal2021anticp} \\
+\midrule
+Model 6: anti-coronavirus & Binary & Amino acid & 109 positives / 356 negatives & - & \cite{timmons2021ennavia} \\
+\midrule
+Model 7: anti-coronavirus and random non-secretory proteins & Binary & Amino acid & 109 positives / 539 negatives & - & \cite{timmons2021ennavia} \\
+\midrule
+Model 8: antifungal peptides & Binary & Amino acid & 778 positives / 778 negatives & 215 positives / 215 negatives & \cite{pinacho2021alignment} \\
+\midrule
+Model 9: anti-hypertensive peptides & Binary & Amino acid & 913 positives / 913 negatives & 386 positives / 386 negatives & \cite{manavalan2019mahtpred} \\
+\midrule
+Model 10: antimalarial peptides & Binary & Amino acid & 111 positives / 542 negatives & 28 positives / 135 negatives & \cite{charoenkwan2022iamap} \\
+\midrule
+Model 11: antimalarial peptides & Binary & Amino acid & 111 positives / 1,708 negatives & 28 positives / 427 negatives & \cite{charoenkwan2022iamap} \\
+\midrule
+Model 12: antimicrobial peptides & Binary & Amino acid & 1,686 positives / 16,428 negatives & 723 positives / 7,041 negatives & \cite{chung2020characterization} \\
+\midrule
+Model 13: antimicrobial peptides & Binary & Amino acid & 879 positives / 2,405 negatives & 920 positives / 920 negatives & \cite{xiao2013iamp} \\
+\midrule
+Model 14: antimicrobial peptides & Binary & Amino acid & 3,876 positives / 9,552 negatives & 2,584 positives / 6,369 negatives & \cite{pang2022integrating} \\
+\midrule
+Model 15: anti-MRSA strains peptides & Binary & Amino acid & 118 positives / 678 negatives & 30 positives / 169 negatives & \cite{charoenkwan2022scmrsa} \\
+\midrule
+Model 16: antioxidant proteins & Binary & Amino acid & 249 positives / 1,531 negatives & 74 positives / 392 negatives & \cite{zhang2016sequence, butt2019prediction} \\
+\midrule
+Model 17: anti-parasitic peptides & Binary & Amino acid & 255 positives / 1,863 negatives & 46 positives / 46 negatives & \cite{zhang2022predapp} \\
+\midrule
+Model 18: antiviral & Binary & Amino acid & 520 positives / 379 negatives & 57 positives / 41 negatives & \cite{timmons2021ennavia} \\
+\midrule
+Model 19: antiviral and random non-secretory proteins & Binary & Amino acid & 520 positives / 539 negatives & 57 positives / 58 negatives & \cite{timmons2021ennavia} \\
+\midrule
+Model 20: antiviral peptides & Binary & Amino acid & 2,321 positives / 2,321 negatives & 623 positives / 623 negatives & \cite{pinacho2021alignment} \\
+\midrule
+Model 21: bitter peptides & Binary & Amino acid & 256 positives / 256 negatives & 64 positives / 64 negatives & \cite{charoenkwan2021bert4bitter} \\
+\midrule
+Model 22: blood-brain barrier peptides & Binary & Amino acid & 100 positives / 100 negatives & 19 positives / 19 negatives & \cite{dai2021bbppred} \\
+\midrule
+Model 23: DNA-binding proteins & Binary & Amino acid & 524 positives / 550 negatives & 93 positives / 90 negatives & \cite{liu2014idna, lou2014sequence} \\
+\midrule
+Model 24: DNA-binding proteins & Binary & Amino acid & 146 positives / 250 negatives & - &  \cite{liu2015psedna}\\
+\midrule
+Model 25: DNase I hypersensitive sites & Binary & Nucleotide & 280 positives / 737 negatives & - & \cite{noble2005predicting} \\
+\midrule
+Model 26: DPP IV inhibitory peptides & Binary & Amino acid & 532 positives / 532 negatives & 133 positives / 133 negatives & \cite{charoenkwan2020idppiv} \\
+\midrule
+Model 27: hemolytic peptides & Binary & Amino acid & 442 positives / 442 negatives & 110 positives / 110 negatives & \cite{chaudhary2016web} \\
+\midrule
+Model 28: recombination spots & Binary & Nucleotide & 478 positives / 572 negatives & - & \cite{jiang2007rf, khan2020prediction} \\
+\midrule
+Model 29: lncRNA (\textit{Homo sapiens}) & Binary & Nucleotide & 8,000 positives / 8,000 negatives & 2,500 positives / 2,500 negatives & \cite{han2019lncfinder} \\
+\midrule
+Model 30: lncRNA (\textit{Mus musculus}) & Binary & Nucleotide & 4,200 positives / 4,200 negatives & 1,800 positives / 1,800 negatives & \cite{han2019lncfinder} \\
+\midrule
+Model 31: lncRNA (\textit{Triticum aestivum}) & Binary & Nucleotide & 4,000 positives / 4,000 negatives & 2,000 positives / 2,000 negatives & \cite{han2019lncfinder} \\
+\midrule
+Model 32: lncRNA (\textit{Zea mays}) & Binary & Nucleotide & 18,000 positives / 18,000 negatives & - & \cite{meng2021plncrna} \\
+\midrule
+Model 33: m5C sites (\textit{Arabidopsis thaliana}) & Binary & Nucleotide & 5,289 positives / 5,289 negatives & 1,000 positives / 1,000 negatives & \cite{lv2020evaluation} \\
+\midrule
+Model 34: m5C sites (\textit{Homo sapiens}) & Binary & Nucleotide & 120 positives / 120 negatives & - & \cite{feng2016identifying} \\
+\midrule
+Model 35: m5C sites (\textit{Mus musculus}) & Binary & Nucleotide & 97 positives / 97 negatives & - & \cite{lv2020evaluation} \\
+\midrule
+Model 36: m5C sites (\textit{Saccharomyces cerevisiae}) & Binary & Nucleotide & 211 positives / 211 negatives & - & \cite{lv2020evaluation} \\
+\midrule
+Model 37: neuropeptides & Binary & Amino acid & 1,940 positives / 1,940 negatives & 485 positives / 485 negatives & \cite{chen2022neuropred, bin2020prediction} \\
+\midrule
+Model 38: non-classical secreted proteins & Binary & Amino acid & 141 positives / 446 negatives & 34 positives / 34 negatives & \cite{zhang2020pengaroo} \\
+\midrule
+Model 39: peptide toxicity & Binary & Amino acid & 1,663 positives / 1,621 negatives & 269 positives / 311 negatives & \cite{wei2021atse} \\
+\midrule
+Model 40: phage virion proteins & Binary & Amino acid & 250 positives / 250 negatives & 63 positives / 63 negatives & \cite{charoenkwan2020meta} \\
+\midrule
+Model 41: proinflammatory peptides & Binary & Amino acid & 607 positives / 1,098 negatives & 134 positives / 156 negatives & \cite{khatun2020proin} \\
+\midrule
+Model 42: protein lysine crotonylation sites & Binary & Amino acid & 2,742 positives / 29,676 negatives & 711 positives / 7,458 negatives & \cite{zhao2020identification} \\
+\midrule
+Model 43: quorum-sensing peptides & Binary & Amino acid & 200 positives / 200 negatives & 20 positives / 20 negatives & \cite{wei2020comparative} \\
+\midrule
+Model 44: real microRNA precursors & Binary & Nucleotide & 1,612 positives / 1,612 negatives & - & \cite{liu2015identification} \\
+\midrule
+Model 45: ribosome binding site sequences & Binary & Nucleotide & 137,924 positives / 137,925 negatives & 13,836 positives / 13,818 negatives & \cite{hollerer2020large} \\
+\midrule
+Model 46: sigma70 promoters & Binary & Nucleotide & 741 positives / 1,400 negatives & - & \cite{lin2017identifying} \\
+\midrule
+Model 47: small non-coding RNA and shuffled sequences & Binary & Nucleotide & 182 positives / 182 negatives & - & \cite{barman2017improved} \\
+\midrule
+Model 48: toehold switch sequences & Binary & Nucleotide & 45,758 positives / 45,776 negatives & 42 positives / 126 negatives & \cite{valeri2020sequence} \\
+\midrule
+Model 49: Tumor T cell antigens & Binary & Amino acid & 470 positives / 318 negatives & 122 positives / 75 negatives & \cite{charoenkwan2020ittca} \\
+\midrule
+Model 50: umami peptides & Binary & Amino acid & 112 positives / 241 negatives & 28 positives / 61 negatives & \cite{charoenkwan2020iumami} \\
+\midrule
+Model 51: lncRNAs subcellular localization - training set with 4 classes & Multiclass & Nucleotide & Cytoplasm: 417 / Exosome: 30 / Nucleus: 153 / Ribosome: 43 & Cytoplasm: 199 / Exosome: 16 / Nucleus: 82 / Ribosome: 99 & \cite{cai2023gm} \\
+\midrule
+Model 52: lncRNAs subcellular localization - training set with 5 classes & Multiclass & Nucleotide & Cytoplasm: 292 / Cytosol: 91 / Exosome: 25 / Nucleus: 149 / Ribosome: 43 & Cytoplasm: 199 / Exosome: 16 / Nucleus: 82 / Ribosome: 99 & \cite{cai2023gm} \\
+\midrule
+Model 53: mRNA subcellular localization & Multiclass & Nucleotide & Cytoplasm: 5,310 / Endoplasmic reticulum: 1,185 / Extracellular region: 710 / Mitochondria: 350 / Nucleus: 4,855 & Cytoplasm: 1,066 / Endoplasmic reticulum: 241 / Extracellular region: 145 / Mitochondria: 71 / Nucleus: 976 &  \cite{musleh2023mslp} \\
+\midrule
+Model 54: non-coding RNA - 4 classes & Multiclass & Nucleotide & Cis-reg: 246 / rRNA: 242 / sRNA: 497 / tRNA: 581 & Cis-reg: 169 / rRNA: 325 / sRNA: 119 / tRNA: 50 & \cite{avila2024biodeepfuse} \\
+\midrule
+Model 55: non-coding RNA - 8 classes & Multiclass & Nucleotide & miRNA: 212 / mRNA: 514 / pre-miRNA: 203 / rRNA: 593 / snoRNA: 143 / snRNA: 91 / tmRNA: 282 / tRNA: 358 & miRNA: 52 / mRNA: 188 / pre-miRNA: 50 / rRNA: 148 / snoRNA: 35 / snRNA: 22 / tmRNA: 70 / tRNA: 89 & \cite{bonidia2022bioautoml} \\
+\midrule
+Model 56: non-coding RNA - E. coli K12 & Multiclass & Nucleotide & rRNA: 32 / sRNA: 133 / tRNA: 40 & rRNA: 8 / sRNA: 33 / tRNA: 10 & \cite{bonidia2022bioautoml} \\
+\midrule
+Model 57: non-coding RNA - Multiple bacterial phyla & Multiclass & Nucleotide & rRNA: 144 / sRNA: 309 / tRNA: 329 & rRNA: 103 / sRNA: 179 / tRNA: 267 & \cite{bonidia2022bioautoml} \\
+\midrule
+Model 58: antibody peptides & Regression & Amino acid & peptides: 67,769 & peptides: 471 & \cite{liu2020antibody} \\
+\midrule
+Model 59: ribosome binding site sequences & Regression & Nucleotide & rbs: 275,849 & rbs: 27,654 & \cite{hollerer2020large} \\
+\midrule
+Model 60: toehold switch sequences & Regression & Nucleotide & toeholds: 91,534 & toeholds: 168 & \cite{valeri2020sequence} \\
+\label{benchmark_datasets}
+\end{longtable}
