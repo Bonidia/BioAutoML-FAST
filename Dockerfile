@@ -58,15 +58,16 @@ RUN test -f MathFeature/methods/ExtractionTechniques.py \
     && chmod +x start.sh \
     && install -d -o appuser -g 0 -m 2775 App/task-results App/task-results/redis App/jobs \
     && install -d -o appuser -g appuser -m 755 App/datasets \
+    && /opt/venv/bin/python -m bioautoml.web_metadata \
     && dpkg-query -W > /opt/bioautoml/system-packages.tsv \
-    && /opt/venv/bin/python scripts/environment_report.py > /opt/bioautoml/environment.json
+    && /opt/venv/bin/python -m bioautoml.environment_report > /opt/bioautoml/environment.json
 
 # 5. Startup and health checks; start.sh supervises all three services.
 USER appuser
 
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD ["python", "/app/scripts/container_healthcheck.py"]
+    CMD ["python", "-c", "import os; from urllib.request import urlopen; from redis import Redis; r = urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8501') + '/_stcore/health', timeout=3); assert r.status == 200; r.close(); assert Redis.from_url(os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0'), socket_connect_timeout=3, socket_timeout=3).ping()"]
 
 # Tini reaps orphaned subprocesses.
 ENTRYPOINT ["/usr/bin/tini", "--"]

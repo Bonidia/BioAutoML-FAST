@@ -213,8 +213,8 @@ Run isolated checks without publishing ports or connecting to a live queue:
 
 ```sh
 docker run --rm bioautoml-fast:local python -m unittest discover -s tests -v
-docker run --rm bioautoml-fast:local python scripts/check_runtime.py
-docker run --rm --cpus 4 bioautoml-fast:local python scripts/check_pipeline.py
+docker run --rm bioautoml-fast:local python tests/check_runtime.py
+docker run --rm --cpus 4 bioautoml-fast:local python tests/check_pipeline.py
 ```
 
 The pipeline smoke test uses small example subsets and two trials per stage;
@@ -273,9 +273,23 @@ sudo systemctl start bioautoml-web bioautoml-worker
 BioAutoML-FAST uses a two-step pipeline: `engineering.py` handles feature extraction and descriptor selection, then automatically invokes `generation.py` for model training and hyperparameter optimization.
 
 The two entry scripts remain at the repository root. Shared helpers live in the
-`bioautoml/` package: `feature_execution.py`, `homology.py`, `calibration.py`, and
+`bioautoml/` package: `feature_execution.py`, `homology.py`, and
 `model_artifacts.py`. Run CLI commands from the repository root; the web app
 continues to start from `App/`.
+
+The image records its environment using `python -m bioautoml.environment_report`.
+At build time, `python -m bioautoml.web_metadata` installs the public metadata from
+`App/index.html` into Streamlit's installed HTML, preserving its versioned scripts,
+styles and fonts. Do not replace Streamlit's HTML with the metadata template.
+The title, description, canonical URL and sharing tags are present in the initial
+HTTP response. The canonical URL targets `https://bioautoml.icmc.usp.br/`; change
+both it and `og:url` in the template for a separately indexed deployment.
+Rebuild the image after editing this template. Metadata does not guarantee Google
+indexing or ranking, and is not an access-control mechanism for private jobs.
+Development checks live in `tests/`; profiling and comparison utilities live in
+`manuscript/experiments/`. Docker checks Streamlit and Redis directly, while
+`start.sh` supervises service processes. The health check does not inspect idle
+worker heartbeats.
 
 <h1 align="center">
   <img src="https://raw.githubusercontent.com/Bonidia/BioAutoML-FAST/refs/heads/main/App/imgs/modules.png" alt="Modules" width="600">
@@ -366,9 +380,9 @@ complete and uncompressed for the Jobs/model-inspection workflow.
 Diagnostic timing and equivalence checks are available as:
 
 ```sh
-python scripts/profile_training.py --input datasets --output /tmp/profile-new \
+python manuscript/experiments/profile_training.py --input datasets --output /tmp/profile-new \
   --datasets dataset2_yu_protein_0 --n_cpu 8 --estimations 10 --tuning 10
-python scripts/compare_training.py /path/to/baseline/dataset2_yu_protein_0 \
+python manuscript/experiments/compare_training.py --trust-model /path/to/baseline/dataset2_yu_protein_0 \
   /tmp/profile-new/dataset2_yu_protein_0
 ```
 
@@ -416,41 +430,8 @@ the aggregate is N/A rather than silently averaging the remaining folds. Invalid
 lengths, nonfinite values, and non-vector inputs are rejected. Older model reports
 without Pearson still load and display “not recorded”; they are not backfilled.
 
-#### Optional probability calibration (classification)
-
-Add `--calibrate_probabilities` to `engineering.py` or `generation.py`, or select
-**Probability calibration** when training a classifier in the web app. This option
-is **off by default**, supports binary/multiclass and sequence/structured inputs,
-and works with or without hyperparameter tuning. Regression is not supported.
-Stage 1 descriptor selection and Stage 2 model selection are unchanged.
-
-The selected classifier is calibrated using five-fold out-of-fold training
-predictions and a fixed sigmoid method (`CalibratedClassifierCV`, `ensemble=False`).
-One underlying classifier is refitted on all training rows for deployment; this is
-not a five-model prediction ensemble. Encoding and imputation are fitted inside
-the calibration folds. With homology-aware CV enabled, calibration folds also
-keep similarity groups together. Infeasible class/group assignments fail explicitly;
-the software does not silently substitute ordinary folds.
-
-For ten-fold reporting CV, calibration is fitted separately *inside each training
-fold*. External labels never fit or select the calibrator. This protects the
-calibration step, but reporting remains **post-selection CV, not fully nested
-evaluation of the entire AutoML procedure**. Calibration can change predicted
-classes and does not guarantee better accuracy, MCC, or probability quality.
-
-The `calibration/` directory contains settings, separate CV/external log loss and
-Brier scores, reliability plots and bin counts, and held-out CV probabilities.
-Binary Brier uses the positive-class squared error; multiclass Brier is the mean
-sum of class-wise squared errors (unscaled, range 0–2). Reports compare calibrated
-probabilities with those of the same underlying classifier. Jobs displays these
-reports; SHAP/feature importance explain the underlying classifier, not calibration.
-Saved models automatically retain calibration on reload; do not pass the training
-flag again for prediction. Older, uncalibrated model artifacts remain supported.
-
-Calibration adds five fold fits plus one full fit per reporting/final model:
-66 classifier fits instead of 11 for this phase. It does **not** multiply the
-AutoML search budget by six. Actual added minutes depend on the selected learner
-and data; inference uses a single classifier plus the sigmoid mapping.
+Classification outputs are model-estimated probabilities, not guaranteed confidence estimates.
+Previously probability-calibrated model artifacts are no longer supported and must be retrained.
 
 #### Optional homology-aware cross-validation and overlap audit
 
@@ -534,13 +515,12 @@ The reported CV is **post-selection CV, not nested evaluation of the full AutoML
 procedure**. Homology-aware folds reduce detected sequence overlap but do not
 remove model-selection optimism or redundancy in the preserved external test set.
 These fixed thresholds are a documented policy, not a universal definition of
-homology. The homology-aware option itself neither calibrates probabilities nor
-creates a new holdout. Probability calibration is a separate, optional training control.
+homology. The homology-aware option does not create a new holdout.
 
 Native sensitivity/integration checks (small fixtures, not benchmark accuracy):
 
 ```sh
-pixi run uv run --locked --no-dev python scripts/check_homology_search.py --output results/homology_native_check
+pixi run uv run --locked --no-dev python tests/check_homology_search.py --output results/homology_native_check
 BIOAUTOML_TEST_MMSEQS=1 pixi run test
 ```
 
@@ -559,11 +539,12 @@ Saved-model prediction does not rerun tuning.
 The benchmark runner retains model/fold seed `63` and search seeds `6301`–`6305`:
 
 ```sh
-python manuscript/run_experiments.py --n_cpu 8 --seed 63
+python manuscript/experiments/run_benchmarks.py --n_cpu 8 --seed 63 --output results/benchmarks-new
 ```
 
-The runner still skips existing run directories; changing training settings does not
-invalidate or replace old results. Five different-search-seed runs measure search
+The runner requires a new output directory outside `App/datasets` and preserves
+historical results. Outputs use `<output>/<dataset>/runs/run_N/`, with the shared
+`run.json`, `timings.csv`, `model/`, `results/`, and `reports/` layout. Five different-search-seed runs measure search
 variability and are separate from repeating the **same** seed in fresh containers.
 Do not assume bitwise reproducibility across hardware, package versions, CPU/thread
 settings, or parallel Optuna searches. Retain the built Docker image for a repeated
@@ -573,11 +554,11 @@ Validation commands (run pipeline checks twice in fresh containers of the same i
 
 ```sh
 python -m unittest discover -s tests -v
-python scripts/check_pipeline.py --output /tmp/repeat-off
+python tests/check_pipeline.py --output /tmp/repeat-off
 # Full bundled nucleotide dataset, 200/150 trial budgets and unchanged early stopping:
-python scripts/check_pipeline.py --full_budget --output /tmp/repeat-full
+python tests/check_pipeline.py --full_budget --output /tmp/repeat-full
 # Recheck preserved artifacts without retraining:
-python scripts/check_pipeline.py --verify_saved /tmp/repeat-full --full_budget --output /tmp/reuse-full
+python tests/check_pipeline.py --verify_saved /tmp/repeat-full --full_budget --output /tmp/reuse-full
 ```
 
 The pipeline check exercises training, the web selected-descriptor extractor,
@@ -585,58 +566,150 @@ saved-model loading, and reordered/batched predictions. Its optional output
 directory retains test artifacts and snapshots for comparison. Prediction checks
 use `rtol=atol=1e-12` to allow machine-precision tree-summation differences;
 descriptor/model decisions must still match. These checks do not add
-production run manifests or completion tracking.
+claims of cross-platform bitwise reproducibility. New runs do record execution
+manifests, phase timings, and completion status.
 
 ### Output files
 
-Both scripts write results to the directory specified by `-output`. Typical outputs include:
+Both scripts and web jobs use the same versioned layout. `-output` must be a fresh
+directory: existing results are never silently overwritten. Separate prediction
+runs do not modify their source model. All output paths use the layout below,
+including before `run.json` is created; historical flat folders are not supported.
 
 | File | Description |
 |---|---|
-| `trained_model.sav` | Self-contained, uncompressed model bundle — reusable for prediction and exploration |
-| `training_kfold(10)_metrics.csv` | 10-fold cross-validation metrics on the training set |
-| `training_confusion_matrix.csv` | Confusion matrix for the training set (classification only) |
-| `metrics_test.csv` | Evaluation metrics on the held-out test set |
-| `test_confusion_matrix.csv` | Confusion matrix for the test set (classification only) |
-| `test_predictions.csv` | Per-sequence predictions on the test set |
-| `feature_importance.tsv` | Feature importance scores |
-| `best_descriptors/` | Best-selected descriptor matrices for train and test sets |
+| `run.json` | Run ID, model ID, settings, seeds, versions, source/input hashes, timestamps and status |
+| `timings.csv` | Phase durations in seconds, statuses and parent phase IDs |
+| `reports/performance_summary.csv` | Descriptor extraction, Stage 1/2 optimisation, end-to-end seconds and sampled peak process-tree RSS in bytes |
+| `reports/sequence_names/` | Original FASTA IDs/full headers, source IDs, record positions and internal IDs (TSV) |
+| `model/trained_model.sav` | Self-contained uncompressed model; web training signs it after finalizing statistics |
+| `results/metrics/optimization_cv_metrics.csv` | Post-selection ten-fold CV; not an unbiased evaluation |
+| `results/metrics/optimization_cv_confusion_matrix.csv` | Classification reporting-CV confusion matrix |
+| `results/metrics/test_metrics.csv` | Test-set metrics |
+| `results/metrics/test_additional_metrics.csv` | Additional classification test metrics |
+| `results/metrics/test_confusion_matrix.csv` | Classification test confusion matrix |
+| `results/predictions/test_predictions.csv` | Per-sequence predictions |
+| `results/descriptors/` | Selected descriptors, selected matrices and feature importance |
+| `inputs/` | Web-submitted inputs; CLI inputs are referenced/fingerprinted without duplicating them |
+| `reports/homology/` | Sequence grouping and overlap reports |
+| `logs/` | Web pipeline output and per-process timing journals |
+| `work/features/` | Intermediate extracted features |
+
+Durations use a monotonic clock; timestamps use UTC. The CLI and Jobs show minutes.
+Queue waiting time is separate. Nested phases overlap and must not be summed.
+`execution_summary.json` records web end-to-end time including optional archive
+encryption; the encrypted archive contains the pre-packaging run record. Later
+model inspection and plotting do not generate activity logs or change the training
+time records.
+Abrupt termination can leave a `running` record and partial journals: this is an
+incomplete run, never proof of successful completion. Automatic feature reuse
+based solely on directory names such as `run_2` has been removed; extraction is
+performed for each fresh CLI training run.
+
+Every new training/prediction execution reports descriptor-extraction time,
+optimisation time, total elapsed time and sampled peak memory. Jobs displays minutes
+and GiB; CSVs retain seconds and bytes. Extraction includes descriptor assembly but
+excludes separately timed FASTA preprocessing. Optimisation includes Stage 1 and
+Stage 2, not final fitting or reporting CV. Inapplicable phases are
+blank in CSVs and shown as “Not applicable”, not fabricated timings. Parallel or
+nested phase intervals are not double-counted. The measurement starts when the
+execution recorder starts, after interpreter/module startup and argument parsing.
+
+Memory is sampled every 0.1 seconds over the executing process and its descendants,
+including native extractors/MMseqs2. This is **sampled peak RSS**, not exact unique
+physical memory: short-lived spikes can be missed and shared pages can be counted
+more than once. Unrelated jobs and Redis/Streamlit services are not part of a job's
+process tree. Partial/failed runs retain available measurements; abrupt process
+termination may prevent a final summary. Web jobs additionally write a root
+`performance_summary.csv` and `execution_summary.json` after optional encryption.
+The encrypted archive's `total_scope=before_archive_packaging` snapshot cannot
+include its own packaging time; the external receipt is the authoritative total.
+
+FASTA names are preserved separately from unique internal IDs. Repeated sequence
+names are allowed, without collapsing records. Jobs and prediction exports show
+the original ID, with the full header, source and record position available for
+disambiguation. Prediction CSVs retain `nameseq` as the original display ID and add
+`internal_id`, `original_header`, `source_file`, `source_id`, and `record_number`.
+Feature matrices and fold alignment continue to use internal IDs. Training-name
+mappings are stored in the model's lazy exploration section before signing.
+Legacy models without mappings keep their existing names; prefixes are never
+guessed away. Regression targets encoded after `|` remain unchanged.
+CLI inputs with colliding filenames are disambiguated internally; web uploads
+must have distinct filename stems within each split to avoid overwriting files.
 
 ## Trained Models
 
-New `.sav` files keep summary information, the prediction pipeline, and the complete
+Version-2 `.sav` bundles keep summary information, the prediction pipeline, and the complete
 training/exploration data in independently loadable sections inside one file.
 The Jobs page opens the summary first; prediction does not load the training matrix.
 Analysis sections and model downloads are prepared on demand. No training data,
-fitted parameters, calibration, or feature precision is discarded.
+fitted parameters or feature precision is discarded.
 Jobs uses native lazy tabs with Streamlit 1.55.0 (pinned in `pyproject.toml` and `uv.lock`): only the
 selected tab executes its analysis. Hidden tabs do not load data or generate plots.
 All Jobs analysis tabs remain available above 5,000 sequences, although individual
 analyses can take longer on large datasets. Submission upload limits are unchanged.
 
-Existing joblib `.sav` files remain supported. Jobs uses read-only memory mapping
-where supported by uncompressed legacy arrays, but must still deserialize the
-legacy estimator and object metadata. Compressed legacy files cannot be mapped.
-To convert a trusted model once, without retraining or
-overwriting the original:
+The web app accepts only version-2 models signed by an approved web-training
+deployment. CLI-created version-2 models remain unsigned and can be loaded only
+with explicit local trust. Plain pickle/joblib models and version-1 bundles are
+rejected before deserialization, even with local trust enabled. Retrain unsupported
+models; no conversion utility or automatic signing of uploaded models is provided.
+Existing artifacts are not modified or deleted.
 
-```bash
-python -m bioautoml.model_artifacts old/trained_model.sav new/trained_model.sav --trust-model
-```
-
-The destination directory must exist and the destination file must not exist.
-New files work with the updated web app and CLI, not older BioAutoML-FAST versions
-or a direct `joblib.load()` call. Python integrations should use:
+Python integrations should use the verified loader, not `joblib.load()`:
 
 ```python
 from bioautoml.model_artifacts import load_model
-model = load_model("trained_model.sav")  # Supports both formats; mapping loads sections lazily.
+model = load_model("trained_model.sav")  # Requires an approved signature/public trust store.
+# Local files you created/trust only; never expose this option to web uploads:
+local_model = load_model("local_model.sav", trust_unsigned=True)
 ```
 
-Only open model files from trusted sources: the fitted objects still use joblib/
-pickle, which can execute code when loaded. The bundle format is not a security
-sandbox. Models and decrypted data are kept session-local, not in a shared model
-cache. Encrypted legacy job archives still require full decryption before opening.
+For CLI prediction with your own unsigned model, add `--trust_unsigned_model` to
+`generation.py`. It explicitly acknowledges pickle/joblib execution risk and is
+forbidden in web job subprocesses. Local benchmark inspection tools are likewise
+for trusted local outputs only. CLI training does not sign models.
+
+### Web signing configuration
+
+Create keys **outside the repository and Docker build context** (the chosen
+directory must not exist):
+
+```bash
+python -m bioautoml.model_security bioautoml-keys
+MODEL_KEYS_DIR=bioautoml-keys ./run-docker.sh
+```
+
+The launcher starts a separate `bioautoml-fast-training` container. Only that
+container receives `signing.pem` (owner-only permissions); the ordinary web and
+prediction container receives only `trusted_keys.json`. The training worker accepts
+only new Home training jobs from `bioautoml-training`; the inference queue remains
+`bioautoml`. No signing endpoint is exposed for uploaded models. Without configured
+keys, web training is disabled and model verification fails closed. Do not use the
+single-container/manual Docker example above for signing-enabled training.
+
+For service deployments, configure `BIOAUTOML_TRUSTED_KEYS` on both processes and
+`BIOAUTOML_TRAINING_ENABLED=1` on the web service. Only the isolated training worker
+receives `BIOAUTOML_WORKER_ROLE=training`, `BIOAUTOML_SIGNING_KEY`, and
+`BIOAUTOML_SIGNING_KEY_ID`. It also needs the same trusted keys, Redis connection,
+jobs volume, and task database. Protect Redis and writable job storage from
+untrusted clients; queue payloads and the training infrastructure are trusted.
+
+Back up the private key separately. Add new public key IDs for rotation; add a
+compromised ID to `revoked` to reject its models, including cached section access.
+When using file bind mounts, recreate both containers after replacing the trust
+file so they see the new inode. Never distribute the private key with an image,
+repository, or download. Do not mount the key directory itself into the web
+container.
+
+The signature authenticates a manifest and each section's SHA-256 hash. A section
+is copied to a private temporary file, checked, and only then deserialized from
+those exact bytes. This preserves lazy sections but adds disk I/O; it is not a
+zero-cost check. Bundles must be uncompressed, contain only expected members, and
+fit `BIOAUTOML_MAX_MODEL_BYTES` (default 32 GiB). Exact recorded NumPy, scikit-learn,
+LightGBM, XGBoost and joblib versions must match. A signature proves origin and
+integrity, not that compromised trusted infrastructure cannot generate harmful
+objects. Models remain session-local and workers must retain restricted privileges.
 
 After updating this code, rebuild/recreate the Docker container: live UI mounts
 alone do not update the Streamlit dependency, `bioautoml/` package, or CLI code.

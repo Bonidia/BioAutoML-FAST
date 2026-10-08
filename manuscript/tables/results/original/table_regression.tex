@@ -14,3 +14,26 @@ Task & Method & MAE & MSE & RMSE & $R^2$ & Pearson $r$ & MAE & MSE & RMSE & $R^2
  & Valeri et al. \cite{valeri2023bioautomated}, AutoKeras & 0.1345 $\pm$ 0.0013 & - & - & - & 0.8249 $\pm$ 0.0031 & - & - & - & - & 0.3287 \\
   & BioAutoML-FAST & & & & & & & & & & \\
 \midrule
+\multirow{2}{=}{Model 61 - protein solubility}
+ & Han et al. \cite{han2019solubility}, SVM & - & - & - & - & - & - & - & - & - & - \\
+ & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multirow{2}{=}{Model 62 - enzyme optimal catalytic temperature}
+ & Qiu et al. \cite{qiu2025seq2topt}, Seq2Topt & - & - & - & - & - & - & - & 12.26 & 0.57 & - \\
+ & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multirow{2}{=}{Model 63 - protein melting temperature}
+ & Li et al. \cite{li2022deepet}, DeepET & - & - & - & - & - & - & - & - & 0.73 & - \\
+ & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multirow{2}{=}{Model 64 - yeast protein half-life}
+ & Martin-Perez and Vill\'{e}n \cite{martinperez2017turnover}, physicochemical regression & - & - & - & - & - & - & - & - & - & - \\
+ & BioAutoML-FAST & & & & & & & & & & \\
+\midrule
+\multicolumn{12}{l}{Source-reported results requiring separate metric or evaluation definitions} \\
+\multicolumn{2}{l}{Task} & \multicolumn{3}{l}{Source method} & \multicolumn{4}{l}{Evaluation} & \multicolumn{2}{l}{Metric} & Value \\
+\midrule
+\multicolumn{2}{l}{Model 61} & \multicolumn{3}{p{0.23\linewidth}}{Han et al., SVM} & \multicolumn{4}{p{0.32\linewidth}}{Paper reports ten-fold evaluation; exact folds unverified} & \multicolumn{2}{l}{Pearson $r^2$} & 0.4115 \\
+\multicolumn{2}{l}{Model 64} & \multicolumn{3}{p{0.23\linewidth}}{Martin-Perez and Vill\'{e}n, physicochemical regression} & \multicolumn{4}{p{0.32\linewidth}}{Source analysis; assignment of the quoted score to held-out predictions unverified} & \multicolumn{2}{l}{Pearson $r$} & 0.39 \\
+\midrule
+\multicolumn{12}{p{0.97\linewidth}}{The main $R^2$ columns denote predictive coefficients of determination, not squared correlations. Source statistics use their original protocols and are not automatically matched comparisons with the newly prepared data. Models 62 and 63 use within-source holdouts, not independent external cohorts; Model 62 retains four exact train--test sequence overlaps. Temperature RMSE is in degrees Celsius. Dashes indicate no verified comparable source value; blank BioAutoML-FAST cells await fresh experiments.} \\

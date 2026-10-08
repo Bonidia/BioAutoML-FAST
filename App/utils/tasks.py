@@ -9,6 +9,7 @@ import requests
 
 redis_conn = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
 q = Queue("bioautoml", connection=redis_conn)
+training_q = Queue("bioautoml-training", connection=redis_conn)
 
 manager = TaskResultManager(os.environ.get("TASK_RESULTS_DB", "task_results.db"))
 
@@ -91,7 +92,11 @@ def enqueue_task(fn, fn_kwargs=None):
     enqueue_kwargs = {"on_success": _on_success, "on_failure": _on_failure}
 
     # create the job
-    job = q.enqueue(fn, kwargs=fn_kwargs, **enqueue_kwargs, job_timeout=7200)
+    training = fn.__module__.endswith('.home') and fn_kwargs.get('training') == 'Training set'
+    if training and os.environ.get('BIOAUTOML_TRAINING_ENABLED') != '1':
+        raise ValueError('Web training requires the dedicated signing worker. Configure it before submitting training jobs.')
+    queue = training_q if training else q
+    job = queue.enqueue(fn, kwargs=fn_kwargs, **enqueue_kwargs, job_timeout=7200)
 
     try:
         email = job.kwargs.get("email")
@@ -107,7 +112,7 @@ def enqueue_task(fn, fn_kwargs=None):
     return id_
 
 def check_job_status(job_id):
-    job = q.fetch_job(job_id)
+    job = q.fetch_job(job_id) or training_q.fetch_job(job_id)
     if job is None:
         return JobStatus.INVALID, None
     

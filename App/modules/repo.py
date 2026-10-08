@@ -1,3 +1,5 @@
+from bioautoml.execution import run_path, timed, start_cli
+from utils.execution import web_execution
 import streamlit as st
 import polars as pl
 import pandas as pd
@@ -31,8 +33,8 @@ from bioautoml.model_artifacts import load_model
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
 
-    path = os.path.join(job_path, "feat_extraction", "test")
-    feat_path = os.path.join(job_path, "feat_extraction")
+    path = run_path(job_path, "feat_extraction", "test")
+    feat_path = run_path(job_path, "feat_extraction")
 
     try:
         shutil.rmtree(path)
@@ -249,7 +251,7 @@ def test_extraction(job_path, test_data, model, data_type):
     nameseq_test.to_csv(fnameseqtest, index=False, header=True)
     y_test.to_csv(flabeltest, index=False, header=True)
 
-    path_bio = os.path.join(job_path, "best_descriptors")
+    path_bio = run_path(job_path, "best_descriptors")
     if not os.path.exists(path_bio):
         os.mkdir(path_bio)
 
@@ -294,8 +296,8 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
     encrypted = fernet.encrypt(tar_bytes)
 
     # 4) Write encrypted archive and salt into job_path
-    enc_path = os.path.join(job_path, "job_archive.enc")
-    salt_path = os.path.join(job_path, "job_salt.bin")
+    enc_path = run_path(job_path, "job_archive.enc")
+    salt_path = run_path(job_path, "job_salt.bin")
 
     with open(enc_path, "wb") as f:
         f.write(encrypted)
@@ -320,6 +322,7 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
             except Exception:
                 pass
 
+@web_execution
 def submit_job(dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
     """Process a single job - modified to be thread-safe."""
 
@@ -330,12 +333,12 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
 
-    log_path = os.path.join(job_path, "subprocess.log")
+    log_path = run_path(job_path, "subprocess.log")
 
     try:
         if training == "Load model":
-            save_path = os.path.join(dataset_path, "trained_model.sav")
-            link_path = os.path.join(job_path, "trained_model.sav")
+            save_path = run_path(dataset_path, "trained_model.sav")
+            link_path = run_path(job_path, "trained_model.sav")
 
             model = load_model(save_path)
 
@@ -361,10 +364,10 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                         data_type = "Protein"
 
                 if data_type == "Structured data":
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
-                    feat_path = os.path.join(job_path, "feat_extraction")
+                    feat_path = run_path(job_path, "feat_extraction")
                     os.makedirs(feat_path)
 
                     if testing == "Test set":
@@ -411,9 +414,9 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                         command.append("--test_nameseq")
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
-                    utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
+                    utils.summary_stats(run_path(job_path, "test"), data_type, job_path, True)
                 else:
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
                     if testing == "Test set":
@@ -435,11 +438,11 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
 
                         extract_selected_test_features(job_path, test_fasta, model, data_type)
 
-                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+                        utils.summary_stats(run_path(job_path, "feat_extraction/test"), data_type, job_path, False)
 
-                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                        command.extend(["--test", run_path(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", run_path(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", run_path(job_path, "feat_extraction/fnameseqtest.csv")])
                     else:
                         save_path = os.path.join(test_path, "predicted.fasta")
                         with open(save_path, mode="wb") as f:
@@ -449,11 +452,11 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
 
                         extract_selected_test_features(job_path, test_fasta, model, data_type)
 
-                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+                        utils.summary_stats(run_path(job_path, "feat_extraction/test"), data_type, job_path, False)
 
-                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                        command.extend(["--test", run_path(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", run_path(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", run_path(job_path, "feat_extraction/fnameseqtest.csv")])
 
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
@@ -461,13 +464,9 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
             with open(log_path, "w") as log_file:
                 subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
-        try:
-            if password:
-                encrypt_job_folder(job_path, password)
-        except Exception as e:
-            print(f"Error encrypting job {job_id}: {e}")
     except Exception as e:
         print(f"Error in job processing: {e}")
+        raise
 
 @st.cache_resource
 def bibtex_to_dict(bib_file="references.bib"):
@@ -1023,7 +1022,8 @@ def runUI():
         }
 
         df_job_data = pl.DataFrame(job_data)
-        tsv_path = os.path.join(job_path, "job_info.tsv")
+        tsv_path = run_path(job_path, "job_info.tsv")
+        os.makedirs(os.path.dirname(tsv_path), exist_ok=True)
         df_job_data.write_csv(tsv_path, separator='\t')
 
         job_submitted_dialog(job_id)

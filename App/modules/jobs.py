@@ -1,3 +1,5 @@
+from bioautoml.execution import run_path, timed, start_cli
+from bioautoml.sequence_names import names_for_run, display_names
 import streamlit as st
 import polars as pl
 import pandas as pd
@@ -8,7 +10,6 @@ import plotly.figure_factory as ff
 import numpy as np
 import os
 import utils
-import joblib
 from umap import UMAP
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
@@ -32,14 +33,51 @@ import shap
 import csv
 import json
 import gzip
-from bioautoml.calibration import get_base_pipeline
-from bioautoml.model_artifacts import get_model_info, load_model, model_fingerprint
+from bioautoml.model_artifacts import get_model_info, load_model, model_fingerprint, validate_model_support
+
+
+def show_feature_name_note():
+    if 'descriptors' in st.session_state.get('model', {}):
+        st.caption(
+            'Feature names use `Descriptor__Feature`: for example, '
+            '`Shannon__k1` is the k1 feature from Shannon. This distinguishes '
+            'features with the same name from different descriptors.'
+        )
+
+
+def show_execution_performance(job_path):
+    """Show headline resource usage; keep detailed timings in saved reports only."""
+    run_record = os.path.join(job_path, 'run.json')
+    if not os.path.isfile(run_record):
+        return
+    with open(run_record) as handle:
+        record = json.load(handle)
+    performance = record.get('performance', {})
+    receipt = os.path.join(job_path, 'execution_summary.json')
+    if os.path.isfile(receipt):
+        with open(receipt) as handle:
+            performance = json.load(handle).get('performance', performance)
+
+    elapsed = performance.get('total_seconds', record.get('elapsed_seconds'))
+    peak_memory = performance.get('peak_memory_bytes')
+    time_help = 'Time spent executing the job, excluding time waiting in the queue.'
+    if not performance or performance.get('total_scope') == 'before_archive_packaging':
+        time_help += ' This saved snapshot excludes archive packaging.'
+    with st.container(border=True):
+        st.markdown('**Execution performance**')
+        time_column, memory_column = st.columns(2)
+        time_column.metric('Total time (min)', 'Unavailable' if elapsed is None else f'{elapsed / 60:.2f}',
+                           help=time_help)
+        memory_column.metric('Estimated peak memory (GiB)',
+                             'Unavailable' if peak_memory is None else f'{peak_memory / 1024**3:.2f}',
+                             help='Sampled memory of the job process and its children, at a nominal 0.1-second interval. '
+                                  'Brief peaks may be missed and shared pages may be counted more than once.')
 
 
 def clear_job_data():
     """Never reuse private model data, downloads or figures across jobs."""
     for key in list(st.session_state):
-        if key in {'model', 'mapper', 'reducer', '_reduction_fig', '_model_download_ready',
+        if key in {'model', 'reducer', '_reduction_fig', '_model_download_ready',
                    '_result_section', '_model_fingerprint', '_loaded_job_path'} or key.startswith(('_dl_', '_shap_')):
             st.session_state.pop(key, None)
 
@@ -50,19 +88,19 @@ def model_download():
     if st.button('Prepare model download', use_container_width=True):
         st.session_state['_model_download_ready'] = True
     if st.session_state.get('_model_download_ready'):
-        with open(os.path.join(st.session_state['job_path'], 'trained_model.sav'), 'rb') as handle:
+        with open(run_path(st.session_state['job_path'], 'trained_model.sav'), 'rb') as handle:
             st.download_button('Download model', data=handle, file_name='trained_model.sav',
                                mime='application/octet-stream', use_container_width=True,
                                help='Complete model, including exploration data. Load only trusted model files.')
 
 def show_pearson_metric(report, cross_validation=False):
-    """Display regression correlation, including older or incomplete reports."""
+    """Display regression correlation, including unavailable or undefined values."""
     help_text = ('Signed linear correlation, not predictive R². A high correlation '
                  'can coexist with large prediction errors.')
     if cross_validation:
         if 'Pearson' not in report or 'std_Pearson' not in report:
             st.metric('Pearson r', 'N/A', help=help_text)
-            st.caption('Pearson r was not recorded in this older result.')
+            st.caption('Pearson r is unavailable in this report.')
             return
         value = report['Pearson'].iloc[0]
         deviation = report['std_Pearson'].iloc[0]
@@ -72,7 +110,7 @@ def show_pearson_metric(report, cross_validation=False):
         values = report.loc[report['Metric'] == 'Pearson', 'Value']
         if values.empty:
             st.metric('Pearson r', 'N/A', help=help_text)
-            st.caption('Pearson r was not recorded in this older result.')
+            st.caption('Pearson r is unavailable in this report.')
             return
         value = values.iloc[0]
         valid = np.isfinite(value)
@@ -104,30 +142,26 @@ def load_reduction_data(job_path, evaluation):
             labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])["label"].tolist()
             nameseqs = st.session_state["model"]["nameseq_train"]
         else:
-            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))["label"].tolist()
-            nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
+            features = pd.read_csv(run_path(job_path, "best_descriptors/best_train.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/flabeltrain.csv"))["label"].tolist()
+            nameseqs = pd.read_csv(run_path(job_path, "feat_extraction/fnameseqtrain.csv"))["nameseq"].tolist()
     else:
-        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
-            features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))["label"].tolist()
+        if os.path.exists(run_path(job_path, "feat_extraction/test_labels.csv")):
+            features = pd.read_csv(run_path(job_path, "feat_extraction/test.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/test_labels.csv"))["label"].tolist()
         else:
-            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))["label"].tolist()
+            features = pd.read_csv(run_path(job_path, "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/flabeltest.csv"))["label"].tolist()
         
-        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
+        nameseqs = pd.read_csv(run_path(job_path, "feat_extraction/fnameseqtest.csv"))["nameseq"].tolist()
     
+    nameseqs = display_names(nameseqs, names_for_run(job_path, st.session_state.get('model')), context=True)
     return features, labels, nameseqs
 
 def scale_features(features):
     """Scale features with caching"""
 
     features = features.copy(deep=False)
-
-    if st.session_state['model'].get('calibration', {}).get('enabled'):
-        pipeline = get_base_pipeline(st.session_state['model']['clf'])
-        values = pipeline[:-1].transform(features.replace([np.inf, -np.inf], np.nan))
-        return st.session_state['model']['scaler'].transform(values)
 
     string_cols = features.select_dtypes(include=["object"]).columns
     if not string_cols.empty:
@@ -224,7 +258,7 @@ def dimensionality_reduction():
 
     with dim_col1:
         # Evaluation set selection
-        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+        df_job_info = pl.read_csv(run_path(st.session_state["job_path"], "job_info.tsv"), separator='\t')
     
         has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
     
@@ -244,7 +278,7 @@ def dimensionality_reduction():
             if evaluation == "Training set":
                 class_label = st.session_state["model"]["train_stats"]["class"].item()
             else:
-                class_label = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))["class"].item()
+                class_label = pd.read_csv(run_path(st.session_state["job_path"], "test_stats.csv"))["class"].item()
             labels["label"] = class_label
             
         labels = labels["label"].tolist()
@@ -342,6 +376,8 @@ def create_correlation_heatmap(corr_matrix):
 
 def feature_correlation():
 
+    show_feature_name_note()
+
     with st.expander("What **Feature Correlation** shows"):
         st.info(
             """
@@ -360,7 +396,7 @@ def feature_correlation():
 
     with col1:
         df_job_info = pl.read_csv(
-            os.path.join(st.session_state["job_path"], "job_info.tsv"),
+            run_path(st.session_state["job_path"], "job_info.tsv"),
             separator="\t"
         )
 
@@ -384,20 +420,12 @@ def feature_correlation():
     else:
         features, _, _ = load_features(st.session_state["job_path"], False)
 
-    if st.session_state['model'].get('calibration', {}).get('enabled'):
-        pipeline = get_base_pipeline(st.session_state['model']['clf'])
-        features = pd.DataFrame(pipeline[:-1].transform(features.replace([np.inf, -np.inf], np.nan)),
-                                columns=features.columns)
-    else:
-        string_cols = features.select_dtypes(include=["object"]).columns
-        if not string_cols.empty:
-            features = features.copy(deep=False)
-            features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
-        if "imputer" in st.session_state["model"]:
-            features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
-
-    if "mapper" in st.session_state:
-        features = features.rename(columns=st.session_state["mapper"])
+    string_cols = features.select_dtypes(include=["object"]).columns
+    if not string_cols.empty:
+        features = features.copy(deep=False)
+        features[string_cols] = st.session_state["model"]["ordinal_encoder"].transform(features[string_cols])
+    if "imputer" in st.session_state["model"]:
+        features = pd.DataFrame(st.session_state["model"]["imputer"].transform(features), columns=features.columns)
 
     feature_names = list(features.columns)
 
@@ -445,18 +473,24 @@ def load_features(job_path, training):
             labels = pd.DataFrame(st.session_state["model"]["train_labels"], columns=["label"])
             nameseqs = st.session_state["model"]["nameseq_train"]
         else:
-            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_train.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltrain.csv"))
-            nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtrain.csv"))
+            features = pd.read_csv(run_path(job_path, "best_descriptors/best_train.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/flabeltrain.csv"))
+            nameseqs = pd.read_csv(run_path(job_path, "feat_extraction/fnameseqtrain.csv"))
     else:
-        if os.path.exists(os.path.join(job_path, "feat_extraction/test_labels.csv")):
-            features = pd.read_csv(os.path.join(job_path, "feat_extraction/test.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/test_labels.csv"))
+        if os.path.exists(run_path(job_path, "feat_extraction/test_labels.csv")):
+            features = pd.read_csv(run_path(job_path, "feat_extraction/test.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/test_labels.csv"))
         else:
-            features = pd.read_csv(os.path.join(job_path, "best_descriptors/best_test.csv"))
-            labels = pd.read_csv(os.path.join(job_path, "feat_extraction/flabeltest.csv"))
-        nameseqs = pd.read_csv(os.path.join(job_path, "feat_extraction/fnameseqtest.csv"))
+            features = pd.read_csv(run_path(job_path, "best_descriptors/best_test.csv"))
+            labels = pd.read_csv(run_path(job_path, "feat_extraction/flabeltest.csv"))
+        nameseqs = pd.read_csv(run_path(job_path, "feat_extraction/fnameseqtest.csv"))
 
+    rows = names_for_run(job_path, st.session_state.get('model'))
+    if isinstance(nameseqs, pd.DataFrame):
+        nameseqs = nameseqs.copy()
+        nameseqs['nameseq'] = display_names(nameseqs['nameseq'], rows, context=True)
+    else:
+        nameseqs = np.asarray(display_names(nameseqs, rows, context=True))
     return features, labels, nameseqs
 
 def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text, selected_feature):
@@ -484,7 +518,9 @@ def create_distplot(fig_data, unique_labels, bin_edges, color_map, fig_rug_text,
 
 
 def feature_distribution():
-    
+
+    show_feature_name_note()
+
     with st.expander("What **Feature Distribution** shows"):
         st.info(
             """
@@ -505,7 +541,7 @@ def feature_distribution():
 
     try:
         # Determine evaluation set options
-        df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+        df_job_info = pl.read_csv(run_path(st.session_state["job_path"], "job_info.tsv"), separator='\t')
         
         has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
         
@@ -525,9 +561,6 @@ def feature_distribution():
         if len(string_cols) > 0:
             features = features.drop(columns=string_cols)
 
-        if "mapper" in st.session_state:
-            features = features.rename(columns=st.session_state["mapper"])
-
         col1, col2 = st.columns(2)
 
         # Select feature to plot
@@ -541,7 +574,7 @@ def feature_distribution():
             if evaluation == "Training set":
                 class_label = st.session_state["model"]["train_stats"]["class"].item()
             else:
-                class_label = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))["class"].item()
+                class_label = pd.read_csv(run_path(st.session_state["job_path"], "test_stats.csv"))["class"].item()
             labels["label"] = class_label
         
         unique_labels = labels["label"].unique()
@@ -710,95 +743,79 @@ def calculate_metrics_from_confusion_matrix(matrix_path):
 
 def sequence_overlap_report():
     """Display job-local audits, never substitute a loaded model's old test audit."""
-    path = os.path.join(st.session_state['job_path'], 'homology')
+    path = run_path(st.session_state['job_path'], 'homology')
     homology_path = os.path.join(path, 'homology_report.json')
     overlap_path = os.path.join(path, 'overlap_report.json')
     if not os.path.isfile(homology_path) and not os.path.isfile(overlap_path):
         st.caption('Sequence overlap audit: not assessed for this job.')
         return
-    with st.expander('Sequence separation and train–test overlap', expanded=True):
-        if os.path.isfile(homology_path):
-            with open(homology_path) as handle:
-                report = json.load(handle)
+    report, audit = {}, {}
+    if os.path.isfile(homology_path):
+        with open(homology_path) as handle:
+            report = json.load(handle)
+    if os.path.isfile(overlap_path):
+        with open(overlap_path) as handle:
+            audit = json.load(handle)
+    with st.container(border=True):
+        st.markdown('**Sequence overlap**')
+        if report:
             if report.get('enabled'):
-                st.write(f'**CV separation:** {report["groups"]} groups across {report["training_samples"]} training sequences.')
-                st.caption(f'MMseqs2 {report["mmseqs_version"]}; identity ≥{report["minimum_identity"] * 100:g}%; '
-                           f'coverage ≥{report["minimum_query_and_target_coverage"] * 100:g}% of both sequences.')
-                st.write(f'Detected cross-fold violations: {report["detected_cross_fold_violations"]}')
+                st.write(f'Homology-aware CV · identity ≥{report["minimum_identity"] * 100:g}% · '
+                         f'coverage ≥{report["minimum_query_and_target_coverage"] * 100:g}% of both sequences.')
+                if report.get('detected_cross_fold_violations'):
+                    st.warning(f'Detected cross-fold violations: {report["detected_cross_fold_violations"]}.')
+            else:
+                st.write('Standard CV · homology-aware grouping disabled.')
+        else:
+            st.caption('CV separation: not recorded for this job.')
+        if audit.get('test_samples'):
+            exact_column, similar_column = st.columns(2)
+            exact_column.metric('Exact matches',
+                                f'{audit["exact_test_sequences"]}/{audit["test_samples"]} ({audit["exact_test_percent"]:.1f}%)',
+                                help='External-test sequences identical to at least one training sequence.')
+            assessed = audit.get('similarity_status') == 'assessed'
+            similar_column.metric('Similar matches',
+                                  (f'{audit["similar_test_sequences_including_exact"]}/{audit["test_samples"]} '
+                                   f'({audit["similar_test_percent_including_exact"]:.1f}%)') if assessed else 'Not assessed',
+                                  help='External-test sequences matching training at the audit thresholds; includes exact matches.')
+            if assessed:
+                st.caption(f'Similar matches include exact matches · audit identity ≥{audit["minimum_identity"] * 100:g}% · '
+                           f'coverage ≥{audit["minimum_query_and_target_coverage"] * 100:g}% of both sequences.')
+            if audit.get('exact_test_sequences') or (assessed and audit.get('similar_test_sequences_including_exact')):
+                st.warning('Train–test overlap detected; external scores may benefit from similarity. Original splits were preserved.')
+            else:
+                st.caption('No qualifying matches detected in the checks performed; this does not rule out homology.')
+            if audit.get('conflicting_exact_pairs'):
+                st.warning(f'Conflicting labels in {audit["conflicting_exact_pairs"]} exact matched pairs.')
+        else:
+            st.caption('Train–test overlap: not assessed' +
+                       (' — no external test sequences supplied.' if audit else ' for this job.'))
+        with st.expander('Details and downloads', expanded=False):
+            if report.get('enabled'):
+                st.write(f'{report["groups"]} groups · {report["training_samples"]} sequences · '
+                         f'{report["detected_cross_fold_violations"]} cross-fold violations')
                 st.dataframe(pd.DataFrame(report['fold_summary']['10']), hide_index=True)
-                st.info('Post-selection homology-aware CV is not nested evaluation of the entire AutoML search. '
-                        'No qualifying matches detected does not prove absence of homology.')
-                st.caption(report['limitation'])
-                for filename in ('homology_report.json', 'fold_assignments.csv'):
-                    with open(os.path.join(path, filename), 'rb') as handle:
+                st.caption('CV is post-selection; undetected similarity may remain.')
+            if audit:
+                definition = audit['exact_definition']
+                if definition == 'equal full-length uppercase sequences; nucleotide U normalized to T; forward orientation':
+                    definition = 'full-length match after uppercasing and nucleotide U→T; forward strand.'
+                st.caption('Exact: ' + definition)
+                status = audit.get('label_conflicts_status', 'not recorded')
+                status = {'assessed': 'checked',
+                          'not assessed for pairs with unknown labels': 'incomplete (missing labels)'}.get(status, status)
+                st.caption('Label conflicts: ' + status)
+            for filename in ('fold_assignments.csv', 'overlap_matches.csv'):
+                filename_path = os.path.join(path, filename)
+                if os.path.isfile(filename_path):
+                    with open(filename_path, 'rb') as handle:
                         st.download_button(f'Download {filename}', handle.read(), file_name=filename,
                                            key=f'homology_{filename}')
-            else:
-                st.write('**CV separation:** homology-aware grouping disabled.')
-        if os.path.isfile(overlap_path):
-            with open(overlap_path) as handle:
-                audit = json.load(handle)
-            st.write('**External-test overlap**')
-            if audit['test_samples']:
-                st.write(f'Exact matches: {audit["exact_test_sequences"]}/{audit["test_samples"]} '
-                         f'({audit["exact_test_percent"]:.1f}%).')
-                if audit['similarity_status'] == 'assessed':
-                    st.write(f'Qualifying similarity matches, including exact: '
-                             f'{audit["similar_test_sequences_including_exact"]}/{audit["test_samples"]} '
-                             f'({audit["similar_test_percent_including_exact"]:.1f}%).')
-                else:
-                    st.caption('Near-duplicate similarity: not assessed.')
-                st.write(f'Conflicting labels among exact matched pairs: {audit["conflicting_exact_pairs"]}.')
-                st.caption(audit.get('label_conflicts_status', ''))
-                if audit['exact_test_sequences'] or audit['similar_test_sequences_including_exact']:
-                    st.warning('Detected train–test sequence overlap. External scores may benefit from similarity; '
-                               'original train/test membership was preserved.')
-                else:
-                    st.caption('No qualifying matches detected in the checks performed.')
-                st.caption(audit['exact_definition'])
-            else:
-                st.caption('Not assessed: no external test sequences supplied.')
-            for filename in ('overlap_report.json', 'overlap_matches.csv'):
-                with open(os.path.join(path, filename), 'rb') as handle:
-                    st.download_button(f'Download {filename}', handle.read(), file_name=filename,
-                                       key=f'homology_{filename}')
-
-
-def probability_calibration_report():
-    model = st.session_state.get('model', {})
-    if not model.get('calibration', {}).get('enabled'):
-        return
-    with st.expander('Probability calibration'):
-        st.json(model['calibration'])
-        st.caption('Sigmoid calibration uses training data only. Lower log loss and Brier score are better. '
-                   'CV calibrators are fitted inside each reporting fold, but AutoML selection is not nested. '
-                   'Calibration may change predicted classes; improvement is not guaranteed.')
-        path = os.path.join(st.session_state['job_path'], 'calibration')
-        for prefix, title in (('cv', 'Post-selection cross-validation'), ('external', 'External test set')):
-            filename = os.path.join(path, f'{prefix}_probability_metrics.json')
-            if not os.path.isfile(filename):
-                continue
-            st.write(title)
-            with open(filename) as handle:
-                st.json(json.load(handle))
-            bins = pd.read_csv(os.path.join(path, f'{prefix}_reliability.csv'))
-            points = bins[bins['count'] > 0]
-            fig = px.line(points, x='mean_probability', y='observed_frequency',
-                          color='label', line_dash='mode', markers=True, hover_data=['count'])
-            fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=1, line=dict(dash='dash'))
-            fig.update_xaxes(range=[0, 1])
-            fig.update_yaxes(range=[0, 1])
-            st.plotly_chart(fig, use_container_width=True)
-            for suffix in ('probability_metrics.json', 'reliability.csv', 'reliability.svg'):
-                name = f'{prefix}_{suffix}'
-                with open(os.path.join(path, name), 'rb') as handle:
-                    st.download_button(f'Download {name}', handle.read(), file_name=name, key=f'calibration_{name}')
 
 
 def performance_metrics(task):
 
     sequence_overlap_report()
-    probability_calibration_report()
 
     with st.expander("What **Performance Metrics** shows"):
         st.info(
@@ -824,7 +841,7 @@ def performance_metrics(task):
             """
         )
 
-    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+    df_job_info = pl.read_csv(run_path(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
     has_test_set = True if df_job_info["testing_set"].item() == "Test set" else False
     
@@ -846,7 +863,7 @@ def performance_metrics(task):
             if "model" in st.session_state:
                 df_cv = st.session_state["model"]["cross_validation"]
             else:
-                df_cv = pd.read_csv(os.path.join(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
+                df_cv = pd.read_csv(run_path(st.session_state["job_path"], "training_kfold(10)_metrics.csv"))
 
             st.caption("10-fold cross-validation — mean ± standard deviation")
 
@@ -889,7 +906,7 @@ def performance_metrics(task):
 
         else:
             if task == "Classification":
-                df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+                df_report = pd.read_csv(run_path(st.session_state["job_path"], "metrics_test.csv"))
                 df_report = df_report.rename(columns={"Unnamed: 0": ""})
 
                 # Format numeric columns except "support"
@@ -903,9 +920,9 @@ def performance_metrics(task):
 
                 st.dataframe(df_report, hide_index=True, use_container_width=True)
 
-                path_metrics_other = os.path.join(os.path.join(st.session_state["job_path"], "metrics_other.csv"))
+                path_metrics_other = os.path.join(run_path(st.session_state["job_path"], "metrics_other.csv"))
 
-                metric_dict = calculate_metrics_from_confusion_matrix(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+                metric_dict = calculate_metrics_from_confusion_matrix(run_path(st.session_state["job_path"], "test_confusion_matrix.csv"))
 
                 if "Sn_macro_test" in metric_dict:
                     c1, c2 = st.columns(2)
@@ -928,7 +945,7 @@ def performance_metrics(task):
                     st.metric("AUC", f"{auc_value:.3f}", help="Area Under the ROC Curve")
 
             elif task == "Regression":
-                df_report = pd.read_csv(os.path.join(st.session_state["job_path"], "metrics_test.csv"))
+                df_report = pd.read_csv(run_path(st.session_state["job_path"], "metrics_test.csv"))
 
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("MAE", f"{df_report.loc[df_report['Metric'] == 'MAE', 'Value'].iloc[0]:.3f}", help="Mean Absolute Error")
@@ -943,9 +960,9 @@ def performance_metrics(task):
                 if "model" in st.session_state:
                     df = st.session_state["model"]["confusion_matrix"]
                 else:
-                    df = pd.read_csv(os.path.join(st.session_state["job_path"], "training_confusion_matrix.csv"))
+                    df = pd.read_csv(run_path(st.session_state["job_path"], "training_confusion_matrix.csv"))
             else:
-                df = pd.read_csv(os.path.join(st.session_state["job_path"], "test_confusion_matrix.csv"))
+                df = pd.read_csv(run_path(st.session_state["job_path"], "test_confusion_matrix.csv"))
 
             fig = create_confusion_matrix_figure(df)
 
@@ -954,9 +971,16 @@ def performance_metrics(task):
 
 def load_predictions(job_path):
     """Load and preprocess predictions data with caching"""
-    predictions = pd.read_csv(os.path.join(job_path, "test_predictions.csv"))
-    predictions.iloc[:,1:-1] = predictions.iloc[:,1:-1] * 100
+    predictions = pd.read_csv(run_path(job_path, "test_predictions.csv"), keep_default_na=False,
+                              dtype={key: str for key in ('nameseq', 'internal_id', 'original_header', 'source_file', 'source_id')})
+    labels = probability_columns(predictions)
+    predictions[labels] = predictions[labels] * 100
     return predictions
+
+
+def probability_columns(predictions):
+    # Class probabilities precede 'prediction'; name metadata follows it.
+    return list(predictions.columns[1:predictions.columns.get_loc('prediction')])
 
 def show_predictions():
 
@@ -981,7 +1005,10 @@ def show_predictions():
 
     # Load data with caching
     predictions = load_predictions(st.session_state["job_path"])
-    labels = predictions.columns[1:-1]
+    labels = probability_columns(predictions)
+    hidden_columns = ['internal_id', 'original_header', 'source_id', 'record_number']
+    if 'source_file' in predictions and predictions['source_file'].nunique() <= 1:
+        hidden_columns.append('source_file')
     
     # Create column config once
     column_config = {
@@ -996,19 +1023,23 @@ def show_predictions():
     # Display with loading indicator
     with st.spinner('Displaying predictions...'):
         st.dataframe(
-            predictions.rename(columns={"nameseq": "Sample name"}),
+            predictions.drop(columns=hidden_columns, errors='ignore').rename(columns={"nameseq": "Sequence name"}),
             hide_index=True,
             height=500,
             column_config=column_config,
             use_container_width=True
         )
+    with open(run_path(st.session_state['job_path'], 'test_predictions.csv'), 'rb') as handle:
+        st.download_button('Download predictions (CSV)', handle.read(), file_name='test_predictions.csv',
+                           key='predictions_csv',
+                           help='Full saved predictions, including sequence metadata. Class probabilities use the original 0–1 scale.')
 
 def load_feature_importance(job_path):
     """Load and cache feature importance data"""
     if "model" in st.session_state:
         df_feat = st.session_state["model"]["feature_importance"]
     else:
-        df_feat = pd.read_csv(os.path.join(job_path, "feature_importance.tsv"))
+        df_feat = pd.read_csv(run_path(job_path, "feature_importance.tsv"))
 
     return df_feat.copy()
 
@@ -1034,8 +1065,7 @@ def get_shap_data(max_samples=500):
     Prepare background data for SHAP with subsampling.
     """
     X = st.session_state["model"]["train"]
-    calibrated = st.session_state['model'].get('calibration', {}).get('enabled')
-    if 'scaler' in st.session_state['model'] or 'imputer' in st.session_state['model'] or calibrated:
+    if 'scaler' in st.session_state['model'] or 'imputer' in st.session_state['model']:
         X = X.set_axis(pd.RangeIndex(len(X)), copy=False)
     # Fitted transformations act row-by-row. Select the same deterministic rows
     # first, avoiding a full-matrix copy/transformation for a 500-row plot.
@@ -1044,26 +1074,28 @@ def get_shap_data(max_samples=500):
     X = X.copy()
     sampled_index = X.index
 
-    if calibrated:
-        pipeline = get_base_pipeline(st.session_state['model']['clf'])
-        X = pd.DataFrame(pipeline[:-1].transform(X.replace([np.inf, -np.inf], np.nan)), columns=X.columns)
-    elif "imputer" in st.session_state["model"]:
+    if "imputer" in st.session_state["model"]:
         X = pd.DataFrame(
             st.session_state["model"]["imputer"].transform(X),
             columns=X.columns
         )
 
-    if "scaler" in st.session_state["model"] and not calibrated:
+    if "scaler" in st.session_state["model"]:
         X = st.session_state["model"]["scaler"].transform(X)
         X = pd.DataFrame(X, columns=st.session_state["model"]["train"].columns)
 
-    if "mapper" in st.session_state:
-        X = X.rename(columns=st.session_state["mapper"])
-
     # Previous code rebuilt frames with a RangeIndex before sampling.
     # Preserve those positional row labels in the explanation display.
-    if "scaler" in st.session_state["model"] or "imputer" in st.session_state["model"] or calibrated:
+    if "scaler" in st.session_state["model"] or "imputer" in st.session_state["model"]:
         X.index = sampled_index
+
+    model = st.session_state['model']
+    if 'sequence_names' in model and model['sequence_names']:
+        # Training frames use positional indices. Relabel only the explanation
+        # copy; the selected rows and numerical values remain unchanged.
+        if all(isinstance(index, (int, np.integer)) and 0 <= index < len(model['nameseq_train']) for index in sampled_index):
+            ids = [model['nameseq_train'][index] for index in sampled_index]
+            X.index = display_names(ids, model['sequence_names'], context=True)
 
     return X
 
@@ -1074,7 +1106,7 @@ def compute_shap_values(model, X):
     - Binary / regression: (n_samples, n_features)
     - Multiclass: (n_samples, n_features, n_classes)
     """
-    explainer = shap.TreeExplainer(get_base_pipeline(model).named_steps['clf'])
+    explainer = shap.TreeExplainer(model.named_steps['clf'])
     shap_values = explainer.shap_values(X)
 
     # --- FIX multiclass output ---
@@ -1101,8 +1133,8 @@ def shap_global_importance(shap_values, X):
     )
 
 def feature_importance():
-    if st.session_state.get('model', {}).get('calibration', {}).get('enabled'):
-        st.caption('Feature importance and SHAP explain the underlying classifier, not the sigmoid calibration mapping.')
+
+    show_feature_name_note()
 
     with st.expander("What **Feature Importance** shows"):
         st.info(
@@ -1139,9 +1171,6 @@ def feature_importance():
 
     if feat_type == "Tree-based":
         df = load_feature_importance(st.session_state["job_path"])
-
-        if "mapper" in st.session_state:
-            df["Feature"] = df["Feature"].replace(st.session_state["mapper"])
 
         col1, col2 = st.columns(2)
         
@@ -1220,7 +1249,7 @@ def model_information(data_type, task):
             """
         )
 
-    df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+    df_job_info = pl.read_csv(run_path(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
     has_test_set = True if df_job_info["testing_set"].item() != "No test set" else False
 
@@ -1288,35 +1317,35 @@ def model_information(data_type, task):
 
         with col2:
             st.markdown("**Extracted features**", help="Here you can download the features extracted from the submitted datasets. Please note that for larger models from the repository, the process may take a little longer.")
+            show_feature_name_note()
 
             if st.button("Prepare datasets for download", use_container_width=True):
                 with st.spinner("Compressing datasets..."):
+                    sequence_names = names_for_run(st.session_state['job_path'], st.session_state['model'])
                     buf_train = io.BytesIO()
                     with gzip.open(buf_train, mode="wt", newline="") as gz:
                         writer = csv.writer(gz)
-                        renamed_columns = [
-                            st.session_state["mapper"].get(col, col)
-                            for col in st.session_state["model"]["train"].columns
-                        ]
-                        writer.writerow(["Sample name"] + renamed_columns + ["label"])
+                        feature_columns = list(st.session_state["model"]["train"].columns)
+                        writer.writerow(["Sequence name", "Internal ID", "Original header", "Source file", "Source ID", "Record number"] + feature_columns + ["label"])
                         for name, row, label in zip(
                             st.session_state["model"]["nameseq_train"],
                             st.session_state["model"]["train"].itertuples(index=False),
                             st.session_state["model"]["train_labels"],
                         ):
-                            writer.writerow([name, *row, label])
+                            metadata = sequence_names.get(str(name), {})
+                            writer.writerow([metadata.get('original_id', name), name, *[metadata.get(field, '') for field in ('original_header', 'source_file', 'source_id', 'record_number')], *row, label])
                     st.session_state["_dl_train"] = buf_train.getvalue()
 
                     if has_test_set:
-                        test_fnameseq = os.path.join(
+                        test_fnameseq = run_path(
                             st.session_state["job_path"],
                             "feat_extraction/fnameseqtest.csv",
                         )
-                        test_features = os.path.join(
+                        test_features = run_path(
                             st.session_state["job_path"],
                             "best_descriptors/best_test.csv",
                         )
-                        test_labels = os.path.join(
+                        test_labels = run_path(
                             st.session_state["job_path"],
                             "feat_extraction/flabeltest.csv",
                         )
@@ -1337,17 +1366,14 @@ def model_information(data_type, task):
                                 test_feature_header = next(reader_feat)
                                 next(reader_label, None)
 
-                                renamed_test_columns = [
-                                    st.session_state["mapper"].get(col, col)
-                                    for col in test_feature_header
-                                ]
                                 writer.writerow(
-                                    ["Sample name"] + renamed_test_columns + ["label"]
+                                    ["Sequence name", "Internal ID", "Original header", "Source file", "Source ID", "Record number"] + test_feature_header + ["label"]
                                 )
                                 for name_row, feat_row, label_row in zip(
                                     reader_name, reader_feat, reader_label
                                 ):
-                                    writer.writerow([name_row[0], *feat_row, label_row[0]])
+                                    metadata = sequence_names.get(name_row[0], {})
+                                    writer.writerow([metadata.get('original_id', name_row[0]), name_row[0], *[metadata.get(field, '') for field in ('original_header', 'source_file', 'source_id', 'record_number')], *feat_row, label_row[0]])
                         st.session_state["_dl_test"] = buf_test.getvalue()
 
                     st.success("Datasets compressed successfully!")
@@ -1385,7 +1411,7 @@ def model_information(data_type, task):
             if "model" in st.session_state:
                 df_descriptors = st.session_state["model"]["descriptors"]
             else:
-                path_descriptors = os.path.join(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
+                path_descriptors = run_path(st.session_state["job_path"], "best_descriptors/selected_descriptors.csv")
                 df_descriptors = pd.read_csv(path_descriptors)
 
             # Replace values
@@ -1516,8 +1542,8 @@ def derive_key_from_password(password: str, salt: bytes, iterations: int = 39000
     return key
 
 def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) -> bool:
-    enc_path = os.path.join(job_path, "job_archive.enc")
-    salt_path = os.path.join(job_path, "job_salt.bin")
+    enc_path = run_path(job_path, "job_archive.enc")
+    salt_path = run_path(job_path, "job_salt.bin")
 
     with open(salt_path, "rb") as f:
         salt = f.read()
@@ -1542,6 +1568,10 @@ def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) 
     except (tarfile.TarError, OSError):
         return False
 
+    # Packaging-inclusive metadata is necessarily outside the encrypted archive.
+    receipt = os.path.join(job_path, 'execution_summary.json')
+    if os.path.isfile(receipt):
+        shutil.copyfile(receipt, os.path.join(target_extract_path, 'execution_summary.json'))
     return True
 
 @st.fragment(run_every=5)
@@ -1621,7 +1651,7 @@ def live_log_viewer(job_id):
         st.info(f"Job is queued at position #{position}. Waiting to start...")
     elif status == "running":
         st.info("Job is currently running...")
-        log_path = os.path.join(predict_path, job_id, "subprocess.log")
+        log_path = run_path(os.path.join(predict_path, job_id), "subprocess.log")
         if os.path.exists(log_path):
             with open(log_path, "r") as f:
                 log_content = f.read()
@@ -1712,8 +1742,8 @@ def runUI():
                     st.session_state.pop("watching_job_id", None)
                     _cleanup_previous_temp()
 
-                    enc_path = os.path.join(job_path, "job_archive.enc")
-                    salt_path = os.path.join(job_path, "job_salt.bin")
+                    enc_path = run_path(job_path, "job_archive.enc")
+                    salt_path = run_path(job_path, "job_salt.bin")
 
                     if os.path.exists(enc_path) and os.path.exists(salt_path):
                         if password:
@@ -1753,7 +1783,7 @@ def runUI():
                     st.info("Job failed. Try again.")
             else:
                 st.session_state.pop("watching_job_id", None)
-                job_path = os.path.join(dataset_path, job_id,  "runs", "run_1")
+                job_path = run_path(dataset_path, job_id,  "runs", "run_1")
 
                 if os.path.exists(job_path):
                     st.session_state["job_path"] = job_path
@@ -1769,7 +1799,7 @@ def runUI():
         if "job_path" in st.session_state:
             _job_banner = st.empty()
 
-            path_model = os.path.join(st.session_state["job_path"], "trained_model.sav")
+            path_model = run_path(st.session_state["job_path"], "trained_model.sav")
 
             fingerprint = model_fingerprint(path_model) if os.path.isfile(path_model) else None
             if (st.session_state.get("_loaded_job_path") != st.session_state["job_path"]
@@ -1781,12 +1811,14 @@ def runUI():
             if os.path.exists(path_model):
                 if "model" not in st.session_state:
                     with st.spinner("Loading trained model..."):
-                        st.session_state["model"] = load_model(path_model, mmap_mode='r')
+                        st.session_state["model"] = load_model(path_model)
                 model = st.session_state['model']
+                validate_model_support(model)
+                show_execution_performance(st.session_state['job_path'])
                 if 'train_stats' in model:
                     train_stats = model['train_stats']
                 else:
-                    train_stats = pd.read_csv(os.path.join(st.session_state['job_path'], 'train_stats.csv'))
+                    train_stats = pd.read_csv(run_path(st.session_state['job_path'], 'train_stats.csv'))
             else:
                 st.error('The trained model file is missing from this job.')
                 return
@@ -1813,13 +1845,7 @@ def runUI():
                 unsafe_allow_html=True,
             )
 
-            if "mapper" not in st.session_state:
-                if data_type == "DNA/RNA":
-                    st.session_state["mapper"] = joblib.load("dict_nt.pkl")
-                else:
-                    st.session_state["mapper"] = joblib.load("dict_aa.pkl")
-
-            df_job_info = pl.read_csv(os.path.join(st.session_state["job_path"], "job_info.tsv"), separator='\t')
+            df_job_info = pl.read_csv(run_path(st.session_state["job_path"], "job_info.tsv"), separator='\t')
 
             with st.container(border=True):
                 st.markdown("**Summary Statistics**")
@@ -1884,7 +1910,7 @@ def runUI():
 
                 if df_job_info["testing_set"].item() != "No test set":
                     st.markdown("**Test/Prediction set**")
-                    test_stats = pd.read_csv(os.path.join(st.session_state["job_path"], "test_stats.csv"))
+                    test_stats = pd.read_csv(run_path(st.session_state["job_path"], "test_stats.csv"))
                     test_stats_formatted = test_stats.style.format(thousands=",")
                     st.dataframe(test_stats_formatted, hide_index=True, use_container_width=True)
 

@@ -10,6 +10,8 @@ import math
 import re
 import shutil
 import subprocess
+from bioautoml.execution import timed
+from bioautoml.sequence_names import sequence_id, source_info
 import tempfile
 import time
 import warnings
@@ -133,10 +135,9 @@ def read_sequences(files, labels, split, data_type, task):
     records = []
     seen = set()
     for filename, label in sorted(zip(files, labels), key=lambda pair: (str(pair[1]), str(Path(pair[0]).resolve()))):
-        source = re.sub(r'[^A-Za-z0-9_.-]+', '_', Path(filename).stem)
-        set_name = re.sub(r'[^A-Za-z0-9_.-]+', '_', f'{split}_{label}').strip('_')
+        source = source_info(filename, f'{split}_{label}')
         for index, record in enumerate(SeqIO.parse(filename, 'fasta')):
-            name = f'pre_{set_name}_{source}_{index}_{record.name}'
+            name = sequence_id(filename, f'{split}_{label}', index, record.name, source=source)
             if name in seen:
                 raise ValueError(f'Ambiguous source-qualified sequence identifier: {name}')
             seen.add(name)
@@ -149,6 +150,8 @@ def read_sequences(files, labels, split, data_type, task):
             if task == 1 and target is not None:
                 target = str(float(record.id.split('|')[-1]))
             records.append({'sequence_id': name, 'original_id': record.id,
+                            'original_header': record.description, 'record_number': index + 1,
+                            'source_id': source['source_id'],
                             'source': Path(filename).name, 'sequence': sequence, 'label': target})
     return sorted(records, key=lambda record: record['sequence_id'])
 
@@ -224,6 +227,7 @@ def search_sequences(queries, targets, data_type, output, n_cpu, identity=DEFAUL
                 print(f'MMseqs2 {mode}: ignored {empty_alignments} zero-length alignments.', flush=True)
 
 
+@timed('homology_grouping')
 def create_homology_report(train, data_type, task, seed, output, n_cpu, identity=DEFAULT_IDENTITY, coverage=DEFAULT_COVERAGE):
     """Create groups from training-only similarity links, and freeze both CVs."""
     started = time.monotonic()
@@ -257,6 +261,8 @@ def create_homology_report(train, data_type, task, seed, output, n_cpu, identity
     if task == 1:
         y = np.asarray(y, dtype=float)
     rows = [{'sequence_id': record['sequence_id'], 'original_id': record['original_id'],
+             'original_header': record.get('original_header', record['original_id']),
+             'source_id': record.get('source_id', ''), 'record_number': record.get('record_number', ''),
              'source': record['source'], 'label': record['label'], 'group_id': groups[i],
              'sequence_sha256': hashlib.sha256(record['sequence'].encode()).hexdigest()}
             for i, record in enumerate(train)]
@@ -306,6 +312,7 @@ def get_homology_folds(report, sequence_ids, task, seed, n_splits=5):
     return [(np.flatnonzero(assignment != fold), np.flatnonzero(assignment == fold)) for fold in range(n_splits)]
 
 
+@timed('overlap_audit')
 def audit_overlap(train, test, data_type, enabled, output, n_cpu, identity=DEFAULT_IDENTITY, coverage=DEFAULT_COVERAGE):
     """Audit original inputs without modifying groups, training or test membership."""
     started = time.monotonic()
@@ -319,8 +326,15 @@ def audit_overlap(train, test, data_type, enabled, output, n_cpu, identity=DEFAU
     exact_pairs = set()
     fields = ['test_sequence_id', 'train_sequence_id', 'exact', 'identity', 'test_coverage',
               'train_coverage', 'label_conflict']
+    name_fields = ['test_original_id', 'train_original_id', 'test_source', 'train_source',
+                   'test_record_number', 'train_record_number']
+    def name_values(query, target):
+        return [test[query].get('original_id', test[query]['sequence_id']),
+                train[target].get('original_id', train[target]['sequence_id']),
+                test[query].get('source', ''), train[target].get('source', ''),
+                test[query].get('record_number', ''), train[target].get('record_number', '')]
     with (output / 'overlap_matches.csv').open('w') as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields + name_fields)
         writer.writeheader()
         for query, record in enumerate(test):
             for target in exact_index.get(record['sequence'], []):
@@ -329,15 +343,15 @@ def audit_overlap(train, test, data_type, enabled, output, n_cpu, identity=DEFAU
                 conflicts += int(bool(conflict))
                 exact_queries.add(query)
                 exact_pairs.add((query, target))
-                writer.writerow(dict(zip(fields, [record['sequence_id'], train[target]['sequence_id'],
-                                                   True, 1.0, 1.0, 1.0, conflict])))
+                writer.writerow(dict(zip(fields + name_fields, [record['sequence_id'], train[target]['sequence_id'],
+                                                   True, 1.0, 1.0, 1.0, conflict] + name_values(query, target))))
         if enabled and test:
             similar_queries.update(exact_queries)
             for query, target, match_identity, qcov, tcov in search_sequences(test, train, data_type, output / 'test_search', n_cpu, identity, coverage):
                 similar_queries.add(query)
                 if (query, target) not in exact_pairs:
-                    writer.writerow(dict(zip(fields, [test[query]['sequence_id'], train[target]['sequence_id'],
-                                                       False, match_identity, qcov, tcov, 'not assessed for nonidentical sequences'])))
+                    writer.writerow(dict(zip(fields + name_fields, [test[query]['sequence_id'], train[target]['sequence_id'],
+                                                       False, match_identity, qcov, tcov, 'not assessed for nonidentical sequences'] + name_values(query, target))))
     report = {'test_samples': len(test), 'training_samples': len(train),
               'exact_status': 'assessed' if test else 'not assessed: no external test sequences',
               'similarity_status': 'assessed' if enabled and test else 'not assessed',

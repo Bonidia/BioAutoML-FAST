@@ -1,3 +1,7 @@
+from bioautoml.model_artifacts import validate_model_support
+from bioautoml.sequence_names import read_names, annotate_predictions
+from bioautoml.execution import run_path, timed, start_cli
+from bioautoml.execution import phase, run_root
 import warnings
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings('ignore')
@@ -38,8 +42,6 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, root_mean_s
 from sklearn.metrics import median_absolute_error, r2_score
 from bioautoml.feature_execution import get_available_cpus
 from bioautoml.homology import get_homology_folds, add_homology_arguments, resolve_homology_arguments, validate_report_settings
-from bioautoml.calibration import (get_base_pipeline, prepare_calibration_folds, make_calibrated_model,
-                         probability_metrics, save_probability_report)
 
 random_seed = 63
 optimization_seed = 63
@@ -191,7 +193,8 @@ def get_cpu_parameters(n_cpu, requested_search_jobs=None):
     model_jobs = max(1, total_cpus // search_jobs)
     return total_cpus, search_jobs, model_jobs
 
-def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=None, calibration_folds=None):
+@timed('optimization_cv')
+def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=None):
     """Run 10-fold cross-validation and write metrics and confusion matrix to CSV.
 
     task=0: classification — binary uses Sn/Sp/AUC/gmean/MCC; multiclass uses macro metrics.
@@ -242,32 +245,7 @@ def evaluate_model_cross(X, y, model, task, output_cross, matrix_output, folds=N
         kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=random_seed)
         if folds is None:
             folds = list(kfold.split(X, y))
-        if calibration_folds is None:
-            scores = cross_validate(model, X, y, cv=folds, scoring=scoring, return_estimator=True)
-        else:
-            from sklearn.metrics import get_scorer
-            folds = calibration_folds['reporting']
-            scores = {f'test_{name}': [] for name in [*scoring, 'Log_loss', 'Brier']}
-            scores['estimator'] = []
-            probabilities = np.empty((len(y), len(lb_encoder.classes_)))
-            raw_probabilities = np.empty_like(probabilities)
-            for number, (train_idx, validation_idx) in enumerate(folds):
-                fitted = make_calibrated_model(model, X, calibration_folds['inner'][number])
-                fitted.fit(X.iloc[train_idx], np.asarray(y)[train_idx])
-                validation = X.iloc[validation_idx]
-                values = fitted.predict_proba(validation)
-                probabilities[validation_idx] = values
-                raw_probabilities[validation_idx] = get_base_pipeline(fitted).predict_proba(validation)
-                for name, scorer in scoring.items():
-                    scorer = get_scorer(scorer) if isinstance(scorer, str) else scorer
-                    scores[f'test_{name}'].append(scorer(fitted, validation, np.asarray(y)[validation_idx]))
-                for name, value in probability_metrics(np.asarray(y)[validation_idx], values).items():
-                    scores[f'test_{name}'].append(value)
-                scores['estimator'].append(fitted)
-            calibration_output = os.path.join(os.path.dirname(output_cross), 'calibration')
-            save_probability_report(y, probabilities, lb_encoder.classes_, calibration_output, 'cv', raw_probabilities)
-            pd.DataFrame(probabilities, columns=lb_encoder.classes_).to_csv(
-                os.path.join(calibration_output, 'cv_probabilities.csv'), index=False)
+        scores = cross_validate(model, X, y, cv=folds, scoring=scoring, return_estimator=True)
 
         save_measures(output_cross, scores)
 
@@ -314,7 +292,7 @@ def features_importance_ensembles(model, features, output_importances):
         Feature names sorted by descending importance
     """
 
-    importances = get_base_pipeline(model).named_steps["clf"].feature_importances_
+    importances = model.named_steps["clf"].feature_importances_
     indices = np.argsort(importances)[::-1]
 
     df = pd.DataFrame({
@@ -345,6 +323,7 @@ def save_prediction(task, prediction, nameseqs, pred_output):
     else:
         preds_df = pd.DataFrame({"nameseq": nameseqs, "prediction": prediction})
 
+    preds_df = annotate_predictions(preds_df, run_root(pred_output))
     preds_df.to_csv(pred_output, index=False)
 
 def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None):
@@ -553,7 +532,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
     final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
     return final_pipeline, best_clf_type
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None, calibrate_probabilities=False):
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None):
     """End-to-end training and prediction pipeline.
 
     When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
@@ -565,14 +544,11 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
     global clf, lb_encoder, ord_encoder
 
-    if calibrate_probabilities and (task != 0 or model):
-        raise ValueError('Probability calibration is an option for new classification training only.')
-    calibrated_prediction = bool(model and model.get('calibration', {}).get('enabled'))
-    if calibrated_prediction and task != 0:
-        raise ValueError('A calibrated classifier cannot be used for regression.')
+    if model:
+        validate_model_support(model)
 
-    if not os.path.exists(output):
-        os.mkdir(output)
+    for directory in ('model', 'results/metrics', 'results/predictions', 'results/descriptors'):
+        os.makedirs(os.path.join(output, directory), exist_ok=True)
 
     if model:
         column_train = model["column_train"]
@@ -589,15 +565,13 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     
     if not model:
         test = validate_feature_alignment(train, train_labels, train_nameseq, test, test_labels, test_nameseq, column_train)
-    raw_train = train.copy() if calibrate_probabilities else None
-    raw_test = test.copy() if (calibrate_probabilities or calibrated_prediction) and isinstance(test, pd.DataFrame) else None
     search_folds, reporting_folds = None, None
     if not model:
         if homology_report:
             search_folds = get_homology_folds(homology_report, train_nameseq, task, random_seed, 5)
             reporting_folds = get_homology_folds(homology_report, train_nameseq, task, random_seed, 10)
             model_dict['homology_report'] = homology_report
-        overlap_path = os.path.join(output, 'homology', 'overlap_report.json')
+        overlap_path = run_path(output, 'homology', 'overlap_report.json')
         if os.path.isfile(overlap_path):
             with open(overlap_path) as handle:
                 model_dict['overlap_report'] = json.load(handle)
@@ -618,7 +592,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         if "label_encoder" in model:
             lb_encoder = model["label_encoder"]
 
-        if "ordinal_encoder" in model and not calibrated_prediction:
+        if "ordinal_encoder" in model:
             ord_encoder = model["ordinal_encoder"]
             # Prediction uses only test rows; do not transform or mutate the
             # training frame retained for the web app's model inspection.
@@ -650,7 +624,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     print('Checking missing values...')
 
     if model:
-        if "imputer" in model and not calibrated_prediction:
+        if "imputer" in model:
             imp = model["imputer"]
             print('Applying SimpleImputer - strategy (mean)...')
 
@@ -671,17 +645,14 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
     """Choosing Classifier """
 
-    calibration_folds = None
-    if calibrate_probabilities:
-        calibration_folds = prepare_calibration_folds(train_labels, random_seed, homology_report, train_nameseq)
-
     if not model:
         sc = StandardScaler()
         model_dict["scaler"] = sc.fit(train)
 
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
-        clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds)
+        with phase('stage_2', 'skipped' if tuning == 0 else 'completed'):
+            clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds)
 
         print('--- Optimization Complete ---')
 
@@ -699,35 +670,17 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     print('Training: post-selection homology-aware CV (10 folds, not nested)...' if homology_report and not model
           else 'Training: StratifiedKFold (cross-validation = 10)...')
     
-    train_output = os.path.join(output, 'training_kfold(10)_metrics.csv')
-    matrix_output = os.path.join(output, 'training_confusion_matrix.csv')
-    importance_output = os.path.join(output, 'feature_importance.tsv')
-    descriptors_output = os.path.join(output, 'best_descriptors/selected_descriptors.csv')
-    model_output = os.path.join(output, 'trained_model.sav')
+    train_output = run_path(output, 'training_kfold(10)_metrics.csv')
+    matrix_output = run_path(output, 'training_confusion_matrix.csv')
+    importance_output = run_path(output, 'feature_importance.tsv')
+    descriptors_output = run_path(output, 'best_descriptors/selected_descriptors.csv')
+    model_output = run_path(output, 'trained_model.sav')
 
     if model:
         clf = model["clf"]
     else:
-        if calibrate_probabilities:
-            calibration_started = time.monotonic()
-            raw_train = raw_train.replace([np.inf, -np.inf], np.nan)
-            evaluate_model_cross(raw_train, train_labels, clf, task, train_output, matrix_output,
-                                 reporting_folds, calibration_folds)
-            calibration_cv_minutes = (time.monotonic() - calibration_started) / 60
-            final_fit_started = time.monotonic()
-            clf = make_calibrated_model(clf, raw_train, calibration_folds['final'])
-            clf.fit(raw_train, train_labels)
-            model_dict['train'] = raw_train
-            model_dict['calibration'] = {'enabled': True, 'method': 'sigmoid', 'ensemble': False,
-                'folds': 5, 'reporting_folds': 10, 'seed': random_seed, 'group_aware': bool(homology_report),
-                'classes': lb_encoder.classes_.tolist(), 'minutes': (time.monotonic() - calibration_started) / 60,
-                'reporting_cv_minutes': calibration_cv_minutes,
-                'final_fit_minutes': (time.monotonic() - final_fit_started) / 60,
-                'evaluation': 'calibration nested within reporting folds; AutoML selection is not nested'}
-            with open(os.path.join(output, 'calibration', 'settings.json'), 'w') as handle:
-                json.dump(model_dict['calibration'], handle, indent=2)
-        else:
-            evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output, reporting_folds)
+        evaluate_model_cross(train, train_labels, clf, task, train_output, matrix_output, reporting_folds)
+        with phase('final_fit'):
             clf.fit(train, train_labels)
         model_dict["clf"] = clf
 
@@ -742,6 +695,8 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         if os.path.exists(descriptors_output):    
             model_dict["descriptors"] = pd.read_csv(descriptors_output)
         model_dict["nameseq_train"] = train_nameseq
+        sequence_names = read_names(output)
+        model_dict["sequence_names"] = {str(key): sequence_names[str(key)] for key in train_nameseq if str(key) in sequence_names}
         
         print('Saving results in ' + train_output + '...')
         print('Saving confusion matrix in ' + matrix_output + '...')
@@ -763,22 +718,17 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
     if os.path.exists(ftest) is True:
         print('Generating Performance Test...')
 
-        if calibrate_probabilities or calibrated_prediction:
-            test = raw_test.replace([np.inf, -np.inf], np.nan)
-
         if task == 0:
-            preds = lb_encoder.inverse_transform(clf.predict(test))
-            probs = clf.predict_proba(test)
-            if (calibrate_probabilities or calibrated_prediction) and len(test_labels) == len(test) and 'Predicted' not in test_labels:
-                save_probability_report(lb_encoder.transform(test_labels), probs, lb_encoder.classes_,
-                                        os.path.join(output, 'calibration'), 'external',
-                                        get_base_pipeline(clf).predict_proba(test))
-            pred_output = os.path.join(output, "test_predictions.csv")
+            with phase('prediction'):
+                preds = lb_encoder.inverse_transform(clf.predict(test))
+                probs = clf.predict_proba(test)
+            pred_output = run_path(output, "test_predictions.csv")
             print('Saving prediction in ' + pred_output + '...')
             save_prediction(task, probs, test_nameseq, pred_output)
         else:
-            preds = clf.predict(test)
-            pred_output = os.path.join(output, 'test_predictions.csv')
+            with phase('prediction'):
+                preds = clf.predict(test)
+            pred_output = run_path(output, 'test_predictions.csv')
             save_prediction(task, preds, test_nameseq, pred_output)
 
         if os.path.exists(ftest_labels) is True and len(np.unique(test_labels)) > 1:
@@ -787,14 +737,14 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
             if task == 0:
                 report = classification_report(test_labels, preds, output_dict=True)
 
-                metrics_output = os.path.join(output, "metrics_test.csv")
+                metrics_output = run_path(output, "metrics_test.csv")
                 print('Saving Metrics - Test set: ' + metrics_output + '...')
                 
                 metr_report = pd.DataFrame(report).transpose()
                 metr_report.to_csv(metrics_output)
                 
                 if len(lb_encoder.classes_) <= 2:
-                    metrics_other_output = os.path.join(output, "metrics_other.csv")
+                    metrics_other_output = run_path(output, "metrics_other.csv")
                     accu = accuracy_score(test_labels, preds)
                     auc = roc_auc_score(test_labels, probs[:, 1])
                     balanced = balanced_accuracy_score(test_labels, preds)
@@ -810,7 +760,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                     metrics_df.to_csv(metrics_other_output, index=False)
 
                 matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
-                matrix_output_test = os.path.join(output, "test_confusion_matrix.csv")
+                matrix_output_test = run_path(output, "test_confusion_matrix.csv")
                 matrix_test.to_csv(matrix_output_test)
                 print('Saving confusion matrix in ' + matrix_output_test + '...')
                 print('Task completed - results generated in ' + output + '!')
@@ -824,11 +774,11 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                     "Metric": ["MAE", "MSE", "RMSE", "R2", "Pearson"],
                     "Value": [MAE, MSE, RMSE, R2, pearson]
                 })
-                metrics_output = os.path.join(output, 'metrics_test.csv')
+                metrics_output = run_path(output, 'metrics_test.csv')
                 metrics.to_csv(metrics_output, index=False)
                 pd.DataFrame({'Pearson': [pearson], 'Pearson_r2': [pearson ** 2],
                               'reason': [reason], 'n_observations': [len(test_labels)]}).to_csv(
-                    os.path.join(output, 'metrics_test_pearson.csv'), index=False)
+                    run_path(output, 'metrics_test_pearson.csv'), index=False)
                 print(f'Saving test metrics → {metrics_output}')
                 print('Task completed successfully!')
         else:
@@ -858,8 +808,8 @@ if __name__ == '__main__':
 ####################################################################################################
     ''')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--calibrate_probabilities', action='store_true', help='Optional training-only sigmoid probability calibration for classification (off by default)')
     parser.add_argument('-path_model', '--path_model', default='', help='Path to trained model to be used.')
+    parser.add_argument('--trust_unsigned_model', action='store_true', help='LOCAL ONLY: explicitly trust an unsigned current-format model; loading can execute code')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
     parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 150')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
@@ -874,10 +824,8 @@ if __name__ == '__main__':
     add_homology_arguments(parser)
     parser.add_argument('-seed', '--seed', default=63, help='random seed for cross-validation and learners - default = 63')
     parser.add_argument('-search_seed', '--search_seed', default=None, help='Optuna sampler seed; defaults to --seed')
-    parser.add_argument('-output', '--output', help='results directory, e.g., result/')
+    parser.add_argument('-output', '--output', required=True, help='results directory, e.g., result/')
     args = parser.parse_args()
-    if args.calibrate_probabilities and (int(args.task) != 0 or args.path_model):
-        parser.error('--calibrate_probabilities requires new classification training; saved models retain their calibration automatically.')
     resolve_homology_arguments(parser, args)
     if args.homology_aware and args.path_model:
         parser.error('--homology_aware is a training option, not an inference option.')
@@ -897,26 +845,31 @@ if __name__ == '__main__':
     random.seed(random_seed)
     np.random.seed(random_seed)
     foutput = str(args.output)
+    execution = start_cli(args, 'prediction' if path_model else 'training')
     start_time = time.time()
 
     model = ''
     train_read, train_labels_read, train_nameseq_read = '', '', ''
     if path_model:
-        model = load_model(path_model)
+        if args.trust_unsigned_model and os.environ.get('BIOAUTOML_WEB_EXECUTION') == '1':
+            parser.error('Unsigned-model loading is forbidden in web jobs.')
+        model = load_model(path_model, trust_unsigned=args.trust_unsigned_model)
+        if execution.owner:
+            execution.record['model_id'] = getattr(model, 'model_id', None)
     else:
         if os.path.exists(ftrain):
             train_read = pd.read_csv(ftrain)
             print('Train - %s: Found File' % ftrain)
         else:
             print('Train - %s: File not exists' % ftrain)
-            sys.exit()
+            raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
         if os.path.exists(nameseq_train):
             train_nameseq_read = pd.read_csv(nameseq_train).values.ravel()
             print('Train_nameseq - %s: Found File' % nameseq_train)
         else:
             print('Train_nameseq - %s: File not exists' % nameseq_train)
-            sys.exit()
+            raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
         if task == 0:
             if os.path.exists(ftrain_labels):
@@ -924,14 +877,14 @@ if __name__ == '__main__':
                 print('Train_labels - %s: Found File' % ftrain_labels)
             else:
                 print('Train_labels - %s: File not exists' % ftrain_labels)
-                sys.exit()
+                raise FileNotFoundError('Required input file is missing; see the preceding message.')
         elif task == 1:
             if os.path.exists(ftrain_labels):
                 train_labels_read = [float(nameseq.split("|")[-1]) for nameseq in pd.read_csv(nameseq_train)["nameseq"].to_list()]
                 print('Train_labels - %s: Found File' % ftrain_labels)
             else:
                 print('Train_labels - %s: File not exists' % ftrain_labels)
-                sys.exit()
+                raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
     test_read = ''
     if ftest:
@@ -940,7 +893,7 @@ if __name__ == '__main__':
             print('Test - %s: Found File' % ftest)
         else:
             print('Test - %s: File not exists' % ftest)
-            sys.exit()
+            raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
     test_nameseq_read = ''
     if nameseq_test:
@@ -949,7 +902,7 @@ if __name__ == '__main__':
             print('Test_nameseq - %s: Found File' % nameseq_test)
         else:
             print('Test_nameseq - %s: File not exists' % nameseq_test)
-            sys.exit()
+            raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
     test_labels_read = ''
     if ftest_labels:
@@ -959,7 +912,7 @@ if __name__ == '__main__':
                 print('Test_labels - %s: Found File' % ftest_labels)
             else:
                 print('Test_labels - %s: File not exists' % ftest_labels)
-                sys.exit()
+                raise FileNotFoundError('Required input file is missing; see the preceding message.')
         elif task == 1:
             if os.path.exists(ftest_labels):
                 test_labels_read = pd.read_csv(ftest_labels).values.ravel()
@@ -968,13 +921,13 @@ if __name__ == '__main__':
                 print('Test_labels - %s: Found File' % ftest_labels)
             else:
                 print('Test_labels - %s: File not exists' % ftest_labels)
-                sys.exit()
+                raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
     homology_report = None
     if args.homology_aware:
         if path_model:
             parser.error('--homology_aware is a training option, not an inference option.')
-        report_path = os.path.join(foutput, 'homology', 'homology_report.json')
+        report_path = run_path(foutput, 'homology', 'homology_report.json')
         if not os.path.isfile(report_path):
             parser.error('Run engineering.py --homology_aware with FASTA inputs first; feature tables alone cannot establish homology.')
         with open(report_path) as handle:
@@ -988,10 +941,11 @@ if __name__ == '__main__':
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
         test_read, test_labels_read, test_nameseq_read, foutput, n_cpu,
-        search_jobs, homology_report=homology_report, calibrate_probabilities=args.calibrate_probabilities
+        search_jobs, homology_report=homology_report
     )
 
     cost = (time.time() - start_time) / 60
     print('Computation time - Pipeline: %s minutes' % cost)
+    execution.finish()
 ##########################################################################
 ##########################################################################

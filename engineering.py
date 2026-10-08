@@ -1,3 +1,7 @@
+from bioautoml.sequence_names import register_sources, source_info
+from bioautoml.execution import run_root
+from bioautoml.execution import run_path, timed, start_cli
+from bioautoml.execution import phase
 import warnings
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings('ignore')
@@ -62,8 +66,6 @@ def prepare_fasta_inputs(files, labels):
 		raise ValueError('Provide exactly one label for every FASTA file.')
 	if len(set(map(os.path.abspath, files))) != len(files):
 		raise ValueError('The same FASTA file was supplied more than once.')
-	if len(set(map(os.path.basename, files))) != len(files):
-		raise ValueError('FASTA basenames must be unique within each split.')
 	pairs = sorted(zip(files, labels), key=lambda pair: (str(pair[1]), os.path.abspath(pair[0])))
 	return [pair[0] for pair in pairs], [pair[1] for pair in pairs]
 
@@ -384,6 +386,7 @@ def objective_nucleotide(trial, train, task, y, feature_cache=None, folds=None, 
 
 	return metric
 
+@timed('stage_1')
 def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None):
 	"""Select the best subset of nucleotide descriptors via Bayesian optimization (Optuna TPE).
 
@@ -398,7 +401,7 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 	df_x = df_x.replace([np.inf, -np.inf], np.nan)
 	get_descriptor_indices(df_x.columns, NUCLEOTIDE_DESCRIPTORS, require_all=True)
 	
-	path_bio = foutput + '/best_descriptors'
+	path_bio = run_path(foutput, 'best_descriptors')
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
 
@@ -557,6 +560,7 @@ def objective_aminoacid(trial, train, task, y, feature_cache=None, folds=None, m
 		
 	return metric
 
+@timed('stage_1')
 def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None):
 	"""Select the best subset of amino acid descriptors via Bayesian optimization (Optuna TPE).
 
@@ -572,7 +576,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 	df_x = df_x.replace([np.inf, -np.inf], np.nan)
 	get_descriptor_indices(df_x.columns, AMINOACID_DESCRIPTORS, require_all=True)
 
-	path_bio = foutput + '/best_descriptors'
+	path_bio = run_path(foutput, 'best_descriptors')
 	if not os.path.exists(path_bio):
 		os.mkdir(path_bio)
 
@@ -647,6 +651,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 
 	return path_btrain, path_btest, btrain, btest
 
+@timed('training_features')
 def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, foutput, n_cpu=-1):
 	"""Extract amino acid descriptors from FASTA files and concatenate them into train/test CSVs.
 
@@ -658,7 +663,7 @@ def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, fou
 	"""
 
 	# Setup directories
-	path = os.path.join(foutput, 'feat_extraction')
+	path = run_path(foutput, 'feat_extraction')
 	path_results = foutput
 
 	# Clear and create directories
@@ -680,6 +685,8 @@ def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, fou
 	]
 	input_groups = [x for x in input_groups if x[0] is not None]
 
+	for files, labels, split in input_groups:
+		register_sources(foutput, files, labels, split)
 	sequence_train = set()
 	fasta_list = []
 	datasets = [
@@ -707,15 +714,16 @@ def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, fou
 		for fasta_file, label_file in zip(fasta_files, label_files):
 			# Preprocess file
 			file_name = os.path.basename(fasta_file)
-			preprocessed_fasta = os.path.join(path, split_type, f'pre_{file_name}')
+			preprocessed_fasta = os.path.join(path, split_type, source_info(fasta_file, f'{split_type}_{label_file}', foutput)['output_name'])
 			
-			subprocess.run([
-				sys.executable, 'other-methods/preprocessing.py',
-				'-i', fasta_file,
-				'-o', preprocessed_fasta,
-				'-s', f'{split_type}_{label_file}',
-				'-d', "Protein",
-			], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
+			with phase('training_preprocessing'):
+				subprocess.run([
+					sys.executable, 'other-methods/preprocessing.py',
+					'-i', fasta_file,
+					'-o', preprocessed_fasta, '--run_root', foutput,
+					'-s', f'{split_type}_{label_file}',
+					'-d', "Protein",
+				], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
 			
 			if split_type == 'train':
 				with open(preprocessed_fasta) as handle:
@@ -843,6 +851,7 @@ def feature_extraction_aminoacid(ftrain, ftrain_labels, ftest, ftest_labels, fou
 
 	return fnameseqtrain, fnameseqtest, ftrain, flabeltrain, ftest, flabeltest
 
+@timed('training_features')
 def feature_extraction_nucleotide(ftrain, ftrain_labels, ftest, ftest_labels, foutput, n_cpu=-1):
 	"""Extract nucleotide descriptors from FASTA files and concatenate them into train/test CSVs.
 
@@ -854,7 +863,7 @@ def feature_extraction_nucleotide(ftrain, ftrain_labels, ftest, ftest_labels, fo
 	"""
 
 	# Setup directories
-	path = os.path.join(foutput, 'feat_extraction')
+	path = run_path(foutput, 'feat_extraction')
 	path_results = foutput
 
 	# Clear and create directories
@@ -872,6 +881,8 @@ def feature_extraction_nucleotide(ftrain, ftrain_labels, ftest, ftest_labels, fo
 	]
 	input_groups = [x for x in input_groups if x[0] is not None]
 
+	for files, labels, split in input_groups:
+		register_sources(foutput, files, labels, split)
 	sequence_train = set()
 	fasta_list = []
 	datasets = [
@@ -900,15 +911,16 @@ def feature_extraction_nucleotide(ftrain, ftrain_labels, ftest, ftest_labels, fo
 		for fasta_file, label_file in zip(fasta_files, label_files):
 			# Preprocess file
 			file_name = os.path.basename(fasta_file)
-			preprocessed_fasta = os.path.join(path, split_type, f'pre_{file_name}')
+			preprocessed_fasta = os.path.join(path, split_type, source_info(fasta_file, f'{split_type}_{label_file}', foutput)['output_name'])
 			
-			subprocess.run([
-				sys.executable, 'other-methods/preprocessing.py',
-				'-i', fasta_file,
-				'-o', preprocessed_fasta,
-				'-s', f'{split_type}_{label_file}',
-				'-d', "DNA/RNA",
-			], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
+			with phase('training_preprocessing'):
+				subprocess.run([
+					sys.executable, 'other-methods/preprocessing.py',
+					'-i', fasta_file,
+					'-o', preprocessed_fasta, '--run_root', foutput,
+					'-s', f'{split_type}_{label_file}',
+					'-d', "DNA/RNA",
+				], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
 			
 			if split_type == 'train':
 				with open(preprocessed_fasta) as handle:
@@ -1024,17 +1036,19 @@ def get_selected_descriptors(selected_descriptors):
 	descriptors = pd.read_csv(selected_descriptors).iloc[0]
 	return [name for name, selected in descriptors.items() if int(selected) == 1]
 
+@timed('test_preprocessing')
 def prepare_test_fastas(fasta_test, fasta_label_test, data_type, path):
 	"""Preprocess test FASTA files and return their paths and labels."""
 
+	register_sources(run_root(path), fasta_test, fasta_label_test, 'test')
 	preprocessed_fastas = []
 	for fasta_file, label_file in zip(fasta_test, fasta_label_test):
 		file_name = os.path.basename(fasta_file)
-		preprocessed_fasta = os.path.join(path, f'pre_{file_name}')
+		preprocessed_fasta = os.path.join(path, source_info(fasta_file, f'test_{label_file}', run_root(path))['output_name'])
 		subprocess.run([
 			sys.executable, 'other-methods/preprocessing.py',
 			'-i', fasta_file,
-			'-o', preprocessed_fasta,
+			'-o', preprocessed_fasta, '--run_root', run_root(path),
 			'-s', f'test_{label_file}',
 			'-d', data_type,
 		], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, check=True)
@@ -1051,8 +1065,8 @@ def save_selected_test(datasets, column_train, foutput):
 	if missing_columns:
 		raise ValueError(f'Missing selected test features: {missing_columns[:10]}')
 
-	feat_path = os.path.join(foutput, 'feat_extraction')
-	path_bio = os.path.join(foutput, 'best_descriptors')
+	feat_path = run_path(foutput, 'feat_extraction')
+	path_bio = run_path(foutput, 'best_descriptors')
 	os.makedirs(path_bio, exist_ok=True)
 
 	fnameseqtest = os.path.join(feat_path, 'fnameseqtest.csv')
@@ -1066,11 +1080,12 @@ def save_selected_test(datasets, column_train, foutput):
 
 	return fnameseqtest, path_btest, flabeltest, btest
 
+@timed('test_features')
 def feature_extraction_aminoacid_test(fasta_test, fasta_label_test, selected_descriptors, column_train, foutput, n_cpu=-1):
 	"""Extract only Stage 1-selected amino-acid descriptors from test FASTA files."""
 
 	selected = get_selected_descriptors(selected_descriptors)
-	feat_path = os.path.join(foutput, 'feat_extraction')
+	feat_path = run_path(foutput, 'feat_extraction')
 	path = os.path.join(feat_path, 'test')
 	selected_path = os.path.join(feat_path, 'selected_test_features')
 	shutil.rmtree(path, ignore_errors=True)
@@ -1143,11 +1158,12 @@ def feature_extraction_aminoacid_test(fasta_test, fasta_label_test, selected_des
 
 	return save_selected_test(datasets, column_train, foutput)
 
+@timed('test_features')
 def feature_extraction_nucleotide_test(fasta_test, fasta_label_test, selected_descriptors, column_train, foutput, n_cpu=-1):
 	"""Extract only Stage 1-selected nucleotide descriptors from test FASTA files."""
 
 	selected = get_selected_descriptors(selected_descriptors)
-	feat_path = os.path.join(foutput, 'feat_extraction')
+	feat_path = run_path(foutput, 'feat_extraction')
 	path = os.path.join(feat_path, 'test')
 	selected_path = os.path.join(feat_path, 'selected_test_features')
 	shutil.rmtree(path, ignore_errors=True)
@@ -1247,15 +1263,12 @@ if __name__ == '__main__':
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-search_jobs', '--search_jobs', default=1, help='parallel Optuna workers; default 1 for repeatable trial ordering')
 	parser.add_argument('--homology_aware', action='store_true', help='Automatically group sequence CV folds using MMseqs2 and audit train-test similarity')
-	parser.add_argument('--calibrate_probabilities', action='store_true', help='Optional sigmoid probability calibration for classification (off by default)')
 	add_homology_arguments(parser)
 	parser.add_argument('-seed', '--seed', default=63, help='random seed for cross-validation and learners - default = 63')
 	parser.add_argument('-search_seed', '--search_seed', default=None, help='Optuna sampler seed; defaults to --seed')
-	parser.add_argument('-output', '--output', help='results directory, e.g., result/')
+	parser.add_argument('-output', '--output', required=True, help='results directory, e.g., result/')
 
 	args = parser.parse_args()
-	if args.calibrate_probabilities and int(args.task) != 0:
-		parser.error('--calibrate_probabilities is available for classification only.')
 	homology_identity, homology_coverage = resolve_homology_arguments(parser, args)
 	try:
 		fasta_train, fasta_label_train = prepare_fasta_inputs(args.fasta_train, args.fasta_label_train)
@@ -1281,13 +1294,14 @@ if __name__ == '__main__':
 	random.seed(random_seed)
 	np.random.seed(random_seed)
 	foutput = str(args.output)
+	execution = start_cli(args, 'training')
 
 	for fasta in fasta_train:
 		if os.path.exists(fasta) is True:
 			print('Train - %s: Found File' % fasta)
 		else:
 			print('Train - %s: File not exists' % fasta)
-			sys.exit()
+			raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
 	if fasta_test:
 		for fasta in fasta_test:
@@ -1295,40 +1309,27 @@ if __name__ == '__main__':
 				print('Test - %s: Found File' % fasta)
 			else:
 				print('Test - %s: File not exists' % fasta)
-				sys.exit()
+				raise FileNotFoundError('Required input file is missing; see the preceding message.')
 
+	register_sources(foutput, fasta_train, fasta_label_train, 'train')
+	register_sources(foutput, fasta_test, fasta_label_test, 'test')
 	start_time = time.time()
 	homology_report = prepare_homology(
 		fasta_train, fasta_label_train, fasta_test, fasta_label_test, dtype, task,
-		random_seed, os.path.join(foutput, 'homology'), args.homology_aware, n_cpu, homology_identity, homology_coverage)
-	if args.calibrate_probabilities:
-		from bioautoml.calibration import prepare_calibration_folds
-		from bioautoml.homology import read_sequences
-		records = read_sequences(fasta_train, fasta_label_train, 'train', dtype, task)
-		prepare_calibration_folds([record['label'] for record in records], random_seed,
-			 homology_report if args.homology_aware else None, [record['sequence_id'] for record in records])
+		random_seed, run_path(foutput, 'homology'), args.homology_aware, n_cpu, homology_identity, homology_coverage)
+	if not args.homology_aware:
+		with phase('homology_grouping', 'skipped'):
+			pass
 
-	folder_name = foutput.split("/")[-1]
-
-	if folder_name == "run_1" or "run" not in folder_name:
-		if dtype == "protein" or dtype == "Protein":
-			fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, \
-				ftest, ftest_labels = feature_extraction_aminoacid(fasta_train, fasta_label_train,
-															None, None, foutput, n_cpu)
-		elif dtype == "dnarna" or dtype == "DNA/RNA":
-			fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, \
-				ftest, ftest_labels = feature_extraction_nucleotide(fasta_train, fasta_label_train,
-															None, None, foutput, n_cpu)
+	# Directory names must not silently change computation or select stale caches.
+	if dtype in ("protein", "Protein"):
+		fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, ftest, ftest_labels = \
+			feature_extraction_aminoacid(fasta_train, fasta_label_train, None, None, foutput, n_cpu)
+	elif dtype in ("dnarna", "DNA/RNA"):
+		fnameseqtrain, fnameseqtest, ftrain, ftrain_labels, ftest, ftest_labels = \
+			feature_extraction_nucleotide(fasta_train, fasta_label_train, None, None, foutput, n_cpu)
 	else:
-		dataset = "/".join(foutput.split("/")[:-1])
-		dataset_run1 = os.path.join(dataset, "run_1")
-
-		if os.path.exists(dataset_run1):
-			dataset_run1_feat = os.path.join(dataset_run1, "feat_extraction")
-
-			fnameseqtrain, ftrain, ftrain_labels = os.path.join(dataset_run1_feat, "fnameseqtrain.csv"), os.path.join(dataset_run1_feat, "ftrain.csv"), os.path.join(dataset_run1_feat, "flabeltrain.csv")
-
-			fnameseqtest, ftest, ftest_labels = '', '', ''
+		raise ValueError('Use generation.py for structured data.')
 
 	if dtype == "protein" or dtype == "Protein":
 		path_train, path_test, train_best, test_best = \
@@ -1338,7 +1339,7 @@ if __name__ == '__main__':
 			feature_engineering_nucleotide(task, estimations, fnameseqtrain, ftrain, ftrain_labels, '', foutput, n_cpu, search_jobs, homology_report)
 
 	if fasta_test:
-		selected_descriptors = os.path.join(foutput, 'best_descriptors', 'selected_descriptors.csv')
+		selected_descriptors = run_path(foutput, 'best_descriptors', 'selected_descriptors.csv')
 		if dtype == "protein" or dtype == "Protein":
 			fnameseqtest, path_test, ftest_labels, test_best = feature_extraction_aminoacid_test(
 				fasta_test, fasta_label_test, selected_descriptors, train_best.columns, foutput, n_cpu
@@ -1358,9 +1359,9 @@ if __name__ == '__main__':
 					'-seed', str(random_seed), '-search_seed', str(optimization_seed),
 					'-output', foutput]
 						+ (['-search_jobs', str(search_jobs)] if search_jobs is not None else [])
-						+ (['--calibrate_probabilities'] if args.calibrate_probabilities else [])
 						+ (['--homology_aware', '--homology_identity', str(homology_identity),
 						    '--homology_coverage', str(homology_coverage)] if args.homology_aware else []), check=True)
+	execution.finish()
 
 ##########################################################################
 ##########################################################################

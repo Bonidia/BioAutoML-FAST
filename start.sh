@@ -3,6 +3,15 @@ set -Eeuo pipefail
 
 app_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/App"
 cd "$app_path"
+# A dedicated training container receives the private key. The ordinary web/
+# inference container must receive only public verification keys.
+if [[ "${BIOAUTOML_WORKER_ROLE:-inference}" == "training" ]]; then
+    exec python worker.py
+fi
+if [[ -n "${BIOAUTOML_SIGNING_KEY:-}" ]]; then
+    echo "Private signing keys belong only in the dedicated training container." >&2
+    exit 1
+fi
 umask 0002
 
 export TASK_RESULTS_DB="${TASK_RESULTS_DB:-$app_path/task-results/task_results.db}"

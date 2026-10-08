@@ -1,3 +1,6 @@
+from bioautoml.sequence_names import register_sources, source_info
+from bioautoml.execution import run_root
+from bioautoml.execution import run_path, timed, start_cli
 import os
 import shutil
 import subprocess
@@ -83,12 +86,14 @@ def run_feature_commands(commands, log_path, n_cpu=-1):
     run_descriptor_commands(commands, log_path, n_cpu, cwd=PROJECT_PATH)
 
 
+@timed('test_preprocessing')
 def prepare_test_fastas(test_data, data_type, path):
     """Preprocess uploaded test FASTA files in their existing label order."""
 
+    register_sources(run_root(path), list(test_data.values()), list(test_data), 'test')
     preprocessed_fastas = []
     for label, fasta_file in test_data.items():
-        preprocessed_fasta = os.path.join(path, f"pre_{label}.fasta")
+        preprocessed_fasta = os.path.join(path, source_info(fasta_file, f"test_{label}", run_root(path))["output_name"])
         subprocess.run(
             [
                 "python",
@@ -99,6 +104,7 @@ def prepare_test_fastas(test_data, data_type, path):
                 fasta_file,
                 "-o",
                 preprocessed_fasta,
+                "--run_root", run_root(path),
                 "-s",
                 f"test_{label}",
             ],
@@ -131,7 +137,7 @@ def save_selected_test(datasets, model, feat_path, job_path):
         os.path.join(feat_path, "flabeltest.csv"), index=False
     )
 
-    path_bio = os.path.join(job_path, "best_descriptors")
+    path_bio = run_path(job_path, "best_descriptors")
     os.makedirs(path_bio, exist_ok=True)
     dataframes.loc[:, train_columns].to_csv(
         os.path.join(path_bio, "best_test.csv"), index=False
@@ -363,10 +369,11 @@ def extract_nucleotide_features(preprocessed_fastas, selected, selected_path, n_
     return datasets
 
 
+@timed('test_features')
 def test_extraction(job_path, test_data, model, data_type, n_cpu=-1):
     """Extract only the descriptor groups required by a saved sequence model."""
 
-    feat_path = os.path.join(job_path, "feat_extraction")
+    feat_path = run_path(job_path, "feat_extraction")
     path = os.path.join(feat_path, "test")
     selected_path = os.path.join(feat_path, "selected_test_features")
     shutil.rmtree(path, ignore_errors=True)

@@ -17,9 +17,11 @@ scripts
 results
 .fuse_hidden*
 secrets.toml
+**/signing.pem
 task_results.db
 jobs
 /datasets
 /manuscript/*
+!/manuscript/experiments/
 !/manuscript/tables/
 !/manuscript/tables/**

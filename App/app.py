@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import streamlit as st
 from streamlit_option_menu import option_menu
 import utils, modules
@@ -28,7 +31,7 @@ def cookie_dialog():
         st.rerun()
 
 def runUI():
-    st.set_page_config(page_title = "BioAutoML-FAST", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
+    st.set_page_config(page_title = "BioAutoML-FAST | AutoML for Biological Sequences", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
 
     utils.inject_css()
 

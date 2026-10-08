@@ -1,3 +1,5 @@
+from bioautoml.execution import run_path, timed, start_cli
+from utils.execution import web_execution
 import streamlit as st
 import polars as pl
 import pandas as pd
@@ -35,8 +37,8 @@ from bioautoml.model_artifacts import load_model, update_model_summary
 def test_extraction(job_path, test_data, model, data_type):
     datasets = []
 
-    path = os.path.join(job_path, "feat_extraction", "test")
-    feat_path = os.path.join(job_path, "feat_extraction")
+    path = run_path(job_path, "feat_extraction", "test")
+    feat_path = run_path(job_path, "feat_extraction")
 
     try:
         shutil.rmtree(path)
@@ -219,7 +221,7 @@ def test_extraction(job_path, test_data, model, data_type):
     nameseq_test.to_csv(fnameseqtest, index=False, header=True)
     y_test.to_csv(flabeltest, index=False, header=True)
 
-    path_bio = os.path.join(job_path, "best_descriptors")
+    path_bio = run_path(job_path, "best_descriptors")
     if not os.path.exists(path_bio):
         os.mkdir(path_bio)
 
@@ -266,8 +268,8 @@ def encrypt_job_folder(job_path: str, password: str) -> None:
     encrypted = fernet.encrypt(tar_bytes)
 
     # 4) Write encrypted archive and salt into job_path
-    enc_path = os.path.join(job_path, "job_archive.enc")
-    salt_path = os.path.join(job_path, "job_salt.bin")
+    enc_path = run_path(job_path, "job_archive.enc")
+    salt_path = run_path(job_path, "job_salt.bin")
 
     with open(enc_path, "wb") as f:
         f.write(encrypted)
@@ -309,7 +311,7 @@ def homology_controls(data_type):
 
 
 def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homology_aware=False,
-                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, calibrate_probabilities=False):
+                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
     """Use the same explicit training controls for sequence and structured jobs."""
     arguments = ['--n_cpu', str(n_cpu), '--seed', str(seed),
                  '--search_seed', str(seed if search_seed is None else search_seed),
@@ -318,14 +320,13 @@ def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homolo
         validate_homology_settings(homology_identity, homology_coverage)
         arguments.extend(['--homology_aware', '--homology_identity', str(homology_identity),
                           '--homology_coverage', str(homology_coverage)])
-    if calibrate_probabilities:
-        arguments.append('--calibrate_probabilities')
     return arguments
 
 
+@web_execution
 def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None,
                seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
-               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, calibrate_probabilities=False):
+               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -335,17 +336,15 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     job_path = os.path.join(predict_path, job_id)
     os.makedirs(job_path, exist_ok=True)
 
-    log_path = os.path.join(job_path, "subprocess.log")
+    log_path = run_path(job_path, "subprocess.log")
 
     try:
         if homology_aware and (training != 'Training set' or data_type == 'Structured data'):
             raise ValueError('Homology-aware CV requires training from sequence FASTA inputs.')
-        if calibrate_probabilities and (training != 'Training set' or task != 'Classification'):
-            raise ValueError('Probability calibration requires new classification training.')
         if homology_aware:
             validate_homology_settings(homology_identity, homology_coverage)
         if training == "Training set":
-            train_path = os.path.join(job_path, "train")
+            train_path = run_path(job_path, "train")
             os.makedirs(train_path)
 
             if data_type == "Structured data":
@@ -367,7 +366,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 df_index = df_train.select(["nameseq"])
                 df_train = df_train.drop(["nameseq", "label"])
 
-                feat_path = os.path.join(job_path, "feat_extraction")
+                feat_path = run_path(job_path, "feat_extraction")
                 os.makedirs(feat_path)
                 
                 df_train.write_csv(os.path.join(feat_path, "train.csv"))
@@ -381,6 +380,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command = [
                     "python",
                     "generation.py",
+                    "--tuning", "150" if tuning else "0",
                     "--task",
                     "1" if task == "Regression" else "0",
                     "--train", os.path.join(feat_path, "train.csv"),
@@ -389,7 +389,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 ]
 
                 if test_files:
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
                     if testing == "Test set":
@@ -452,19 +452,20 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage, calibrate_probabilities))
+                                                  homology_identity, homology_coverage))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
                     subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
-                utils.summary_stats(os.path.join(job_path, "train"), data_type, job_path, True)
+                utils.summary_stats(run_path(job_path, "train"), data_type, job_path, True)
 
                 if test_files:
-                    utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
+                    utils.summary_stats(run_path(job_path, "test"), data_type, job_path, True)
             
-                update_model_summary(os.path.join(job_path, "trained_model.sav"),
-                                     train_stats=pd.read_csv(os.path.join(job_path, "train_stats.csv")))
+                update_model_summary(run_path(job_path, "trained_model.sav"),
+                                     trust_unsigned=True,
+                                     train_stats=pd.read_csv(run_path(job_path, "train_stats.csv")))
             else:
                 if task == "Classification":
                     for file in train_files:
@@ -495,7 +496,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                 command.extend(train_fasta.keys())
 
                 if test_files:
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
                     if testing == "Test set":
@@ -526,22 +527,23 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("Predicted")
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage, calibrate_probabilities))
+                                                  homology_identity, homology_coverage))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
                     subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
 
-                utils.summary_stats(os.path.join(job_path, "feat_extraction/train"), data_type, job_path, False)
+                utils.summary_stats(run_path(job_path, "feat_extraction/train"), data_type, job_path, False)
 
                 if test_files:
-                    utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+                    utils.summary_stats(run_path(job_path, "feat_extraction/test"), data_type, job_path, False)
             
-                update_model_summary(os.path.join(job_path, "trained_model.sav"),
-                                     train_stats=pd.read_csv(os.path.join(job_path, "train_stats.csv")))
+                update_model_summary(run_path(job_path, "trained_model.sav"),
+                                     trust_unsigned=True,
+                                     train_stats=pd.read_csv(run_path(job_path, "train_stats.csv")))
 
         elif training == "Load model":
-            save_path = os.path.join(job_path, "trained_model.sav")
+            save_path = run_path(job_path, "trained_model.sav")
             with open(save_path, mode="wb") as f:
                 f.write(train_files.getvalue())
 
@@ -567,10 +569,10 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         data_type = "Protein"
 
                 if data_type == "Structured data":
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
-                    feat_path = os.path.join(job_path, "feat_extraction")
+                    feat_path = run_path(job_path, "feat_extraction")
                     os.makedirs(feat_path)
 
                     if testing == "Test set":
@@ -632,9 +634,9 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("--test_nameseq")
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
-                    utils.summary_stats(os.path.join(job_path, "test"), data_type, job_path, True)
+                    utils.summary_stats(run_path(job_path, "test"), data_type, job_path, True)
                 else:
-                    test_path = os.path.join(job_path, "test")
+                    test_path = run_path(job_path, "test")
                     os.makedirs(test_path)
 
                     if testing == "Test set":
@@ -656,11 +658,11 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
                         extract_selected_test_features(job_path, test_fasta, model, data_type, n_cpu)
 
-                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+                        utils.summary_stats(run_path(job_path, "feat_extraction/test"), data_type, job_path, False)
 
-                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                        command.extend(["--test", run_path(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", run_path(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", run_path(job_path, "feat_extraction/fnameseqtest.csv")])
                     else:
                         save_path = os.path.join(test_path, "predicted.fasta")
                         with open(save_path, mode="wb") as f:
@@ -670,24 +672,20 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
 
                         extract_selected_test_features(job_path, test_fasta, model, data_type, n_cpu)
 
-                        utils.summary_stats(os.path.join(job_path, "feat_extraction/test"), data_type, job_path, False)
+                        utils.summary_stats(run_path(job_path, "feat_extraction/test"), data_type, job_path, False)
 
-                        command.extend(["--test", os.path.join(job_path, "best_descriptors/best_test.csv")])
-                        command.extend(["--test_label", os.path.join(job_path, "feat_extraction/flabeltest.csv")])
-                        command.extend(["--test_nameseq", os.path.join(job_path, "feat_extraction/fnameseqtest.csv")])
+                        command.extend(["--test", run_path(job_path, "best_descriptors/best_test.csv")])
+                        command.extend(["--test_label", run_path(job_path, "feat_extraction/flabeltest.csv")])
+                        command.extend(["--test_nameseq", run_path(job_path, "feat_extraction/fnameseqtest.csv")])
 
             command.extend(["--n_cpu", "-1"])
             command.extend(["--output", job_path])
 
             with open(log_path, "w") as log_file:
                 subprocess.run(command, cwd="..", stdout=log_file, stderr=subprocess.STDOUT, text=True, check=True)
-        try:
-            if password:
-                encrypt_job_folder(job_path, password)
-        except Exception as e:
-            print(f"Error encrypting job {job_id}: {e}")
     except Exception as e:
         print(f"Error in job processing: {e}")
+        raise
 
 @st.dialog("Job submitted")
 def job_submitted_dialog(job_id):
@@ -980,7 +978,6 @@ def runUI():
     st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
 
     tuning = False  # default; overridden by the checkbox widget below when applicable
-    calibrate_probabilities = False
     homology_aware = False
     homology_identity, homology_coverage = DEFAULT_IDENTITY, DEFAULT_COVERAGE
 
@@ -1015,7 +1012,7 @@ def runUI():
             data_type = None
 
     if training == "Training set" and data_type != "Structured data":
-        checkcol1, checkcol2, checkcol3 = st.columns(3)
+        checkcol1, checkcol2 = st.columns(2)
 
         with checkcol1:
             tuning = st.checkbox("Hyperparameter tuning", help="Whether to use hyperparameter tuning for the model (this can make the training take longer).")
@@ -1026,21 +1023,8 @@ def runUI():
                 help='Automatically keeps detected similar sequences in the same CV fold using MMseqs2. '
                      'Also audits supplied test sequences without changing their membership. Adds processing time.')
 
-        with checkcol3:
-            if task == 'Classification':
-                calibrate_probabilities = st.checkbox(
-                    'Probability calibration', value=False,
-                    help='Fits sigmoid calibration using training-only, five-fold predictions. Respects homology groups. '
-                         'Adds classifier fits, not additional AutoML trials. May change predicted classes and does not guarantee improvement.')
-
         if homology_aware:
             homology_identity, homology_coverage = homology_controls(data_type)
-    elif training == 'Training set' and task == 'Classification':
-        calibrate_probabilities = st.checkbox(
-            'Probability calibration', value=False,
-            help='Fits sigmoid calibration using training-only, five-fold predictions. Respects homology groups. '
-                 'Adds classifier fits, not additional AutoML trials. May change predicted classes and does not guarantee improvement.')
-
     checkcol1, checkcol2 = st.columns(2)
 
     with checkcol1:
@@ -1171,7 +1155,6 @@ def runUI():
             task = "Classification"
             tuning = False
             homology_aware = False
-            calibrate_probabilities = False
         else:
             # For non-structured sequence classification, require >= 2 class files
             if task and data_type != "Structured data":
@@ -1332,7 +1315,6 @@ def runUI():
             "testing":   testing,
             "tuning": tuning,
             "homology_aware": homology_aware,
-            "calibrate_probabilities": calibrate_probabilities,
             "homology_identity": homology_identity,
             "homology_coverage": homology_coverage,
             "seed": 63,
@@ -1357,7 +1339,8 @@ def runUI():
         }
 
         df_job_data = pl.DataFrame(job_data)
-        tsv_path = os.path.join(job_path, "job_info.tsv")
+        tsv_path = run_path(job_path, "job_info.tsv")
+        os.makedirs(os.path.dirname(tsv_path), exist_ok=True)
         df_job_data.write_csv(tsv_path, separator='\t')
 
         job_submitted_dialog(job_id)

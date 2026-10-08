@@ -10,6 +10,8 @@ bind_address="${BIND_ADDRESS:-127.0.0.1}"
 jobs_path="${JOBS_DIR:-$project_path/App/jobs}"
 state_path="${STATE_DIR:-$project_path/App/task-results}"
 datasets_path="${DATASETS_DIR:-$project_path/App/datasets}"
+keys_path="${MODEL_KEYS_DIR:-}"
+training_container="${container_name}-training"
 owner_label="io.bioautoml-fast.launcher"
 # Accept the previously documented flag; rebuilding is now unconditional.
 if [[ "${1:-}" == "--build" ]]; then
@@ -24,11 +26,28 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Settings: IMAGE_NAME, CONTAINER_NAME, HOST_PORT, BIND_ADDRESS, JOBS_DIR, STATE_DIR, DATASETS_DIR."
     echo "Defaults: bioautoml-fast:local, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
     echo "DATASETS_DIR is mounted read-only and must contain references.bib and your model repository."
+    echo "MODEL_KEYS_DIR: optional external key directory created with python -m bioautoml.model_security."
+    echo "With keys, starts a dedicated signing/training container; private keys never enter the web container."
     echo "Run as a non-root user with Docker access. Paths are resolved on the Docker host."
     exit 0
 fi
 
 fail() { echo "Error: $*" >&2; exit 1; }
+verification_options=()
+if [[ -n "$keys_path" ]]; then
+    [[ -d "$keys_path" ]] || fail "MODEL_KEYS_DIR does not exist."
+    keys_path="$(cd -- "$keys_path" && pwd -P)"
+    [[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* && "$keys_path" != *,* ]] || fail "Keys must be outside the project/build context."
+    for name in signing.pem trusted_keys.json key_id; do
+        [[ -r "$keys_path/$name" ]] || fail "Missing key configuration: $name"
+    done
+    key_id="$(<"$keys_path/key_id")"
+    verification_options+=(--mount "type=bind,source=$keys_path/trusted_keys.json,target=/run/bioautoml/trusted_keys.json,readonly"
+                          --env BIOAUTOML_TRUSTED_KEYS=/run/bioautoml/trusted_keys.json
+                          --env BIOAUTOML_TRAINING_ENABLED=1)
+else
+    echo "MODEL_KEYS_DIR is unset: web training is disabled and models cannot be verified."
+fi
 command -v docker >/dev/null || fail "Docker is not installed."
 docker info >/dev/null 2>&1 || fail "Cannot access Docker. Check the daemon and your Docker permissions."
 [[ "$(id -u)" != "0" ]] || fail "Run this script as a non-root user with Docker access (without sudo)."
@@ -49,10 +68,12 @@ development_options+=(--env STREAMLIT_SERVER_RUN_ON_SAVE=true
                       --env STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll)
 
 # Do not accidentally replace an unrelated application using the same name.
-if docker container inspect "$container_name" >/dev/null 2>&1; then
-    owner="$(docker container inspect --format "{{index .Config.Labels \"$owner_label\"}}" "$container_name")"
-    [[ "$owner" == "run-docker.sh" ]] || fail "Container '$container_name' was not created by this script. Choose another CONTAINER_NAME or remove it manually after checking it."
-fi
+for existing_container in "$container_name" "$training_container"; do
+    if docker container inspect "$existing_container" >/dev/null 2>&1; then
+        owner="$(docker container inspect --format "{{index .Config.Labels \"$owner_label\"}}" "$existing_container")"
+        [[ "$owner" == "run-docker.sh" ]] || fail "Container '$existing_container' was not created by this script."
+    fi
+done
 
 # Validate repository data before stopping the current application. Do not
 # silently create an empty datasets directory that would break the Repository tab.
@@ -70,6 +91,11 @@ for path in "$jobs_path" "$state_path"; do
 done
 [[ "$jobs_path" != "$state_path" ]] || fail "JOBS_DIR and STATE_DIR must be separate directories."
 
+if docker container inspect "$training_container" >/dev/null 2>&1; then
+    echo "Stopping the signing/training container (running training will be interrupted)..."
+    docker stop --time 40 "$training_container" >/dev/null
+    docker container rm "$training_container" >/dev/null
+fi
 if docker container inspect "$container_name" >/dev/null 2>&1; then
     echo "Stopping and removing container $container_name (running jobs will be interrupted)..."
     docker stop --time 40 "$container_name" >/dev/null
@@ -82,6 +108,7 @@ fi
 
 echo "Building $image_name..."
 docker build "$@" --tag "$image_name" --file "$project_path/Dockerfile" "$project_path"
+image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
 
 echo "Live UI reload enabled with read-only source mounts."
 echo "Avoid editing job-processing code while jobs are running; worker changes require a restart."
@@ -96,8 +123,30 @@ docker run --detach --name "$container_name" \
     --mount "type=bind,source=$datasets_path,target=/app/App/datasets,readonly" \
     --env TASK_RESULTS_DB=/app/App/task-results/task_results.db \
     --env REDIS_DATA_DIR=/app/App/task-results/redis \
+    --env BIOAUTOML_IMAGE_ID="$image_id" \
+    "${verification_options[@]}" \
     "${development_options[@]}" \
     "$image_name"
+
+if [[ -n "$keys_path" ]]; then
+    docker run --detach --name "$training_container" \
+        --label "$owner_label=run-docker.sh" \
+        --restart unless-stopped --stop-timeout 40 --no-healthcheck \
+        --user "$(id -u):$(id -g)" --network "container:$container_name" \
+        --mount "type=bind,source=$jobs_path,target=/app/App/jobs" \
+        --mount "type=bind,source=$state_path,target=/app/App/task-results" \
+        --mount "type=bind,source=$keys_path/signing.pem,target=/run/bioautoml/signing.pem,readonly" \
+        "${verification_options[@]}" \
+        --env TASK_RESULTS_DB=/app/App/task-results/task_results.db \
+        --env REDIS_URL=redis://127.0.0.1:6379/0 \
+        --env BIOAUTOML_IMAGE_ID="$image_id" \
+        --env BIOAUTOML_WORKER_ROLE=training \
+        --env RQ_WORKER_NAME=bioautoml-training \
+        --env BIOAUTOML_SIGNING_KEY=/run/bioautoml/signing.pem \
+        --env BIOAUTOML_SIGNING_KEY_ID="$key_id" \
+        "$image_name"
+    echo "Signing/training worker: $training_container (private key mounted here only)"
+fi
 
 echo "Started. Web: http://$bind_address:$host_port"
 echo "Jobs: $jobs_path"
