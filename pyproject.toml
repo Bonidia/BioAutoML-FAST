@@ -23,6 +23,12 @@ ignore = [
 [tool.ruff.format]
 # Only the App/ source is formatted; scripts in other dirs are excluded above
 
+[tool.uv]
+constraint-dependencies = [
+    "certifi>=2026.10.19",
+    "gitpython>=3.1.59",
+]
+
 [project]
 name = "BioAutoML-FAST"
 version = "1.0.0"
