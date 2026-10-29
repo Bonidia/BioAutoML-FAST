@@ -23,13 +23,6 @@ from utils import tasks
 from rq import get_current_job
 from utils.tasks import manager
 from utils.db import TaskResultManager, TaskStatus
-import tarfile
-import io
-import secrets
-import base64
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.fernet import Fernet
 from utils.feature_extraction import test_extraction as extract_selected_test_features
 from bioautoml.homology import DEFAULT_IDENTITY, DEFAULT_COVERAGE, validate_homology_settings, homology_warnings
 from bioautoml.model_artifacts import load_model, update_model_summary
@@ -232,67 +225,6 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-# Derive a URL-safe Base64 key for Fernet from a password + salt
-def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
-    password_bytes = password.encode("utf-8")
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=iterations,
-    )
-    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
-    return key
-
-# Create a tar archive in memory from a directory path and return bytes
-def make_tar_bytes_from_dir(folder_path: str) -> bytes:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz", dereference=True) as tar:
-        # Add all files and subdirectories
-        tar.add(folder_path, arcname=".")
-    buf.seek(0)
-    return buf.read()
-
-# Encrypt the entire job folder into job_archive.enc and save salt (job_salt.bin).
-# Removes the original files once encrypted.
-def encrypt_job_folder(job_path: str, password: str) -> None:
-    # 1) Create tar.gz bytes of folder
-    tar_bytes = make_tar_bytes_from_dir(job_path)
-
-    # 2) Generate salt and derive key
-    salt = secrets.token_bytes(16)
-    key = derive_key_from_password(password, salt)
-    fernet = Fernet(key)
-
-    # 3) Encrypt the tar bytes
-    encrypted = fernet.encrypt(tar_bytes)
-
-    # 4) Write encrypted archive and salt into job_path
-    enc_path = run_path(job_path, "job_archive.enc")
-    salt_path = run_path(job_path, "job_salt.bin")
-
-    with open(enc_path, "wb") as f:
-        f.write(encrypted)
-    with open(salt_path, "wb") as f:
-        f.write(salt)
-
-    # 5) Remove everything else in job_path except the newly created files
-    for root, dirs, files in os.walk(job_path):
-        for name in files:
-            full = os.path.join(root, name)
-            if full not in {enc_path, salt_path}:
-                try:
-                    os.remove(full)
-                except Exception:
-                    pass
-        # remove empty directories (except the top job_path)
-        for d in dirs:
-            dirfull = os.path.join(root, d)
-            try:
-                # attempt rmdir (will only remove if empty)
-                os.rmdir(dirfull)
-            except Exception:
-                pass
 
 def homology_controls(data_type):
     """Percent-based sequence training controls; keep validation shared with CLI."""
@@ -324,7 +256,7 @@ def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homolo
 
 
 @web_execution
-def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning, email=None, password=None,
+def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning,
                seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
                homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
     """Process a single job - modified to be thread-safe."""
@@ -650,9 +582,6 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
                                     f.write(file.getvalue())
-                            # save_path = os.path.join(test_path, test_files.name)
-                            # with open(save_path, mode="wb") as f:
-                            #     f.write(test_files.getvalue())
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
@@ -905,6 +834,9 @@ class InternalUploadedFile:
 
 def runUI():
     """Main Streamlit UI function with thread management."""
+    if st.session_state.pop('_clear_home_credentials', False):
+        st.session_state['home_email'] = ''
+        st.session_state['home_password'] = ''
 
     with open("imgs/logo.png", "rb") as file_:
         contents = file_.read()
@@ -1028,7 +960,7 @@ def runUI():
     checkcol1, checkcol2 = st.columns(2)
 
     with checkcol1:
-        email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+        email = st.text_input("Email to notify when job finishes (Optional)", key='home_email', help="Held temporarily in memory for notifications; not saved in job records. The email provider receives this address.")
 
         # Simple validation (not strict): show warning if looks invalid
         if email:
@@ -1036,7 +968,7 @@ def runUI():
                 st.warning("That doesn't look like a valid email address.")
 
     with checkcol2:
-        password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+        password = st.text_input("Password to encrypt submission (Optional)", key='home_password', type='password', help="Encrypts completed results. The password is not persisted; the server processes plaintext during execution. Temporary credentials can be lost on restart, requiring resubmission.")
 
     # ── Configuration summary ──────────────────────────────────────────────
     _summary = []
@@ -1052,7 +984,7 @@ def runUI():
         _summary.append("🎯 <b>Mode:</b> Loading an existing model")
     _summary.append(f"🔬 <b>Validation:</b> {testing}")
     if email:
-        _summary.append(f"📧 <b>Notify:</b> {email}")
+        _summary.append("📧 <b>Notify:</b> Yes")
     if password:
         _summary.append(" 🔒 <b>Encrypted</b>")
     st.markdown(
@@ -1138,6 +1070,7 @@ def runUI():
                     test_files = st.file_uploader("Test set files", accept_multiple_files=False, 
                                                     help="File accordingly to the loaded model (e.g., continuous numerical value appended to the end of the header after the | character).")
 
+        st.caption('Results are automatically deleted 30 days after completion. Please download them beforehand.')
         submitted = st.form_submit_button("Submit", use_container_width=True, type="primary")
 
     predict_path = os.path.abspath("jobs")
@@ -1325,23 +1258,15 @@ def runUI():
             "password":  password
         }
 
-        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
-
-        job_path = os.path.join(predict_path, job_id)
-        os.makedirs(job_path, exist_ok=True)
-
         job_data = {
-            "data_type": [data_type],
-            "task": [task],
-            "training_set": [training == "Training set"],
-            "testing_set": [testing],
-            "tuning": [tuning],
+            "data_type": data_type,
+            "task": task,
+            "training_set": training == "Training set",
+            "testing_set": testing,
+            "tuning": tuning,
         }
-
-        df_job_data = pl.DataFrame(job_data)
-        tsv_path = run_path(job_path, "job_info.tsv")
-        os.makedirs(os.path.dirname(tsv_path), exist_ok=True)
-        df_job_data.write_csv(tsv_path, separator='\t')
+        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs, job_info=job_data)
+        st.session_state['_clear_home_credentials'] = True
 
         job_submitted_dialog(job_id)
 

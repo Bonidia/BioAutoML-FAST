@@ -11,11 +11,34 @@ from bioautoml.execution import Execution, run_path, atomic_json, utc_now
 from bioautoml.model_artifacts import sign_web_model, ModelArtifact
 from bioautoml.model_security import require_web_signer
 from bioautoml.performance import write_performance
+from .privacy import take_encryption_key, encrypt_job_folder
+from .retention import job_lock, job_directory, remove_job_files
 
 
 def web_execution(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
+        reference = kwargs.pop('_private_ref', None)
+        encrypted = kwargs.pop('_encrypted', False)
+        if 'password' in kwargs or 'email' in kwargs:
+            raise ValueError('This queued submission uses retired credential storage; please resubmit.')
+        job = get_current_job()
+        if job is None:
+            raise ValueError('Web execution requires a queued job.')
+        arguments = inspect.signature(function).bind(*args, **kwargs)
+        root = job_directory(job.id)
+        if Path(arguments.arguments['predict_path']).resolve() != root.parent:
+            raise ValueError('Web jobs must use the managed jobs directory.')
+        with job_lock(job.id):
+            try:
+                encryption = take_encryption_key(reference) if encrypted else None
+                return execute(*args, _encryption=encryption, **kwargs)
+            except BaseException:
+                if encrypted:
+                    remove_job_files(job.id)
+                raise
+
+    def execute(*args, _encryption=None, **kwargs):
         arguments = inspect.signature(function).bind(*args, **kwargs)
         arguments.apply_defaults()
         values = arguments.arguments
@@ -50,8 +73,8 @@ def web_execution(function):
             # The job archive includes the completed timing record. Its separate
             # packaging time is retained in the database/outer queue timestamps.
             execution.finish(defer_resources=True)
-            if values.get('password'):
-                function.__globals__['encrypt_job_folder'](str(root), values['password'])
+            if _encryption:
+                encrypt_job_folder(str(root), *_encryption)
             execution.memory.stop()
             execution.performance.update(total_seconds=time.perf_counter() - execution.started,
                                          total_scope='end_to_end',

@@ -65,6 +65,10 @@ def CTDT(fastas, **kw):
 
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
+		# Transition frequencies are undefined without a complete pair.
+		if len(sequence) < 2:
+			encodings.append([name] + [None] * (len(header) - 1))
+			continue
 		code = [name]
 		aaPair = [sequence[j:j + 2] for j in range(len(sequence) - 1)]
 		for p in property:

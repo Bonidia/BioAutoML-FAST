@@ -45,6 +45,10 @@ def DDE(fastas, **kw):
 
 	for i in fastas:
 		name, sequence = i[0], re.sub('-', '', i[1])
+		# Dipeptide deviation is undefined without a complete pair.
+		if len(sequence) < 2:
+			encodings.append([name] + [None] * len(diPeptides))
+			continue
 		code = [name]
 		tmpCode = [0] * 400
 		for j in range(len(sequence) - 2 + 1):

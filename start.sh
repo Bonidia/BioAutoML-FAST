@@ -1,8 +1,10 @@
 #!/bin/bash
 set -Eeuo pipefail
+ulimit -c 0
 
 app_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/App"
 cd "$app_path"
+export PYTHONPATH="${app_path%/App}${PYTHONPATH:+:$PYTHONPATH}"
 # A dedicated training container receives the private key. The ordinary web/
 # inference container must receive only public verification keys.
 if [[ "${BIOAUTOML_WORKER_ROLE:-inference}" == "training" ]]; then
@@ -17,10 +19,15 @@ umask 0002
 export TASK_RESULTS_DB="${TASK_RESULTS_DB:-$app_path/task-results/task_results.db}"
 redis_path="${REDIS_DATA_DIR:-$app_path/task-results/redis}"
 redis_port="${REDIS_PORT:-6379}"
+private_redis_port="${PRIVATE_REDIS_PORT:-6380}"
+export PRIVATE_REDIS_URL="${PRIVATE_REDIS_URL:-redis://127.0.0.1:$private_redis_port/0}"
 export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:$redis_port/0}"
 export RQ_WORKER_NAME="${RQ_WORKER_NAME:-bioautoml-container}"
 shutdown_timeout="${SHUTDOWN_TIMEOUT:-25}"
 redis_pid=""
+private_redis_pid=""
+private_redis_path=""
+retention_pid=""
 worker_pid=""
 web_pid=""
 
@@ -49,6 +56,7 @@ cleanup() {
         kill -TERM "$worker_pid" 2>/dev/null || true
     fi
     stop_group "$web_pid" TERM
+    stop_group "$retention_pid" TERM
     local deadline=$((SECONDS + shutdown_timeout))
     while (( SECONDS < deadline )); do
         if ! group_running "$worker_pid" && ! group_running "$web_pid"; then
@@ -59,8 +67,15 @@ cleanup() {
     stop_group "$worker_pid" KILL
     stop_group "$web_pid" KILL
     stop_group "$redis_pid" TERM
+    stop_group "$private_redis_pid" TERM
     if [[ -n "$redis_pid" ]]; then
         wait "$redis_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$private_redis_pid" ]]; then
+        wait "$private_redis_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$private_redis_path" ]]; then
+        rmdir -- "$private_redis_path" 2>/dev/null || true
     fi
     exit "$status"
 }
@@ -108,6 +123,41 @@ if [[ "$redis_ready" != "1" ]]; then
 fi
 echo "Redis ready."
 
+# Never put temporary credentials in the durable queue Redis, even in another DB.
+if [[ "${START_PRIVATE_REDIS:-1}" == "1" ]]; then
+    python - "$private_redis_port" <<'PY'
+import socket
+import sys
+with socket.socket() as probe:
+    try:
+        probe.bind(('127.0.0.1', int(sys.argv[1])))
+    except OSError:
+        raise SystemExit('Private Redis port is already in use; refusing to attach to another server.')
+PY
+    private_redis_path="$(mktemp -d /tmp/bioautoml-private-redis.XXXXXX)"
+    setsid redis-server --bind 127.0.0.1 --protected-mode yes \
+        --port "$private_redis_port" --daemonize no --loglevel warning \
+        --dir "$private_redis_path" \
+        --save '' --appendonly no --maxmemory 64mb --maxmemory-policy noeviction \
+        --rename-command SAVE '' --rename-command BGSAVE '' --rename-command BGREWRITEAOF '' &
+    private_redis_pid=$!
+fi
+private_ready=0
+for ((attempt=0; attempt<60; attempt++)); do
+    if python -c 'from utils.privacy import private_store; private_store().ping()' 2>/dev/null; then
+        private_ready=1
+        break
+    fi
+    sleep 0.5
+done
+if [[ "$private_ready" != "1" ]]; then
+    echo 'Memory-only private Redis is unavailable or incorrectly configured.' >&2
+    exit 1
+fi
+
+setsid python -m utils.retention --loop &
+retention_pid=$!
+
 setsid python worker.py &
 worker_pid=$!
 setsid streamlit run app.py --server.address=0.0.0.0 \
@@ -117,9 +167,12 @@ web_pid=$!
 
 # If any service exits, stop the others and fail the container so a restart
 # policy can recover it. An exec of Streamlit alone would hide worker failures.
-service_pids=("$worker_pid" "$web_pid")
+service_pids=("$worker_pid" "$web_pid" "$retention_pid")
 if [[ -n "$redis_pid" ]]; then
     service_pids+=("$redis_pid")
+fi
+if [[ -n "$private_redis_pid" ]]; then
+    service_pids+=("$private_redis_pid")
 fi
 status=0
 wait -n "${service_pids[@]}" || status=$?

@@ -193,7 +193,7 @@ def feature_extraction(features, spectrum, spectrumTwo):
     population_standard_deviation = np.std(spectrum)
     features.append(population_standard_deviation)
     ###################################
-    sample_standard_deviation = statistics.stdev(spectrum)
+    sample_standard_deviation = statistics.stdev(spectrum) if len(spectrum) > 1 else np.nan
     features.append(sample_standard_deviation)
     ###################################
     percentile15 = np.percentile(spectrum, 15)
@@ -213,7 +213,7 @@ def feature_extraction(features, spectrum, spectrumTwo):
     ###################################
     # mode = statistics.mode(spectrum)
     ###################################
-    variance = statistics.variance(spectrum)
+    variance = statistics.variance(spectrum) if len(spectrum) > 1 else np.nan
     features.append(variance)
     ###################################
     interquartile_range = np.percentile(spectrum, 75) - np.percentile(spectrum, 25)

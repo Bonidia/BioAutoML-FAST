@@ -2,6 +2,7 @@ from bioautoml.sequence_names import register_sources, source_info
 from bioautoml.execution import run_root
 from bioautoml.execution import run_path, timed, start_cli
 from bioautoml.execution import phase
+from bioautoml.optimization import optimize_study
 import warnings
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings('ignore')
@@ -219,6 +220,7 @@ class EarlyStoppingCallback:
 		self.min_delta = min_delta
 		self.best_value = None
 		self.no_improve_count = 0
+		self.stopped = False
 
 	def __call__(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial):
 		"""Called after each trial; calls study.stop() once patience is exhausted."""
@@ -240,6 +242,7 @@ class EarlyStoppingCallback:
 			self.no_improve_count += 1
 
 		if self.no_improve_count >= self.patience:
+			self.stopped = True
 			print(
 				f"Early stopping triggered: "
 				f"no improvement ≥ {self.min_delta} "
@@ -310,7 +313,7 @@ def objective_nucleotide(trial, train, task, y, feature_cache=None, folds=None, 
 	index = get_selected_feature_indices(descriptors, space)
 
 	if len(index) == 0:
-		raise optuna.TrialPruned()
+		raise optuna.TrialPruned('empty descriptor subset')
 
 	# === Task Handling ===
 	if task == 0:
@@ -374,7 +377,7 @@ def objective_nucleotide(trial, train, task, y, feature_cache=None, folds=None, 
 			
 			# Prune if this trial is performing poorly
 			if trial.should_prune():
-				raise optuna.TrialPruned()
+				raise optuna.TrialPruned('fold-score pruning')
 		
 		metric = np.mean(fold_scores)
 	except optuna.TrialPruned:
@@ -382,7 +385,7 @@ def objective_nucleotide(trial, train, task, y, feature_cache=None, folds=None, 
 	except Exception as e:
 		print("Trial failed with exception:")
 		print(type(e).__name__, str(e))
-		raise optuna.TrialPruned()
+		raise
 
 	return metric
 
@@ -434,13 +437,12 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 		)
 	)
 
-	results.optimize(
-		func,
-		n_trials=estimations,
-		timeout=10_800,
-		show_progress_bar=True,
-		callbacks=[early_stopping],
-		n_jobs=search_jobs
+	optimize_study(
+		results, func, foutput, 'stage_1', estimations, 10_800, search_jobs,
+		settings=dict(seed=random_seed, search_seed=optimization_seed, startup_trials=30,
+			metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
+			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only'),
+		early_stopping=early_stopping,
 	)
 
 	best_tuning = results.best_params
@@ -489,7 +491,7 @@ def objective_aminoacid(trial, train, task, y, feature_cache=None, folds=None, m
 	index = get_selected_feature_indices(descriptors, space)
 
 	if len(index) == 0:
-		raise optuna.TrialPruned()
+		raise optuna.TrialPruned('empty descriptor subset')
 
 	# === Task Handling ===
 	if task == 0:
@@ -547,7 +549,7 @@ def objective_aminoacid(trial, train, task, y, feature_cache=None, folds=None, m
 			trial.report(np.mean(fold_scores), step)
 
 			if trial.should_prune():
-				raise optuna.TrialPruned()
+				raise optuna.TrialPruned('fold-score pruning')
 		
 		metric = np.mean(fold_scores)
 
@@ -556,7 +558,7 @@ def objective_aminoacid(trial, train, task, y, feature_cache=None, folds=None, m
 	except Exception as e:
 		print("Trial failed with exception:")
 		print(type(e).__name__, str(e))
-		raise optuna.TrialPruned()
+		raise
 		
 	return metric
 
@@ -609,13 +611,12 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 		)
 	)
 
-	results.optimize(
-		func,
-		n_trials=estimations,
-		timeout=7200,
-		show_progress_bar=True,
-		callbacks=[early_stopping],
-		n_jobs=search_jobs
+	optimize_study(
+		results, func, foutput, 'stage_1', estimations, 7200, search_jobs,
+		settings=dict(seed=random_seed, search_seed=optimization_seed, startup_trials=30,
+			metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
+			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only'),
+		early_stopping=early_stopping,
 	)
 
 	best_tuning = results.best_params

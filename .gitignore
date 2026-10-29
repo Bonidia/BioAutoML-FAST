@@ -21,7 +21,10 @@ secrets.toml
 task_results.db
 jobs
 /datasets
+!/App/datasets/references.bib
 /manuscript/*
 !/manuscript/experiments/
+!/manuscript/experiments/scripts/
+!/manuscript/experiments/scripts/*.py
 !/manuscript/tables/
 !/manuscript/tables/**

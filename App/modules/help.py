@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.blablador import Models, ChatCompletions
 import json
+import os
 
 SYSTEM_PROMPT = """
 You are the built-in AI assistant for BioAutoML-FAST, an automated machine learning platform for biological sequence analysis. Your role is to help users prepare data, configure jobs, interpret results, and navigate the platform. All guidance must strictly reflect the platform's implemented UI and workflows. Do not invent features or behaviors.
@@ -237,9 +238,8 @@ def ai_help():
     st.markdown("### AI Help")
     st.markdown("You may ask the assistant questions such as *How can I train a regression model from scratch?* The assistant is available to help with any questions related to using and navigating the platform.")
 
-    try:
-        API_KEY = st.secrets["blablador_key"]
-    except KeyError:
+    API_KEY = os.environ.get("BLABLADOR_API_KEY", "").strip()
+    if not API_KEY:
         st.warning("AI assistant is not configured. Please contact the platform administrators.")
         return
 

@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import os
 from utils.tasks import manager
 
 def runUI():
@@ -29,6 +30,11 @@ def runUI():
         unsafe_allow_html=True,
     )
 
+    api_key = os.environ.get("MAILGUN_API_KEY", "").strip()
+    if not api_key:
+        st.warning("Model sharing is unavailable: email service is not configured.")
+        return
+
     with st.form("share_submit", border=True, clear_on_submit=True):
 
         checkcol1, checkcol2 = st.columns(2)
@@ -51,8 +57,6 @@ def runUI():
             job = manager.get_result(job_id)
 
             if job:
-                api_key = st.secrets["api_key"]
-
                 subject = f"[BioAutoML-FAST] User wants to share their model"
 
                 if email:
@@ -60,16 +64,19 @@ def runUI():
                 else:
                     body = f"""Dear administrator,\n\nUser wants to share their model.\n\nJob ID: {job_id}\nText from the user:\n{text_area}\n\nPlease verify if the model is suitable to be used in the model repository."""
 
-                response =  requests.post(
+                try:
+                    response = requests.post(
                             "https://api.mailgun.net/v3/bioauto.inteligentehub.com.br/messages",
                             auth=("api", api_key),
                             data={"from": "BioAutoML-FAST <sharing@bioauto.inteligentehub.com.br>",
                                 "to": "brenoslivio@usp.br",
                                 "subject": subject,
-                                "text": body})
+                                "text": body}, timeout=15)
+                except requests.RequestException:
+                    st.error("Email failed to be sent to administrator.")
+                    return
                 
                 if response.status_code == 200:
-                    # Print a message to console after successfully sending the email.
                     st.success("Email sent to administrator.")
                 else:
                     st.error("Email failed to be sent to administrator.")

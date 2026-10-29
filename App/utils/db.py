@@ -196,7 +196,6 @@ class TaskResultManager:
             return None
 
         df["Duration"] = df.apply(compute_duration, axis=1)
-        # reorder columns as requested
         df = df[["Job ID", "End", "Duration", "Status"]]
 
         return df

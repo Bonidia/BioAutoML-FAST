@@ -9,6 +9,9 @@ from utils.tasks import manager
 from datetime import datetime
 
 def clear_cache():
+    # Navigation away from Jobs must not orphan a decrypted archive.
+    if st.session_state.get('temp_extract_path'):
+        modules.jobs._cleanup_previous_temp()
     keys = list(st.session_state.keys())
     for key in keys:
         if key not in ("cookie", "chat_history"):

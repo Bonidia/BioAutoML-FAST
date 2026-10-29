@@ -79,6 +79,8 @@ def nacSeq(k):
             kmer[key] = 0
         kmer = collections.OrderedDict(sorted(kmer.items()))
         for subseq in chunks_two(seq, k):
+            if len(subseq) != k:
+                continue
             if subseq in kmer:
                 # print(subseq)
                 kmer[subseq] = kmer[subseq] + 1
@@ -87,7 +89,8 @@ def nacSeq(k):
         for key, value in kmer.items():
             # print (key)
             # print (value)
-            probabilities.append([str(key), value/totalWindows])
+            # No complete window means an all-zero, fixed-width composition.
+            probabilities.append([str(key), value/totalWindows if totalWindows > 0 else 0.0])
         file_record(name_seq)
     return
 
@@ -129,6 +132,8 @@ def findKmers(ksize):
                 kmer[key] = 0
             kmer = collections.OrderedDict(sorted(kmer.items()))
             for subseq in chunks_two(seq,k):
+                if len(subseq) != k:
+                    continue
                 if subseq in kmer:
                     # print(subseq)
                     kmer[subseq] = kmer[subseq] + 1
@@ -137,7 +142,7 @@ def findKmers(ksize):
             for key, value in kmer.items():
                 # print (key)
                 # print (value)
-                probabilities.append([str(key), value/totalWindows])
+                probabilities.append([str(key), value/totalWindows if totalWindows > 0 else 0.0])
         file_record(name_seq)
     return
 

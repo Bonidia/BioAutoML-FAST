@@ -21,12 +21,7 @@ import matplotlib.pyplot as plt
 from utils.tasks import manager
 import tarfile
 import io
-import secrets
-import base64
-import tempfile
 import shutil
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 from st_aggrid import AgGrid, GridOptionsBuilder, ColumnsAutoSizeMode
 import shap
@@ -34,6 +29,11 @@ import csv
 import json
 import gzip
 from bioautoml.model_artifacts import get_model_info, load_model, model_fingerprint, validate_model_support
+from utils.privacy import derive_key_from_password
+from utils.retention import is_expired, create_job_temp, remove_job_temp, job_lock
+from contextlib import ExitStack
+import uuid
+import re
 
 
 def show_feature_name_note():
@@ -126,13 +126,12 @@ def show_pearson_metric(report, cross_validation=False):
         st.caption(message + ' See the Pearson CSV sidecar for details.')
 
 def _cleanup_previous_temp():
-    prev = st.session_state.get("temp_extract_path")
+    prev = st.session_state.pop("temp_extract_path", None)
     if prev and os.path.exists(prev):
         try:
-            shutil.rmtree(prev)
+            remove_job_temp(prev)
         except Exception:
             pass
-        del st.session_state["temp_extract_path"]
 
 def load_reduction_data(job_path, evaluation):
     """Load and cache data for dimensionality reduction"""
@@ -192,7 +191,6 @@ def create_reduction_plot(reduced_data, labels, names_df, reduction_method):
     colors = utils.get_colors(len(unique_labels))
 
     # Build per-point hover text aligned with original order.
-    # If names_df is the zipped DataFrame we created earlier (label, nameseq)
     if isinstance(names_df, pd.DataFrame) and 'nameseq' in names_df.columns:
         # assume names_df is aligned with labels order
         point_names = names_df['nameseq'].astype(str).tolist()
@@ -676,9 +674,9 @@ def calculate_metrics_from_confusion_matrix(matrix_path):
     df = df.loc[~df.index.str.lower().isin(drop_labels)]
     df = df.loc[:, ~df.columns.str.lower().isin(drop_labels)]
 
-    # 🔑 Enforce square confusion matrix
-    common_labels = df.index.intersection(df.columns)
-    df = df.loc[common_labels, common_labels]
+    # Enforce square confusion matrix
+    labels = df.index.union(df.columns)
+    df = df.reindex(index=labels, columns=labels, fill_value=0)
 
     C = df.values.astype(float)
     n_classes = C.shape[0]
@@ -941,8 +939,9 @@ def performance_metrics(task):
 
                 if os.path.exists(path_metrics_other):
                     df_metrics_other = pd.read_csv(path_metrics_other)
-                    auc_value = df_metrics_other[df_metrics_other["Metric"] == "AUC"]["Value"].item()
-                    st.metric("AUC", f"{auc_value:.3f}", help="Area Under the ROC Curve")
+                    auc_values = df_metrics_other.loc[df_metrics_other["Metric"] == "AUC", "Value"]
+                    if not auc_values.empty:
+                        st.metric("AUC", f"{auc_values.item():.3f}", help="Area Under the ROC Curve")
 
             elif task == "Regression":
                 df_report = pd.read_csv(run_path(st.session_state["job_path"], "metrics_test.csv"))
@@ -1109,7 +1108,6 @@ def compute_shap_values(model, X):
     explainer = shap.TreeExplainer(model.named_steps['clf'])
     shap_values = explainer.shap_values(X)
 
-    # --- FIX multiclass output ---
     if isinstance(shap_values, list):
         # list[n_classes] of (n_samples, n_features)
         shap_values = np.stack(shap_values, axis=2)
@@ -1529,17 +1527,6 @@ def model_information(data_type, task):
                     st.image("imgs/models/lightgbm.png", use_container_width=True)
 
 
-def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
-    password_bytes = password.encode("utf-8")
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=iterations,
-    )
-    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
-    
-    return key
 
 def decrypt_job_archive(job_path: str, password: str, target_extract_path: str) -> bool:
     enc_path = run_path(job_path, "job_archive.enc")
@@ -1673,6 +1660,42 @@ def live_log_viewer(job_id):
         st.error("Job has failed. Please try submitting a new job.")
 
 def runUI():
+    # Keep cleanup from deleting an archive/model while this render reads it.
+    identifiers = set()
+    for value in (st.session_state.get('job_input'), st.session_state.get('_loaded_web_job'), st.query_params.get('id')):
+        try:
+            identifier = str(uuid.UUID(value))
+            if identifier == value:
+                identifiers.add(identifier)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    with ExitStack() as stack:
+        for identifier in sorted(identifiers):
+            record = manager.get_result(identifier)
+            if record and record['status'] not in {'pending', 'running'}:
+                stack.enter_context(job_lock(identifier))
+        _runUI()
+
+
+def _runUI():
+    loaded = st.session_state.get('_loaded_web_job')
+    if loaded:
+        record = manager.get_result(loaded)
+        if not record or is_expired(record):
+            clear_job_data()
+            _cleanup_previous_temp()
+            st.session_state.pop('job_path', None)
+            st.session_state.pop('_loaded_web_job', None)
+            st.info('This job is no longer available. Results expire 30 days after completion.')
+        elif st.session_state.get('temp_extract_path'):
+            temporary = st.session_state['temp_extract_path']
+            if os.path.isdir(temporary):
+                os.utime(temporary, None)
+            else:
+                clear_job_data()
+                st.session_state.pop('job_path', None)
+                st.session_state.pop('temp_extract_path', None)
+                st.info('The private viewing session expired. Enter your job ID and password again.')
 
     with st.expander("Viewing your submission"):
         st.info(
@@ -1708,7 +1731,7 @@ def runUI():
         with col2:
             st.button("Example", use_container_width=True, on_click=get_job_example)
 
-        with st.form("jobs_submit", border=False):
+        with st.form("jobs_submit", border=False, clear_on_submit=True):
 
             textcol1, textcol2 = st.columns(2)
 
@@ -1731,6 +1754,11 @@ def runUI():
         if job_id:
             clear_job_data()
             _cleanup_previous_temp()
+            st.session_state.pop('_loaded_web_job', None)
+            st.session_state.pop('job_path', None)
+            if not re.fullmatch(r'[a-zA-Z0-9_-]+', job_id):
+                st.error('Invalid job ID.')
+                return
             job_path = ""
             if os.path.exists(os.path.join(predict_path, job_id)):
                 job_path = os.path.join(predict_path, job_id)
@@ -1738,7 +1766,11 @@ def runUI():
             job = manager.get_result(job_id)
 
             if job:
+                if is_expired(job):
+                    st.info('This job has expired. Results are retained for 30 days after completion.')
+                    return
                 if job["status"] == "success":
+                    st.session_state['_loaded_web_job'] = job_id
                     st.session_state.pop("watching_job_id", None)
                     _cleanup_previous_temp()
 
@@ -1747,14 +1779,14 @@ def runUI():
 
                     if os.path.exists(enc_path) and os.path.exists(salt_path):
                         if password:
-                            temp_dir = tempfile.mkdtemp(prefix=f"extracted_job_{job_id}_")
+                            temp_dir = create_job_temp(job_id)
                             succeeded = decrypt_job_archive(job_path, password, temp_dir)
 
                             if succeeded:
                                 st.session_state["job_path"] = temp_dir
                                 st.session_state["temp_extract_path"] = temp_dir
                             else:
-                                shutil.rmtree(temp_dir)
+                                remove_job_temp(temp_dir)
                                 st.error(f"Wrong password for decryption.")
                                 if "job_path" in st.session_state:
                                     del st.session_state["job_path"]

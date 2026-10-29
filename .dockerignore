@@ -12,6 +12,7 @@ MathFeature
 results
 datasets
 experiments
+manuscript/experiments/results/
 logs
 logs_tmp
 work

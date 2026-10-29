@@ -13,6 +13,11 @@ class TrainingJob(Job):
         return super()._execute()
 
 
+def work_horse_killed(job, retpid, ret_val, rusage):
+    from utils.tasks import _on_failure
+    _on_failure(job, job.connection)
+
+
 def main():
     app_path = Path(__file__).resolve().parent
     os.chdir(app_path)
@@ -37,7 +42,8 @@ def main():
 
     redis_conn.ping()
     worker = Worker([queue], connection=redis_conn, name=os.environ.get("RQ_WORKER_NAME"),
-                    job_class=TrainingJob if queue is training_q else Job)
+                    job_class=TrainingJob if queue is training_q else Job,
+                    work_horse_killed_handler=work_horse_killed)
     worker.work()
 
 

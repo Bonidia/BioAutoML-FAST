@@ -2,6 +2,7 @@ from bioautoml.model_artifacts import validate_model_support
 from bioautoml.sequence_names import read_names, annotate_predictions
 from bioautoml.execution import run_path, timed, start_cli
 from bioautoml.execution import phase, run_root
+from bioautoml.optimization import optimize_study, save_skipped_history
 import warnings
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings('ignore')
@@ -326,7 +327,7 @@ def save_prediction(task, prediction, nameseqs, pred_output):
     preds_df = annotate_predictions(preds_df, run_root(pred_output))
     preds_df.to_csv(pred_output, index=False)
 
-def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None):
+def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None, output=None):
     """
     Runs Optuna optimization and returns the best configured pipeline.
     task: 0 = Classification, 1 = Regression
@@ -404,7 +405,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
                 
                 # Prune if this trial is performing poorly compared to others at this step
                 if trial.should_prune():
-                    raise optuna.TrialPruned()
+                    raise optuna.TrialPruned('fold-score pruning')
 
             return np.mean(fold_scores)
 
@@ -469,7 +470,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
                 
                 # Prune if this trial is performing poorly compared to others at this step
                 if trial.should_prune():
-                    raise optuna.TrialPruned()
+                    raise optuna.TrialPruned('fold-score pruning')
 
             return np.mean(fold_scores)
 
@@ -479,15 +480,19 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
     else:
         direction = "minimize"
 
+    history_settings = dict(seed=random_seed, search_seed=optimization_seed, startup_trials=10,
+                            metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
+                            direction=direction.upper(), patience=None)
     if n_trials > 0:
         study = optuna.create_study(
             direction=direction,
             sampler=optuna.samplers.TPESampler(
-                multivariate=True, group=True, constant_liar=True,
+                n_startup_trials=10, multivariate=True, group=True, constant_liar=True,
                 seed=optimization_seed
             )
         )
-        study.optimize(objective, n_trials=n_trials, timeout=10_800, show_progress_bar=True, n_jobs=search_jobs)
+        optimize_study(study, objective, output, 'stage_2', n_trials, 10_800, search_jobs,
+                       settings=history_settings)
         
         print(f"Best Trial Score: {study.best_value:.4f}")
         print("Best Params Raw:", study.best_params)
@@ -500,6 +505,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
 
     else:
         best_clf_type = 2
+        save_skipped_history(output, 'stage_2', history_settings)
     
     final_model = None
     
@@ -652,7 +658,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
         with phase('stage_2', 'skipped' if tuning == 0 else 'completed'):
-            clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds)
+            clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds, output=output)
 
         print('--- Optimization Complete ---')
 
@@ -743,8 +749,8 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                 metr_report = pd.DataFrame(report).transpose()
                 metr_report.to_csv(metrics_output)
                 
+                metrics_other_output = run_path(output, "metrics_other.csv")
                 if len(lb_encoder.classes_) <= 2:
-                    metrics_other_output = run_path(output, "metrics_other.csv")
                     accu = accuracy_score(test_labels, preds)
                     auc = roc_auc_score(test_labels, probs[:, 1])
                     balanced = balanced_accuracy_score(test_labels, preds)
@@ -756,8 +762,14 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                         'Value': [accu, auc, balanced, gmean, mcc]
                     }
 
-                    metrics_df = pd.DataFrame(metrics)
-                    metrics_df.to_csv(metrics_other_output, index=False)
+                else:
+                    metrics = {
+                        'Metric': ['Accuracy', 'Balanced ACC', 'MCC'],
+                        'Value': [accuracy_score(test_labels, preds), balanced_accuracy_score(test_labels, preds),
+                                  matthews_corrcoef(test_labels, preds)]
+                    }
+                metrics_df = pd.DataFrame(metrics)
+                metrics_df.to_csv(metrics_other_output, index=False)
 
                 matrix_test = (pd.crosstab(test_labels, preds, rownames=["REAL"], colnames=["PREDICTED"], margins=True))
                 matrix_output_test = run_path(output, "test_confusion_matrix.csv")

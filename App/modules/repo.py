@@ -19,14 +19,7 @@ from rq import get_current_job
 from utils.tasks import manager
 from utils.db import TaskResultManager, TaskStatus
 import re
-import tarfile
 import tempfile
-import io
-import secrets
-import base64
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.fernet import Fernet
 from utils.feature_extraction import test_extraction as extract_selected_test_features
 from bioautoml.model_artifacts import load_model
 
@@ -204,40 +197,6 @@ def test_extraction(job_path, test_data, model, data_type):
         df.to_csv(dataset, index=False)
         datasets.append(dataset)
 
-        # dataset = feat_path + '/EIIP.csv'
-
-        # subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '7'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-        # colnames = ['EIIP_' + str(i) for i in range(0, max(col_count))]
-
-        # df = pd.read_csv(dataset, names=colnames, header=None)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
-
-        # dataset = feat_path + '/AAAF.csv'
-
-        # subprocess.run(['python', 'other-methods/mathfeature-modified/methods/Mappings-Protein.py',
-        #                 '-n', str(len(test_data)), '-o',
-        #                 dataset, '-r', '1'], cwd="..", text=True, input=text_input,
-        #                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-
-        # with open(dataset, 'r') as temp_f:
-        #     col_count = [len(l.split(",")) for l in temp_f.readlines()]
-
-        # colnames = ['AccumulatedFrequency_' + str(i) for i in range(0, max(col_count))]
-
-        # df = pd.read_csv(dataset, names=colnames, header=None)
-        # df.rename(columns={df.columns[0]: 'nameseq', df.columns[-1]: 'label'}, inplace=True)
-        # df.to_csv(dataset, index=False)
-        # datasets.append(dataset)
-
     if datasets:
         datasets = list(dict.fromkeys(datasets))
         dataframes = pd.concat([pd.read_csv(f) for f in datasets], axis=1)
@@ -262,68 +221,9 @@ def test_extraction(job_path, test_data, model, data_type):
 
     df_predict.to_csv(os.path.join(path_bio, "best_test.csv"), index=False)
 
-# Derive a URL-safe Base64 key for Fernet from a password + salt
-def derive_key_from_password(password: str, salt: bytes, iterations: int = 390000) -> bytes:
-    password_bytes = password.encode("utf-8")
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=iterations,
-    )
-    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
-    return key
-
-# Create a tar archive in memory from a directory path and return bytes
-def make_tar_bytes_from_dir(folder_path: str) -> bytes:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz", dereference=True) as tar:
-        # Add all files and subdirectories
-        tar.add(folder_path, arcname=".")
-    buf.seek(0)
-    return buf.read()
-
-def encrypt_job_folder(job_path: str, password: str) -> None:
-    # 1) Create tar.gz bytes of folder
-    tar_bytes = make_tar_bytes_from_dir(job_path)
-
-    # 2) Generate salt and derive key
-    salt = secrets.token_bytes(16)
-    key = derive_key_from_password(password, salt)
-    fernet = Fernet(key)
-
-    # 3) Encrypt the tar bytes
-    encrypted = fernet.encrypt(tar_bytes)
-
-    # 4) Write encrypted archive and salt into job_path
-    enc_path = run_path(job_path, "job_archive.enc")
-    salt_path = run_path(job_path, "job_salt.bin")
-
-    with open(enc_path, "wb") as f:
-        f.write(encrypted)
-    with open(salt_path, "wb") as f:
-        f.write(salt)
-
-    # 5) Remove everything else in job_path except the newly created files
-    for root, dirs, files in os.walk(job_path):
-        for name in files:
-            full = os.path.join(root, name)
-            if full not in {enc_path, salt_path}:
-                try:
-                    os.remove(full)
-                except Exception:
-                    pass
-        # remove empty directories (except the top job_path)
-        for d in dirs:
-            dirfull = os.path.join(root, d)
-            try:
-                # attempt rmdir (will only remove if empty)
-                os.rmdir(dirfull)
-            except Exception:
-                pass
 
 @web_execution
-def submit_job(dataset_path, test_files, predict_path, data_type, training, testing, email=None, password=None):
+def submit_job(dataset_path, test_files, predict_path, data_type, training, testing):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -430,9 +330,6 @@ def submit_job(dataset_path, test_files, predict_path, data_type, training, test
                                 save_path = os.path.join(test_path, file.name)
                                 with open(save_path, mode="wb") as f:
                                     f.write(file.getvalue())
-                            # save_path = os.path.join(test_path, test_files.name)
-                            # with open(save_path, mode="wb") as f:
-                            #     f.write(test_files.getvalue())
 
                         test_fasta = {os.path.splitext(f)[0] : os.path.join(test_path, f) for f in os.listdir(test_path) if os.path.isfile(os.path.join(test_path, f))}
 
@@ -936,15 +833,16 @@ def runUI():
         col1, col2 = st.columns(2)
 
         with col1:
-            email = st.text_input("Email to notify when job finishes (Optional)", help="We will send a completion notification to this address.")
+            email = st.text_input("Email to notify when job finishes (Optional)", help="Held temporarily in memory for notifications; not saved in job records. The email provider receives this address.")
 
             # Simple validation (not strict): show warning if looks invalid
             if email:
                 if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                     st.warning("That doesn't look like a valid email address.")
         with col2:
-            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Only with this password can the job be accessed. Not even the administrators can view encrypted submissions.")
+            password = st.text_input("Password to encrypt submission (Optional)", type='password', help="Encrypts completed results. The password is not persisted; the server processes plaintext during execution. Temporary credentials can be lost on restart, requiring resubmission.")
 
+        st.caption('Results are automatically deleted 30 days after completion. Please download them beforehand.')
         submitted = st.form_submit_button("Submit", 
                                     use_container_width=True, 
                                     type="primary")
@@ -1005,26 +903,16 @@ def runUI():
             "password":  password
         }
             
-        # Add job to the queue
-        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs)
-        job_path = os.path.join(predict_path, job_id)
-
-        os.makedirs(job_path, exist_ok=True)
-
         task = int(dataset_id.split('_')[-1])
 
         job_data = {
-            "data_type": [data_type],
-            "task": ["Classification" if task == 0 else "Regression"],
-            "training_set": [training == "Training set"],
-            "testing_set": [testing],
-            "tuning": [tuning]
+            "data_type": data_type,
+            "task": "Classification" if task == 0 else "Regression",
+            "training_set": training == "Training set",
+            "testing_set": testing,
+            "tuning": tuning
         }
-
-        df_job_data = pl.DataFrame(job_data)
-        tsv_path = run_path(job_path, "job_info.tsv")
-        os.makedirs(os.path.dirname(tsv_path), exist_ok=True)
-        df_job_data.write_csv(tsv_path, separator='\t')
+        job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs, job_info=job_data)
 
         job_submitted_dialog(job_id)
 

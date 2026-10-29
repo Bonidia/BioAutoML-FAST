@@ -2,7 +2,7 @@
 # Rebuild and run the local application with live UI reload, preserving jobs and state.
 set -Eeuo pipefail
 
-project_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 image_name="${IMAGE_NAME:-bioautoml-fast:local}"
 container_name="${CONTAINER_NAME:-bioautoml-fast}"
 host_port="${HOST_PORT:-8501}"
@@ -21,33 +21,22 @@ fi
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Usage: $0 [Docker build options, e.g. --no-cache-filter mathfeature]"
     echo "Always rebuilds the image and recreates the container with live UI reload."
-    echo "Replaces this script's container and image tag. Jobs/state are NEVER deleted."
+    echo "Replaces this script's container and image tag; completed jobs expire after 30 days."
     echo "Any running training jobs in that container will be interrupted."
     echo "Settings: IMAGE_NAME, CONTAINER_NAME, HOST_PORT, BIND_ADDRESS, JOBS_DIR, STATE_DIR, DATASETS_DIR."
     echo "Defaults: bioautoml-fast:local, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
     echo "DATASETS_DIR is mounted read-only and must contain references.bib and your model repository."
-    echo "MODEL_KEYS_DIR: optional external key directory created with python -m bioautoml.model_security."
-    echo "With keys, starts a dedicated signing/training container; private keys never enter the web container."
+    echo "MODEL_KEYS_DIR: optional external key directory; existing keys are reused, missing directories are initialized."
+    echo "Default: existing training container's keys, otherwise \${XDG_CONFIG_HOME:-\$HOME/.config}/bioautoml-fast/model-keys."
+    echo "Starts a dedicated signing/training container; private keys never enter the web container."
+    echo "Interactive launches prompt for API keys with hidden input; Enter or whitespace disables that service."
+    echo "Non-interactive launches use optional exported variables: BLABLADOR_API_KEY and MAILGUN_API_KEY."
+    echo "Keys are passed at runtime; missing keys disable only their respective services."
     echo "Run as a non-root user with Docker access. Paths are resolved on the Docker host."
     exit 0
 fi
 
 fail() { echo "Error: $*" >&2; exit 1; }
-verification_options=()
-if [[ -n "$keys_path" ]]; then
-    [[ -d "$keys_path" ]] || fail "MODEL_KEYS_DIR does not exist."
-    keys_path="$(cd -- "$keys_path" && pwd -P)"
-    [[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* && "$keys_path" != *,* ]] || fail "Keys must be outside the project/build context."
-    for name in signing.pem trusted_keys.json key_id; do
-        [[ -r "$keys_path/$name" ]] || fail "Missing key configuration: $name"
-    done
-    key_id="$(<"$keys_path/key_id")"
-    verification_options+=(--mount "type=bind,source=$keys_path/trusted_keys.json,target=/run/bioautoml/trusted_keys.json,readonly"
-                          --env BIOAUTOML_TRUSTED_KEYS=/run/bioautoml/trusted_keys.json
-                          --env BIOAUTOML_TRAINING_ENABLED=1)
-else
-    echo "MODEL_KEYS_DIR is unset: web training is disabled and models cannot be verified."
-fi
 command -v docker >/dev/null || fail "Docker is not installed."
 docker info >/dev/null 2>&1 || fail "Cannot access Docker. Check the daemon and your Docker permissions."
 [[ "$(id -u)" != "0" ]] || fail "Run this script as a non-root user with Docker access (without sudo)."
@@ -75,6 +64,28 @@ for existing_container in "$container_name" "$training_container"; do
     fi
 done
 
+if [[ -z "$keys_path" ]] && docker container inspect "$training_container" >/dev/null 2>&1; then
+    signing_path="$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/run/bioautoml/signing.pem"}}{{.Source}}{{end}}{{end}}' "$training_container")"
+    [[ -n "$signing_path" ]] || fail "Existing training container has no signing-key mount; set MODEL_KEYS_DIR explicitly."
+    keys_path="$(dirname -- "$signing_path")"
+    [[ -d "$keys_path" ]] || fail "Existing signing keys are unavailable; restore them before restarting."
+fi
+keys_path="${keys_path:-${XDG_CONFIG_HOME:-$HOME/.config}/bioautoml-fast/model-keys}"
+[[ "$keys_path" != *,* && ! -L "$keys_path" ]] || fail "Key directories cannot be symlinks or contain commas."
+keys_parent="$(dirname -- "$keys_path")"
+(umask 077; mkdir -p -- "$keys_parent")
+keys_parent="$(cd -- "$keys_parent" && pwd -P)"
+keys_name="$(basename -- "$keys_path")"
+[[ "$keys_name" != . && "$keys_name" != .. && "$keys_name" != / ]] || fail "Use a dedicated signing-key directory."
+keys_path="$keys_parent/$keys_name"
+[[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* && "$keys_path" != *,* ]] || fail "Keys must be outside the project/build context."
+if [[ -e "$keys_path" ]]; then
+    [[ -d "$keys_path" ]] || fail "Signing-key path is not a directory."
+    for name in signing.pem trusted_keys.json key_id; do
+        [[ -f "$keys_path/$name" && -s "$keys_path/$name" && -r "$keys_path/$name" && ! -L "$keys_path/$name" ]] || fail "Missing, empty or unsafe key configuration: $name. Restore the original keys; they will not be overwritten."
+    done
+fi
+
 # Validate repository data before stopping the current application. Do not
 # silently create an empty datasets directory that would break the Repository tab.
 [[ -d "$datasets_path" && -r "$datasets_path" && -x "$datasets_path" ]] || fail "DATASETS_DIR must be an existing readable directory: $datasets_path"
@@ -90,6 +101,40 @@ for path in "$jobs_path" "$state_path"; do
     [[ -w "$path" && -x "$path" ]] || fail "Directory is not writable by your user: $path"
 done
 [[ "$jobs_path" != "$state_path" ]] || fail "JOBS_DIR and STATE_DIR must be separate directories."
+for path in "$jobs_path" "$state_path" "$datasets_path"; do
+    [[ "$keys_path" != "$path" && "$keys_path" != "$path/"* ]] || fail "Signing keys must not be inside directories shared with the web container."
+done
+
+configure_api_keys() {
+    local trace_enabled=0
+    if [[ $- == *x* ]]; then
+        trace_enabled=1
+        set +x
+    fi
+    local api_key_name api_key_value prompt
+    for api_key_name in BLABLADOR_API_KEY MAILGUN_API_KEY; do
+        api_key_value="${!api_key_name-}"
+        if [[ -t 0 ]]; then
+            case "$api_key_name" in
+                BLABLADOR_API_KEY) prompt="Blablador API key (Enter to skip): " ;;
+                MAILGUN_API_KEY) prompt="Mailgun API key (Enter to skip): " ;;
+            esac
+            api_key_value=""
+            read -r -s -p "$prompt" api_key_value || api_key_value=""
+            printf '\n' >&2
+        fi
+        api_key_value="${api_key_value#"${api_key_value%%[![:space:]]*}"}"
+        api_key_value="${api_key_value%"${api_key_value##*[![:space:]]}"}"
+        printf -v "$api_key_name" '%s' "$api_key_value"
+        export "$api_key_name"
+    done
+    unset api_key_value
+    if (( trace_enabled )); then
+        set -x
+    fi
+}
+
+configure_api_keys
 
 if docker container inspect "$training_container" >/dev/null 2>&1; then
     echo "Stopping the signing/training container (running training will be interrupted)..."
@@ -110,12 +155,36 @@ echo "Building $image_name..."
 docker build "$@" --tag "$image_name" --file "$project_path/Dockerfile" "$project_path"
 image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
 
+if [[ ! -d "$keys_path" ]]; then
+    echo "Creating signing keys in $keys_path..."
+    docker run --rm --network none --read-only --cap-drop ALL \
+        --security-opt=no-new-privileges:true --ulimit core=0 \
+        --user "$(id -u):$(id -g)" \
+        --mount "type=bind,source=$keys_parent,target=/run/bioautoml-key-store" \
+        --entrypoint python "$image_name" -m bioautoml.model_security "/run/bioautoml-key-store/$keys_name"
+fi
+key_id="$(<"$keys_path/key_id")"
+[[ "$key_id" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Invalid signing key ID."
+verification_options=(--mount "type=bind,source=$keys_path/trusted_keys.json,target=/run/bioautoml/trusted_keys.json,readonly"
+                      --env BIOAUTOML_TRUSTED_KEYS=/run/bioautoml/trusted_keys.json
+                      --env BIOAUTOML_TRAINING_ENABLED=1)
+docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt=no-new-privileges:true --ulimit core=0 \
+    --user "$(id -u):$(id -g)" \
+    --mount "type=bind,source=$keys_path/signing.pem,target=/run/bioautoml/signing.pem,readonly" \
+    "${verification_options[@]}" \
+    --env BIOAUTOML_SIGNING_KEY=/run/bioautoml/signing.pem \
+    --env BIOAUTOML_SIGNING_KEY_ID="$key_id" \
+    --entrypoint python "$image_name" -c 'from bioautoml.model_security import initialize_web_signer; initialize_web_signer(); print("Signing keys verified.")'
+echo "Signing keys: $keys_path (keep a secure backup for future machines)."
+
 echo "Live UI reload enabled with read-only source mounts."
 echo "Avoid editing job-processing code while jobs are running; worker changes require a restart."
 echo "Starting $container_name with persistent local directories..."
 docker run --detach --name "$container_name" \
     --label "$owner_label=run-docker.sh" \
-    --restart unless-stopped --stop-timeout 40 \
+    --security-opt=no-new-privileges:true \
+    --restart unless-stopped --stop-timeout 40 --ulimit core=0 \
     --user "$(id -u):$(id -g)" \
     --publish "$bind_address:$host_port:8501" \
     --mount "type=bind,source=$jobs_path,target=/app/App/jobs" \
@@ -124,6 +193,8 @@ docker run --detach --name "$container_name" \
     --env TASK_RESULTS_DB=/app/App/task-results/task_results.db \
     --env REDIS_DATA_DIR=/app/App/task-results/redis \
     --env BIOAUTOML_IMAGE_ID="$image_id" \
+    --env BLABLADOR_API_KEY \
+    --env MAILGUN_API_KEY \
     "${verification_options[@]}" \
     "${development_options[@]}" \
     "$image_name"
@@ -131,7 +202,8 @@ docker run --detach --name "$container_name" \
 if [[ -n "$keys_path" ]]; then
     docker run --detach --name "$training_container" \
         --label "$owner_label=run-docker.sh" \
-        --restart unless-stopped --stop-timeout 40 --no-healthcheck \
+        --security-opt=no-new-privileges:true \
+        --restart unless-stopped --stop-timeout 40 --no-healthcheck --ulimit core=0 \
         --user "$(id -u):$(id -g)" --network "container:$container_name" \
         --mount "type=bind,source=$jobs_path,target=/app/App/jobs" \
         --mount "type=bind,source=$state_path,target=/app/App/task-results" \
@@ -140,6 +212,7 @@ if [[ -n "$keys_path" ]]; then
         --env TASK_RESULTS_DB=/app/App/task-results/task_results.db \
         --env REDIS_URL=redis://127.0.0.1:6379/0 \
         --env BIOAUTOML_IMAGE_ID="$image_id" \
+        --env MAILGUN_API_KEY \
         --env BIOAUTOML_WORKER_ROLE=training \
         --env RQ_WORKER_NAME=bioautoml-training \
         --env BIOAUTOML_SIGNING_KEY=/run/bioautoml/signing.pem \

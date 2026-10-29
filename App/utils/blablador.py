@@ -42,8 +42,7 @@ class ChatCompletions():
    
     url = "https://api.helmholtz-blablador.fz-juelich.de/v1/chat/completions"
     
-    # don't know what these are, using default values from https://helmholtz-blablador.fz-juelich.de:8000/docs#/
-    top_p =  1 # has something to do with temperature...
+    top_p =  1
     presence_penalty = 0
     frequency_penalty = 0
 
@@ -81,12 +80,10 @@ class Completions():
    
     url = "https://api.helmholtz-blablador.fz-juelich.de/v1/completions"
     
-    # don't know what these are, using default values from https://helmholtz-blablador.fz-juelich.de:8000/docs#/
-
     suffix = "string"
     logprobs = 0
     echo = "false"
-    top_p =  1 # has something to do with temperature...
+    top_p =  1
     presence_penalty = 0
     frequency_penalty = 0
 
