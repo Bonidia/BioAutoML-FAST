@@ -19,8 +19,10 @@ if [[ "${1:-}" == "--build" ]]; then
 fi
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    echo "Usage: $0 [Docker build options, e.g. --no-cache-filter mathfeature]"
-    echo "Always rebuilds the image and recreates the container with live UI reload."
+    echo "Usage: $0 [--delete | Docker build options, e.g. --no-cache-filter mathfeature]"
+    echo "--delete: stop and remove this deployment's two containers and image tag, without rebuilding."
+    echo "Local jobs, database files, datasets and signing keys are preserved."
+    echo "Without --delete, rebuilds the image and recreates the containers with live UI reload."
     echo "Replaces this script's container and image tag; completed jobs expire after 30 days."
     echo "Any running training jobs in that container will be interrupted."
     echo "Settings: IMAGE_NAME, CONTAINER_NAME, HOST_PORT, BIND_ADDRESS, JOBS_DIR, STATE_DIR, DATASETS_DIR."
@@ -37,11 +39,46 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 fail() { echo "Error: $*" >&2; exit 1; }
+delete_mode=false
+if [[ "${1:-}" == "--delete" ]]; then
+    [[ $# == 1 ]] || fail "--delete cannot be combined with Docker build options."
+    delete_mode=true
+fi
 command -v docker >/dev/null || fail "Docker is not installed."
 docker info >/dev/null 2>&1 || fail "Cannot access Docker. Check the daemon and your Docker permissions."
 [[ "$(id -u)" != "0" ]] || fail "Run this script as a non-root user with Docker access (without sudo)."
 [[ "$container_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || fail "Invalid CONTAINER_NAME."
 [[ "$image_name" != -* && "$image_name" != *@* && "$image_name" != sha256:* ]] || fail "IMAGE_NAME must be a local image name/tag, not an ID or digest."
+
+# Validate both containers before removing either one.
+for existing_container in "$container_name" "$training_container"; do
+    if docker container inspect "$existing_container" >/dev/null 2>&1; then
+        owner="$(docker container inspect --format "{{index .Config.Labels \"$owner_label\"}}" "$existing_container")"
+        [[ "$owner" == "run-docker.sh" ]] || fail "Container '$existing_container' was not created by this script."
+    fi
+done
+
+remove_deployment() {
+    local existing_container
+    for existing_container in "$training_container" "$container_name"; do
+        if docker container inspect "$existing_container" >/dev/null 2>&1; then
+            echo "Stopping and removing $existing_container (running jobs will be interrupted)..."
+            docker stop --time 40 "$existing_container" >/dev/null
+            docker container rm "$existing_container" >/dev/null
+        fi
+    done
+    if docker image inspect "$image_name" >/dev/null 2>&1; then
+        echo "Removing image tag $image_name..."
+        docker image rm "$image_name" || fail "Image removal failed; it may still be in use. No forced image removal was attempted."
+    fi
+}
+
+if [[ "$delete_mode" == true ]]; then
+    remove_deployment
+    echo "Deployment removed (or already absent). Local jobs, database files, datasets and signing keys were not deleted."
+    exit 0
+fi
+
 [[ "$host_port" =~ ^[0-9]{1,5}$ ]] || fail "HOST_PORT must be between 1 and 65535."
 host_port=$((10#$host_port))
 (( host_port >= 1 && host_port <= 65535 )) || fail "HOST_PORT must be between 1 and 65535."
@@ -55,14 +92,6 @@ done
 # Mount the startup script too so this works with previously built images.
 development_options+=(--env STREAMLIT_SERVER_RUN_ON_SAVE=true
                       --env STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll)
-
-# Do not accidentally replace an unrelated application using the same name.
-for existing_container in "$container_name" "$training_container"; do
-    if docker container inspect "$existing_container" >/dev/null 2>&1; then
-        owner="$(docker container inspect --format "{{index .Config.Labels \"$owner_label\"}}" "$existing_container")"
-        [[ "$owner" == "run-docker.sh" ]] || fail "Container '$existing_container' was not created by this script."
-    fi
-done
 
 if [[ -z "$keys_path" ]] && docker container inspect "$training_container" >/dev/null 2>&1; then
     signing_path="$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/run/bioautoml/signing.pem"}}{{.Source}}{{end}}{{end}}' "$training_container")"
@@ -136,20 +165,7 @@ configure_api_keys() {
 
 configure_api_keys
 
-if docker container inspect "$training_container" >/dev/null 2>&1; then
-    echo "Stopping the signing/training container (running training will be interrupted)..."
-    docker stop --time 40 "$training_container" >/dev/null
-    docker container rm "$training_container" >/dev/null
-fi
-if docker container inspect "$container_name" >/dev/null 2>&1; then
-    echo "Stopping and removing container $container_name (running jobs will be interrupted)..."
-    docker stop --time 40 "$container_name" >/dev/null
-    docker container rm "$container_name" >/dev/null
-fi
-if docker image inspect "$image_name" >/dev/null 2>&1; then
-    echo "Removing existing image tag $image_name..."
-    docker image rm "$image_name" || fail "Image is still in use. No forced image removal was attempted."
-fi
+remove_deployment
 
 echo "Building $image_name..."
 docker build "$@" --tag "$image_name" --file "$project_path/Dockerfile" "$project_path"

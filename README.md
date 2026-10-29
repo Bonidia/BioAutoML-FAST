@@ -400,6 +400,16 @@ Open `http://localhost:8501`. The script rebuilds the image and replaces its
 container; running jobs are interrupted. Jobs and database files remain in local
 bind-mounted directories. See `./run-docker.sh --help` for options.
 
+To stop and remove both application containers and the image without rebuilding:
+
+```sh
+./run-docker.sh --delete
+```
+
+Running container jobs are interrupted. Local jobs, database files, datasets,
+and signing keys are preserved. If you used custom `CONTAINER_NAME` or
+`IMAGE_NAME` values, supply the same values when deleting the deployment.
+
 When run in a terminal, the launcher prompts for the Blablador and Mailgun API
 keys with hidden input. Press Enter or enter only whitespace to skip a service.
 Your answers replace any inherited API-key values, so a blank answer always
