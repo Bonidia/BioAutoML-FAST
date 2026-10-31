@@ -99,7 +99,7 @@ def main():
                         raise ValueError(f'Input changed during audit: {path}')
                 atomic_json(summary, row)
             rows.append(row)
-            ablation.save_csv(pd.DataFrame(rows), args.output / 'summary.csv')
+            ablation.save_csv(pd.DataFrame(rows), args.output / 'results.csv')
             state['completed_results'] = len(rows)
             atomic_json(args.output / 'protocol.json', state)
             print(f'{dataset["dataset"]}: {row["overlapping_test_records"]} overlapping test records', flush=True)

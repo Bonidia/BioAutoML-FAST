@@ -636,7 +636,11 @@ def runUI():
         "Model 57: non-coding RNA - Multiple bacterial phyla",
         "Model 58: antibody sequences",
         "Model 59: ribosome binding site sequences",
-        "Model 60: toehold switch sequences"
+        "Model 60: toehold switch sequences",
+        "Model 61: protein solubility",
+        "Model 62: enzyme optimal temperature",
+        "Model 63: protein thermostability",
+        "Model 64: protein turnover"
     ]
 
     datasets = [
@@ -699,7 +703,11 @@ def runUI():
         "dataset57_bonidia_dnarna_0",
         "dataset58_liu_protein_1",
         "dataset59_hoellerer_dnarna_1",
-        "dataset60_valeri_dnarna_1"
+        "dataset60_valeri_dnarna_1",
+        "dataset61_han_protein_1",
+        "dataset62_qiu_protein_1",
+        "dataset63_leuenberger_protein_1",
+        "dataset64_martinperez_protein_1"
     ]
 
     cites = [
@@ -762,10 +770,13 @@ def runUI():
         "bonidia2022bioautoml",
         "liu2020antibody",
         "hollerer2020large",
-        "valeri2020sequence"
+        "valeri2020sequence",
+        "han2019solubility",
+        "qiu2025seq2topt",
+        "leuenberger2017thermal,li2022deepet",
+        "martinperez2017turnover"
     ]
 
-    # Build mapping dict programmatically to avoid 60 if/else branches
     model_map = {
         models[i]: {"dataset": datasets[i], "cite": cites[i]}
         for i in range(len(models))
@@ -778,10 +789,15 @@ def runUI():
         dataset_id = model_map[model]["dataset"]
         cite_key = model_map[model]["cite"]
 
-        df_train_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_1/train_stats.csv"))
+        dataset_path = os.path.join("datasets", dataset_id, "runs", "run_1")
+        train_stats_path = run_path(dataset_path, "train_stats.csv")
+        if not os.path.isfile(train_stats_path):
+            st.info("This model is not yet available in the local repository.")
+            return
+        df_train_stats = pd.read_csv(train_stats_path)
 
-        if os.path.exists(os.path.join("datasets", dataset_id, "runs/run_1/test_stats.csv")):
-            df_test_stats = pd.read_csv(os.path.join("datasets", dataset_id, "runs/run_1/test_stats.csv"))
+        if os.path.exists(run_path(dataset_path, "test_stats.csv")):
+            df_test_stats = pd.read_csv(run_path(dataset_path, "test_stats.csv"))
         else:
             df_test_stats = pd.DataFrame()
 

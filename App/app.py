@@ -34,7 +34,7 @@ def cookie_dialog():
         st.rerun()
 
 def runUI():
-    st.set_page_config(page_title = "BioAutoML-FAST | AutoML for Biological Sequences", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
+    st.set_page_config(page_title = "BioAutoML-FAST | Automated Machine Learning for Biological Sequences", page_icon = "imgs/icon.png", initial_sidebar_state = "expanded", layout="wide")
 
     utils.inject_css()
 

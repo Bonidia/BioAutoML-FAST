@@ -85,6 +85,20 @@ def read_json(path):
     return json.loads(Path(path).read_text())
 
 
+def same_configuration(previous, current):
+    return previous == current
+
+
+def preserve_protocol(path):
+    path = Path(path)
+    if path.exists():
+        archive = path.parent / 'protocol_history'
+        archive.mkdir(exist_ok=True)
+        target = archive / f'{file_hash(path)}.json'
+        if not target.exists():
+            shutil.copy2(path, target)
+
+
 def save_csv(frame, path):
     path = Path(path)
     temporary = path.with_suffix('.tmp')
@@ -297,9 +311,9 @@ def validate_previous_step(config, compatible_runner_hashes, compatible_code_cha
                 and previous_code.get(name) == change['before']
                 and expected_code.get(name) == change['after']):
             previous_code[name] = change['after']
-    if previous != expected or previous_code != expected_code:
+    if not same_configuration(previous, expected) or not same_configuration(previous_code, expected_code):
         raise ValueError(f'Existing step has different inputs, settings or production code: {output}')
-    if old_runner not in {current_runner, *compatible_runner_hashes}:
+    if old_runner not in (current_runner, *compatible_runner_hashes):
         raise ValueError(f'Existing step uses an unapproved runner version: {output}')
     if record['status'] == 'completed':
         missing = [name for name in record['outputs'] if not (output / name).is_file()]
@@ -397,31 +411,8 @@ def collect_result(config):
     return row
 
 
-def summarize(rows, root):
-    frame = pd.DataFrame(rows)
-    save_csv(frame, root / 'results.csv')
-    keys = ['dataset', 'task', 'dtype', 'condition', 'primary_metric']
-    additional = {}
-    for name in frame.columns:
-        if name.startswith('test_') and name != 'test_records':
-            additional[f'{name}_mean'] = (name, 'mean')
-            additional[f'{name}_sd'] = (name, 'std')
-    summary = frame.groupby(keys, sort=False).agg(
-        repeats=('primary_score', 'size'), primary_mean=('primary_score', 'mean'),
-        primary_sd=('primary_score', 'std'), mean_features=('features', 'mean'),
-        mean_condition_minutes=('condition_minutes', 'mean'), mean_stage_1_minutes=('stage_1_minutes', 'mean'),
-        mean_stage_2_minutes=('stage_2_minutes', 'mean'), max_condition_peak_gib=('condition_peak_gib', 'max'),
-        **additional).reset_index()
-    save_csv(summary, root / 'summary.csv')
-    paired_keys = ['dataset', 'task', 'dtype', 'run', 'search_seed', 'primary_metric']
-    full = frame[frame.condition == 'selected_tuned'][paired_keys + ['primary_score']]
-    paired = frame[frame.condition != 'selected_tuned'].merge(full, on=paired_keys, suffixes=('', '_full'))
-    paired['full_minus_condition'] = paired['primary_score_full'] - paired['primary_score']
-    save_csv(paired[paired_keys + ['condition', 'full_minus_condition']], root / 'paired_results.csv')
-    summary = paired.groupby(keys, sort=False).agg(
-        paired_repeats=('full_minus_condition', 'size'), mean_difference=('full_minus_condition', 'mean'),
-        sd_difference=('full_minus_condition', 'std')).reset_index()
-    save_csv(summary, root / 'paired_summary.csv')
+def save_results(rows, root):
+    save_csv(pd.DataFrame(rows), root / 'results.csv')
 
 
 def main():
@@ -456,7 +447,7 @@ def main():
         if previous['status'] == 'running':
             raise ValueError('Stop the active experiment before resuming; running protocols cannot be resumed.')
         for key in protocol:
-            if key not in ('status', 'note') and previous.get(key) != protocol[key]:
+            if key not in ('status', 'note') and not same_configuration(previous.get(key), protocol[key]):
                 raise ValueError(f'Resume protocol mismatch: {key}. Do not mix different experiments.')
         pd.testing.assert_frame_equal(pd.read_csv(args.output / 'input_inventory.csv'), inventory, check_dtype=False)
         previous_minutes = previous.get('total_minutes') or 0
@@ -467,6 +458,7 @@ def main():
         for directory in ('configs', 'logs'):
             (args.output / directory).mkdir()
         save_csv(inventory, args.output / 'input_inventory.csv')
+    preserve_protocol(args.output / 'protocol.json')
     atomic_json(args.output / 'protocol.json', protocol)
     worker_options = dict(resume=args.resume, compatible_runner_hashes=protocol.get('compatible_runner_hashes', []),
                           compatible_code_changes=protocol.get('compatible_code_changes', []))
@@ -486,7 +478,7 @@ def main():
                     current = dict(config, operation='condition', condition=condition, output=str(run_folder / condition))
                     run_worker(args.output, current, **worker_options)
                     rows.append(collect_result(current))
-                    summarize(rows, args.output)
+                    save_results(rows, args.output)
                     protocol['completed_results'] = len(rows)
                     atomic_json(args.output / 'protocol.json', protocol)
     except BaseException:

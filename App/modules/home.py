@@ -243,11 +243,11 @@ def homology_controls(data_type):
 
 
 def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homology_aware=False,
-                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
+                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True):
     """Use the same explicit training controls for sequence and structured jobs."""
     arguments = ['--n_cpu', str(n_cpu), '--seed', str(seed),
                  '--search_seed', str(seed if search_seed is None else search_seed),
-                 '--search_jobs', str(search_jobs)]
+                 '--search_jobs', str(search_jobs), '--pruning' if pruning else '--no-pruning']
     if homology_aware:
         validate_homology_settings(homology_identity, homology_coverage)
         arguments.extend(['--homology_aware', '--homology_identity', str(homology_identity),
@@ -258,7 +258,7 @@ def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homolo
 @web_execution
 def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning,
                seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
-               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE):
+               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -384,7 +384,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage))
+                                                  homology_identity, homology_coverage, pruning=pruning))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -459,7 +459,7 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("Predicted")
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage))
+                                                  homology_identity, homology_coverage, pruning=pruning))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -910,6 +910,7 @@ def runUI():
     st.markdown('<div class="section-label">Configuration</div>', unsafe_allow_html=True)
 
     tuning = False  # default; overridden by the checkbox widget below when applicable
+    pruning = True
     homology_aware = False
     homology_identity, homology_coverage = DEFAULT_IDENTITY, DEFAULT_COVERAGE
 
@@ -944,7 +945,7 @@ def runUI():
             data_type = None
 
     if training == "Training set" and data_type != "Structured data":
-        checkcol1, checkcol2 = st.columns(2)
+        checkcol1, checkcol2, checkcol3 = st.columns(3)
 
         with checkcol1:
             tuning = st.checkbox("Hyperparameter tuning", help="Whether to use hyperparameter tuning for the model (this can make the training take longer).")
@@ -955,8 +956,17 @@ def runUI():
                 help='Automatically keeps detected similar sequences in the same CV fold using MMseqs2. '
                      'Also audits supplied test sequences without changing their membership. Adds processing time.')
 
+        with checkcol3:
+            pruning = st.checkbox('Trial pruning', value=True,
+                                  help='Stops unpromising search trials during cross-validation in both stages. '
+                                       'Disabling it can increase training time; it does not disable search patience or time limits.')
+
         if homology_aware:
             homology_identity, homology_coverage = homology_controls(data_type)
+    elif training == "Training set":
+        pruning = st.checkbox('Trial pruning', value=True,
+                              help='Stops unpromising tuning trials during cross-validation. '
+                                   'Disabling it can increase training time; time limits remain unchanged.')
     checkcol1, checkcol2 = st.columns(2)
 
     with checkcol1:
@@ -1248,6 +1258,7 @@ def runUI():
             "testing":   testing,
             "tuning": tuning,
             "homology_aware": homology_aware,
+            "pruning": pruning,
             "homology_identity": homology_identity,
             "homology_coverage": homology_coverage,
             "seed": 63,
@@ -1264,6 +1275,7 @@ def runUI():
             "training_set": training == "Training set",
             "testing_set": testing,
             "tuning": tuning,
+            "pruning": pruning if training == 'Training set' else None,
         }
         job_id = tasks.enqueue_task(submit_job, fn_kwargs=fn_kwargs, job_info=job_data)
         st.session_state['_clear_home_credentials'] = True

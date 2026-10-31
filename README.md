@@ -205,9 +205,17 @@ Both training scripts accept these options:
 | `--seed` | Seed for learners and shuffled CV folds. | `63` |
 | `--search_seed` | Optuna sampler seed. | Same as `--seed` |
 | `--search_jobs` | Concurrent Optuna trials; keep at `1` for repeatable trial ordering. | `1` |
+| `--pruning` / `--no-pruning` | Enable or disable fold-score pruning in descriptor selection and hyperparameter tuning. | On |
 | `--homology_aware` | Automatic MMseqs2 sequence grouping for CV and train–test similarity auditing. Start from FASTA inputs with `engineering.py`; `generation.py` reuses its assignments. | Off |
 | `--homology_identity` | Minimum identity in percent (1–100); requires `--homology_aware`. | 90 |
 | `--homology_coverage` | Minimum alignment coverage of **each** sequence in percent (1–100); requires `--homology_aware`. | 80 |
+
+The web training form provides the same **Trial pruning** checkbox, checked by
+default. Turning it off can increase training time. Search patience, trial caps,
+time limits, and rejection of invalid configurations remain unchanged. With
+tuning disabled, pruning still applies to descriptor selection; it does not
+affect prediction with a saved model. The choice is recorded in run settings and
+optimization reports.
 
 #### Regression reporting
 
@@ -267,45 +275,51 @@ pixi install --locked
 pixi run sync
 ```
 
-Execute them in order, allowing each to finish; later experiments reuse verified
-results and descriptor caches from earlier ones.
+Run the tasks individually, in this order. Each task runs only its own experiment;
+it does not launch prerequisites.
 
 ```sh
-# 15 datasets × 6 conditions × 3 seeds.
-pixi run uv run --locked --no-dev python manuscript/experiments/run_ablation.py
-
-# First seed for all 64 datasets; reuse the ablation where compatible.
-pixi run uv run --locked --no-dev python manuscript/experiments/run_benchmarks.py --n_cpu 32 --runs 1 \
-  --reuse_ablation manuscript/experiments/results/ablation \
-  --output manuscript/experiments/results/benchmarks
-
-# Five-dataset comparisons: Stage 1 learner, trial budget, and homology-aware CV.
-pixi run uv run --locked --no-dev python manuscript/experiments/run_learner_aware.py
-pixi run uv run --locked --no-dev python manuscript/experiments/run_trial_budget_sweep.py
-pixi run uv run --locked --no-dev python manuscript/experiments/run_homology_comparison.py
-
-# Exact-overlap audit and three-dataset pruning on/off comparison.
-pixi run uv run --locked --no-dev python manuscript/experiments/scripts/audit_sequence_overlap.py
-pixi run uv run --locked --no-dev python manuscript/experiments/scripts/run_pruning_comparison.py
-
-# Complete five seeds for all 64 datasets: 104 reused + 216 new results.
-pixi run uv run --locked --no-dev python manuscript/experiments/scripts/run_benchmark_repeats.py
+pixi run ablation               # 15 datasets × 6 conditions × 3 seeds
+pixi run benchmark-first        # First seed across 64 datasets
+pixi run learner-aware          # Alternative Stage 1 learners
+pixi run budget-sweep           # Stage-specific trial budgets
+pixi run homology               # Ordinary and homology-aware CV
+pixi run sequence-overlap       # Exact train–test overlap audit
+pixi run pruning                # Pruning on/off, 3 datasets × 3 seeds
+pixi run benchmark              # Complete/resume five benchmark seeds
 ```
 
-Optional first-seed pruning-off sensitivity benchmark (after the pruning comparison):
+Optional first-seed pruning-off benchmark:
 
 ```sh
-pixi run uv run --locked --no-dev python manuscript/experiments/scripts/pruning_off/run_pruning_off.py
+pixi run benchmark-pruning-off
 ```
 
-- **Validate first:** append `--dry_run` to a command once its prerequisite
-  experiments are complete. Use `--help` for options.
-- **Resume:** append `--resume` to the original command after stopping its runner
-  and workers. Completed compatible runs are reused; failed or partial runs may
-  require inspection. Do not change inputs, code or dependencies during a run.
-- **Outputs:** `manuscript/experiments/results/<experiment>/` contains protocols,
-  logs, metrics, models and trial histories. Preserve referenced source results;
-  Git ignores the results directory. Existing outputs are not silently overwritten.
+- **Options:** append `--help` or `--dry_run`, e.g. `pixi run homology --dry_run`.
+- **Resume:** benchmark tasks resume automatically. Other tasks accept `--resume`.
+  Stop previous runners and workers before restarting. Compatible completed runs
+  and descriptors are reused; interrupted benchmark attempts are archived.
+- **Outputs:** all scripts live directly in `manuscript/experiments/`; outputs
+  remain in `results/<experiment>/` below it. Each experiment saves per-run
+  `results.csv` rows, with dataset, seed/condition where applicable, metrics and
+  timings, plus its underlying artifacts and provenance. The budget sweep saves
+  per-seed checkpoint rows; the overlap audit saves per-dataset counts.
+  Cross-seed summaries, paired differences and comparison plots are left to your
+  analysis. Existing historical outputs are preserved.
+  Both benchmark tasks share `results/benchmarks/`, with one `runs/run_N/`
+  directory per completed dataset/seed and a reusable `shared/` descriptor cache.
+  `App/datasets` is a single symlink to `manuscript/experiments/results/benchmarks/`.
+  Each dataset contains real `train/`, `test/` (when available), `shared/` and
+  `runs/` directories. Reused results and caches are copied into this layout.
+  Git includes the sequences and bibliography, but excludes generated results.
+  Missing seeds are not replaced with older models.
+  Benchmark-wide tables (`results.csv`, `results_index.csv`), protocols, inventories,
+  worker configurations and logs are stored in the ignored `.benchmark/` directory.
+  Keep this directory to resume safely; only dataset folders and `references.bib`
+  appear at the visible repository level.
+- **Settings:** use `--runs`, `--output` and `--reuse_from` with benchmark tasks
+  as needed. Changed inputs, budgets or dependencies cannot be mixed into an
+  existing benchmark. Imported artifacts retain their original provenance.
 - **Interpretation:** ten-fold scores are post-selection optimization CV, not
   unbiased evaluation. Report test MCC and regression R² separately. Cached or
   additive timings are not standalone end-to-end runtime measurements.
@@ -437,6 +451,17 @@ key sets stop startup. New keys do not automatically trust models from another
 deployment. Keep private keys out of Git and Docker images. CLI training does not
 require signing keys. `App/datasets/references.bib` is included in the repository;
 trained model files must be supplied separately for the model repository.
+The launcher resolves `App/datasets` and mounts the whole directory read-only
+at `/app/App/datasets`. Set `DATASETS_DIR` to use a different repository directory.
+Unsigned CLI benchmark artifacts still require trusted signing before web
+loading; linking them does not bypass model verification.
+
+## Continuous integration
+
+GitHub Actions checks pull requests and pushes to the default branch by running
+`run-docker.sh` with isolated containers, temporary data, and disposable signing
+keys. It checks Streamlit, Redis, both workers, CLI startup, and Home-page rendering
+in Chromium. No benchmarks or production credentials are used.
 
 ## Citation
 

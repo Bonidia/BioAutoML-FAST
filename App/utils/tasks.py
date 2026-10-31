@@ -13,7 +13,7 @@ redis_conn = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/
 q = Queue("bioautoml", connection=redis_conn)
 training_q = Queue("bioautoml-training", connection=redis_conn)
 
-manager = TaskResultManager(os.environ.get("TASK_RESULTS_DB", "task_results.db"))
+manager = TaskResultManager()
 
 class JobStatus(Enum):
     PENDING = "pending"

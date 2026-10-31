@@ -390,7 +390,7 @@ def objective_nucleotide(trial, train, task, y, feature_cache=None, folds=None, 
 	return metric
 
 @timed('stage_1')
-def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None):
+def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None, pruning=True):
 	"""Select the best subset of nucleotide descriptors via Bayesian optimization (Optuna TPE).
 
 	Treats each descriptor group as a binary on/off variable and maximises MCC (task=0)
@@ -431,6 +431,7 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 
 	results = optuna.create_study(
 		direction=direction,
+		pruner=optuna.pruners.MedianPruner() if pruning else optuna.pruners.NopPruner(),
 		sampler=optuna.samplers.TPESampler(
 			n_startup_trials=30, multivariate=True, group=True,
 			constant_liar=True, seed=optimization_seed
@@ -441,7 +442,7 @@ def feature_engineering_nucleotide(task, estimations, fnameseqtrain, train, trai
 		results, func, foutput, 'stage_1', estimations, 10_800, search_jobs,
 		settings=dict(seed=random_seed, search_seed=optimization_seed, startup_trials=30,
 			metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
-			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only'),
+			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only', pruning=pruning),
 		early_stopping=early_stopping,
 	)
 
@@ -563,7 +564,7 @@ def objective_aminoacid(trial, train, task, y, feature_cache=None, folds=None, m
 	return metric
 
 @timed('stage_1')
-def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None):
+def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train_labels, test, foutput, n_cpu=-1, search_jobs=None, homology_report=None, pruning=True):
 	"""Select the best subset of amino acid descriptors via Bayesian optimization (Optuna TPE).
 
 	Treats each descriptor group as a binary on/off variable and maximises MCC (task=0)
@@ -605,6 +606,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 
 	results = optuna.create_study(
 		direction=direction,
+		pruner=optuna.pruners.MedianPruner() if pruning else optuna.pruners.NopPruner(),
 		sampler=optuna.samplers.TPESampler(
 			n_startup_trials=30, multivariate=True, group=True,
 			constant_liar=True, seed=optimization_seed
@@ -615,7 +617,7 @@ def feature_engineering_aminoacid(task, estimations, fnameseqtrain, train, train
 		results, func, foutput, 'stage_1', estimations, 7200, search_jobs,
 		settings=dict(seed=random_seed, search_seed=optimization_seed, startup_trials=30,
 			metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
-			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only'),
+			patience=patience, min_delta=difference, patience_counts='COMPLETE trials only', pruning=pruning),
 		early_stopping=early_stopping,
 	)
 
@@ -1260,6 +1262,8 @@ if __name__ == '__main__':
 	parser.add_argument('-estimations', '--estimations', default=200, help='number of estimations - BioAutoML-FAST - default = 200')
 	parser.add_argument('-patience', '--patience', default=80, help='number of trials before early stopping - default = 80')
 	parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 150')
+	parser.add_argument('--pruning', action=argparse.BooleanOptionalAction, default=True,
+						help='Stop unpromising trials during CV in both search stages; --no-pruning disables fold-score pruning (default: enabled)')
 	parser.add_argument('-difference', '--difference', default=0.001, help='difference before early stopping - default = 0.001')
 	parser.add_argument('-n_cpu', '--n_cpu', default=-1, help='number of cpus - default = all')
 	parser.add_argument('-search_jobs', '--search_jobs', default=1, help='parallel Optuna workers; default 1 for repeatable trial ordering')
@@ -1334,10 +1338,10 @@ if __name__ == '__main__':
 
 	if dtype == "protein" or dtype == "Protein":
 		path_train, path_test, train_best, test_best = \
-			feature_engineering_aminoacid(task, estimations, fnameseqtrain, ftrain, ftrain_labels, '', foutput, n_cpu, search_jobs, homology_report)
+			feature_engineering_aminoacid(task, estimations, fnameseqtrain, ftrain, ftrain_labels, '', foutput, n_cpu, search_jobs, homology_report, pruning=args.pruning)
 	elif dtype == "dnarna" or dtype == "DNA/RNA":
 		path_train, path_test, train_best, test_best = \
-			feature_engineering_nucleotide(task, estimations, fnameseqtrain, ftrain, ftrain_labels, '', foutput, n_cpu, search_jobs, homology_report)
+			feature_engineering_nucleotide(task, estimations, fnameseqtrain, ftrain, ftrain_labels, '', foutput, n_cpu, search_jobs, homology_report, pruning=args.pruning)
 
 	if fasta_test:
 		selected_descriptors = run_path(foutput, 'best_descriptors', 'selected_descriptors.csv')
@@ -1358,7 +1362,7 @@ if __name__ == '__main__':
 					'-test_label', ftest_labels, '-train_nameseq', fnameseqtrain,
 					'-test_nameseq', fnameseqtest, '-n_cpu', str(n_cpu),
 					'-seed', str(random_seed), '-search_seed', str(optimization_seed),
-					'-output', foutput]
+					'-output', foutput, '--pruning' if args.pruning else '--no-pruning']
 						+ (['-search_jobs', str(search_jobs)] if search_jobs is not None else [])
 						+ (['--homology_aware', '--homology_identity', str(homology_identity),
 						    '--homology_coverage', str(homology_coverage)] if args.homology_aware else []), check=True)

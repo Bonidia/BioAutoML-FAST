@@ -15,7 +15,7 @@ from redis import Redis
 from rq.exceptions import NoSuchJobError
 from rq.job import Job
 
-from .db import TaskResultManager
+from .db import TaskResultManager, get_database_path
 
 
 RETENTION_DAYS = 30
@@ -44,7 +44,7 @@ def job_directory(job_id):
 @contextmanager
 def job_lock(job_id, blocking=True):
     job_directory(job_id)
-    state = Path(os.environ.get('TASK_RESULTS_DB', 'task_results.db')).resolve().parent / 'job-locks'
+    state = get_database_path().parent / 'job-locks'
     state.mkdir(parents=True, exist_ok=True)
     with open(state / (job_id + '.lock'), 'a') as handle:
         try:
@@ -177,7 +177,7 @@ def main():
     if args.loop and args.dry_run:
         parser.error('--loop and --dry-run cannot be combined')
     logging.basicConfig(level=logging.INFO)
-    manager = TaskResultManager(os.environ.get('TASK_RESULTS_DB', 'task_results.db'))
+    manager = TaskResultManager()
     connection = Redis.from_url(os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0'),
                                 socket_connect_timeout=5, socket_timeout=5)
     while True:

@@ -226,7 +226,7 @@ def run_worker(root, config, resume):
         if not resume:
             raise FileExistsError(f'Existing output preserved: {output}')
         record = ablation.read_json(output / 'run.json')
-        if record['settings'] != config:
+        if not ablation.same_configuration(record['settings'], config):
             raise ValueError(f'Resume configuration mismatch: {output}')
         if record['status'] == 'completed':
             if any(not (output / item).is_file() for item in record['outputs']):
@@ -252,28 +252,8 @@ def run_worker(root, config, resume):
                        stdout=log, stderr=subprocess.STDOUT, env=environment, check=True)
 
 
-def summarize(rows, root):
-    frame = pd.DataFrame(rows)
-    ablation.save_csv(frame, root / 'results.csv')
-    keys = ['dataset', 'task', 'dtype', 'cv', 'primary_metric']
-    metrics = {f'{name}_{stat}': (name, stat) for name in frame.columns
-               if name.startswith('test_') and name != 'test_records' for stat in ('mean', 'std')}
-    summary = frame.groupby(keys, sort=False).agg(repeats=('primary_score', 'size'),
-        primary_mean=('primary_score', 'mean'), primary_sd=('primary_score', 'std'),
-        mean_features=('features', 'mean'), mean_pipeline_minutes=('pipeline_minutes', 'mean'),
-        max_peak_gib=('pipeline_peak_gib', 'max'), **metrics).reset_index()
-    ablation.save_csv(summary, root / 'summary.csv')
-    keys = ['dataset', 'task', 'dtype', 'run', 'search_seed', 'primary_metric']
-    ordinary = frame[frame.cv == 'ordinary'][keys + ['primary_score', 'pipeline_minutes']]
-    pairs = frame[frame.cv == 'homology'].merge(ordinary, on=keys, suffixes=('', '_ordinary'), validate='one_to_one')
-    pairs['homology_minus_ordinary'] = pairs.primary_score - pairs.primary_score_ordinary
-    pairs['extra_minutes'] = pairs.pipeline_minutes - pairs.pipeline_minutes_ordinary
-    ablation.save_csv(pairs[keys + ['homology_minus_ordinary', 'extra_minutes']], root / 'paired_results.csv')
-    grouped = pairs.groupby(['dataset', 'task', 'dtype', 'primary_metric'], sort=False).agg(
-        paired_repeats=('homology_minus_ordinary', 'size'), mean_difference=('homology_minus_ordinary', 'mean'),
-        sd_difference=('homology_minus_ordinary', 'std'), mean_extra_minutes=('extra_minutes', 'mean')).reset_index()
-    ablation.save_csv(grouped, root / 'paired_summary.csv')
-
+def save_results(rows, root):
+    ablation.save_csv(pd.DataFrame(rows), root / 'results.csv')
 
 def execute(args, datasets, inventory, sources, assets, reusable):
     settings = dict(seed=args.seed, n_cpu=args.n_cpu, estimations=args.estimations, tuning=args.tuning,
@@ -286,7 +266,7 @@ def execute(args, datasets, inventory, sources, assets, reusable):
                    '90% identity screens high-identity redundancy, not remote homology.')
     protocol_path = args.output / 'protocol.json'
     if protocol_path.exists():
-        if not args.resume or ablation.read_json(protocol_path)['configuration'] != protocol:
+        if not args.resume or not ablation.same_configuration(ablation.read_json(protocol_path)['configuration'], protocol):
             raise ValueError('Existing experiment requires --resume with an identical protocol.')
     elif args.resume:
         raise FileNotFoundError('No experiment exists to resume.')
@@ -294,6 +274,7 @@ def execute(args, datasets, inventory, sources, assets, reusable):
         (args.output / name).mkdir(exist_ok=True)
     ablation.save_csv(inventory, args.output / 'input_inventory.csv')
     state = dict(configuration=protocol, status='preparing', completed_results=0, started_at=utc_now())
+    ablation.preserve_protocol(protocol_path)
     atomic_json(protocol_path, state)
     rows, started, preparations = [], time.perf_counter(), {}
     try:
@@ -340,7 +321,7 @@ def execute(args, datasets, inventory, sources, assets, reusable):
                         pipeline_peak_gib=max(row['shared_peak_gib'], row['stage_1_peak_gib'], row['condition_peak_gib'],
                             preparation_record['peak_memory_bytes'] / 1024**3 if cv == 'homology' else 0))
                     rows.append(row)
-                    summarize(rows, args.output)
+                    save_results(rows, args.output)
                     state['completed_results'] = len(rows)
                     atomic_json(protocol_path, state)
     except BaseException:

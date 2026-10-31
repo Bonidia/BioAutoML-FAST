@@ -55,7 +55,7 @@ def main():
                                   run=run, search_seed=6300 + run, pruning=pruning, output=str(output))
                     support.run_worker(args.output, config, args.resume)
                     rows.append(support.collect_result(dataset, run, output, pruning=pruning))
-                    support.save_results(rows, args.output, pruning=True)
+                    support.save_results(rows, args.output)
                     state['completed_results'] = len(rows)
                     atomic_json(args.output / 'protocol.json', state)
 

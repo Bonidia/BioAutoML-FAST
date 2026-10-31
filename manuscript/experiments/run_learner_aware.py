@@ -151,7 +151,7 @@ def run_worker(root, config, resume):
         if not resume:
             raise FileExistsError(f'Existing output preserved: {output}')
         record = ablation.read_json(output / 'run.json')
-        if record['settings'] != config:
+        if not ablation.same_configuration(record['settings'], config):
             raise ValueError(f'Resume settings/code mismatch: {output}')
         if record['status'] == 'completed':
             if any(not (output / name).is_file() for name in record['outputs']):
@@ -205,25 +205,8 @@ def validate_baselines(args, datasets):
     return references
 
 
-def summarize(rows, root):
-    frame = pd.DataFrame(rows)
-    ablation.save_csv(frame, root / 'results.csv')
-    keys = ['dataset', 'task', 'dtype', 'learner', 'primary_metric']
-    summary = frame.groupby(keys, sort=False).agg(
-        repeats=('primary_score', 'size'), primary_mean=('primary_score', 'mean'),
-        primary_sd=('primary_score', 'std'), mean_features=('features', 'mean'),
-        mean_pipeline_minutes=('pipeline_minutes', 'mean'), max_peak_gib=('pipeline_peak_gib', 'max')).reset_index()
-    ablation.save_csv(summary, root / 'summary.csv')
-    paired_keys = ['dataset', 'task', 'dtype', 'run', 'search_seed', 'primary_metric']
-    baseline = frame[frame.learner == 'lightgbm'][paired_keys + ['primary_score', 'pipeline_minutes']]
-    pairs = frame[frame.learner != 'lightgbm'].merge(baseline, on=paired_keys, suffixes=('', '_lightgbm'))
-    pairs['alternative_minus_lightgbm'] = pairs.primary_score - pairs.primary_score_lightgbm
-    pairs['extra_minutes'] = pairs.pipeline_minutes - pairs.pipeline_minutes_lightgbm
-    ablation.save_csv(pairs[paired_keys + ['learner', 'alternative_minus_lightgbm', 'extra_minutes']], root / 'paired_results.csv')
-    paired = pairs.groupby(keys, sort=False).agg(paired_repeats=('alternative_minus_lightgbm', 'size'),
-        mean_difference=('alternative_minus_lightgbm', 'mean'), sd_difference=('alternative_minus_lightgbm', 'std'),
-        mean_extra_minutes=('extra_minutes', 'mean')).reset_index()
-    ablation.save_csv(paired, root / 'paired_summary.csv')
+def save_results(rows, root):
+    ablation.save_csv(pd.DataFrame(rows), root / 'results.csv')
 
 
 def main():
@@ -266,7 +249,7 @@ def main():
         if not args.resume:
             raise FileExistsError('Existing results preserved; use --resume or a fresh output path.')
         previous = ablation.read_json(args.output / 'protocol.json')
-        if previous['status'] == 'running' or previous['configuration'] != protocol:
+        if previous['status'] == 'running' or not ablation.same_configuration(previous['configuration'], protocol):
             raise ValueError('Active experiment or mismatched resume protocol.')
     else:
         if args.resume:
@@ -276,6 +259,7 @@ def main():
             (args.output / name).mkdir()
         ablation.save_csv(inventory, args.output / 'input_inventory.csv')
     state = dict(configuration=protocol, status='running', completed_results=0)
+    ablation.preserve_protocol(args.output / 'protocol.json')
     atomic_json(args.output / 'protocol.json', state)
     rows, started = [], time.perf_counter()
     try:
@@ -301,7 +285,7 @@ def main():
                         pipeline_minutes=row['shared_total_minutes'] + row['stage_1_total_minutes'] + row['condition_minutes'],
                         pipeline_peak_gib=max(row['shared_peak_gib'], row['stage_1_peak_gib'], row['condition_peak_gib']))
                     rows.append(row)
-                    summarize(rows, args.output)
+                    save_results(rows, args.output)
                     state['completed_results'] = len(rows)
                     atomic_json(args.output / 'protocol.json', state)
     except BaseException:

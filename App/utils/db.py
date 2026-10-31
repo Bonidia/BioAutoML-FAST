@@ -1,10 +1,17 @@
 import json
+import os
 import sqlite3
 import pandas as pd
 from enum import Enum
 from pathlib import Path
 import threading
 from datetime import datetime, timezone
+
+
+def get_database_path():
+    default = Path(__file__).resolve().parents[1] / 'task-results' / 'task_results.db'
+    return Path(os.environ.get('TASK_RESULTS_DB') or default).expanduser().resolve()
+
 
 class TaskStatus(Enum):
     SUCCESS = "success"
@@ -13,8 +20,8 @@ class TaskStatus(Enum):
     RUNNING = "running"
 
 class TaskResultManager:
-    def __init__(self, path_to_db):
-        self._path_to_db = path_to_db
+    def __init__(self, path_to_db=None):
+        self._path_to_db = get_database_path() if path_to_db is None else path_to_db
         self._local = threading.local()
         self._create_db()
 

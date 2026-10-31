@@ -327,7 +327,7 @@ def save_prediction(task, prediction, nameseqs, pred_output):
     preds_df = annotate_predictions(preds_df, run_root(pred_output))
     preds_df.to_csv(pred_output, index=False)
 
-def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None, output=None):
+def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, folds=None, output=None, pruning=True):
     """
     Runs Optuna optimization and returns the best configured pipeline.
     task: 0 = Classification, 1 = Regression
@@ -482,10 +482,11 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
 
     history_settings = dict(seed=random_seed, search_seed=optimization_seed, startup_trials=10,
                             metric='MCC' if task == 0 else 'RMSE', folds=5, model_jobs=model_jobs,
-                            direction=direction.upper(), patience=None)
+                            direction=direction.upper(), patience=None, pruning=pruning)
     if n_trials > 0:
         study = optuna.create_study(
             direction=direction,
+            pruner=optuna.pruners.MedianPruner() if pruning else optuna.pruners.NopPruner(),
             sampler=optuna.samplers.TPESampler(
                 n_startup_trials=10, multivariate=True, group=True, constant_liar=True,
                 seed=optimization_seed
@@ -538,7 +539,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
     final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
     return final_pipeline, best_clf_type
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None):
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None, pruning=True):
     """End-to-end training and prediction pipeline.
 
     When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
@@ -658,7 +659,7 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
         print('--- Optimizing Hyperparameters with Optuna ---')
         # We replace the hardcoded logic with the optimization function call
         with phase('stage_2', 'skipped' if tuning == 0 else 'completed'):
-            clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds, output=output)
+            clf, selected_type_id = get_best_model_optuna(train, train_labels, task, tuning, n_cpu, search_jobs, folds=search_folds, output=output, pruning=pruning)
 
         print('--- Optimization Complete ---')
 
@@ -824,6 +825,8 @@ if __name__ == '__main__':
     parser.add_argument('--trust_unsigned_model', action='store_true', help='LOCAL ONLY: explicitly trust an unsigned current-format model; loading can execute code')
     parser.add_argument('-task', '--task', default=0, help='Machine learning task - 0: Classification, 1: Regression - Default: Classification')
     parser.add_argument('-tuning', '--tuning', default=150, help='number of trials for hyperparameter tuning - default = 150')
+    parser.add_argument('--pruning', action=argparse.BooleanOptionalAction, default=True,
+                        help='Stop unpromising tuning trials during CV; --no-pruning disables fold-score pruning (default: enabled)')
     parser.add_argument('-train', '--train', help='csv format file, e.g., train.csv')
     parser.add_argument('-train_label', '--train_label', default='', help='csv format file, e.g., labels.csv')
     parser.add_argument('-train_nameseq', '--train_nameseq', default='', help='csv with sequence names')
@@ -953,7 +956,7 @@ if __name__ == '__main__':
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
         test_read, test_labels_read, test_nameseq_read, foutput, n_cpu,
-        search_jobs, homology_report=homology_report
+        search_jobs, homology_report=homology_report, pruning=args.pruning
     )
 
     cost = (time.time() - start_time) / 60

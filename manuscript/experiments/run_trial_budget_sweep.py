@@ -43,8 +43,6 @@ def parse_arguments():
     parser.add_argument('--datasets_root', type=Path, default=PROJECT_PATH / 'App/datasets')
     parser.add_argument('--ablation_root', type=Path, default=EXPERIMENTS_PATH / 'results/ablation')
     parser.add_argument('--output', type=Path, default=EXPERIMENTS_PATH / 'results/trial_budget_sweep')
-    parser.add_argument('--wait_for_benchmark', type=Path,
-                        help='Wait for this benchmark protocol.json to become completed; abort if it fails')
     parser.add_argument('--dry_run', action='store_true')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--smoke_test', action='store_true')
@@ -56,7 +54,7 @@ def parse_arguments():
         parser.error('Use positive CPU/trial counts and a seed in [0, 2**32).')
     if len(set(args.datasets)) != len(args.datasets):
         parser.error('Dataset IDs must not repeat.')
-    for name in ('datasets_root', 'ablation_root', 'output', 'wait_for_benchmark'):
+    for name in ('datasets_root', 'ablation_root', 'output'):
         if getattr(args, name) is not None:
             setattr(args, name, getattr(args, name).resolve())
     results = EXPERIMENTS_PATH / 'results'
@@ -64,8 +62,6 @@ def parse_arguments():
         parser.error('Output must be a subdirectory of manuscript/experiments/results.')
     if args.output.is_relative_to(args.ablation_root) or args.ablation_root.is_relative_to(args.output):
         parser.error('Sweep and ablation directories must not overlap.')
-    if args.wait_for_benchmark and args.wait_for_benchmark.is_relative_to(args.output):
-        parser.error('Cannot wait for a benchmark inside the sweep output.')
     if not args.smoke_test and (args.runs != 5 or args.max_trials != 200 or tuple(args.datasets) != DATASETS
                                or args.seed != 63 or args.n_cpu != 32):
         parser.error('The full protocol uses five datasets/seeds, 200 trials, seed 63 and 32 CPUs; otherwise use --smoke_test.')
@@ -200,7 +196,7 @@ def checkpoint_rows(history, budgets, metadata):
     trials = sorted(history['trials'], key=lambda trial: trial['number'])
     if [trial['number'] for trial in trials] != list(range(len(trials))):
         raise ValueError('History trial numbers are not a contiguous zero-based trajectory.')
-    rows, previous = [], None
+    rows = []
     maximize = history['direction'] == 'MAXIMIZE'
     for budget in budgets:
         prefix = trials[:budget]
@@ -209,11 +205,10 @@ def checkpoint_rows(history, budgets, metadata):
                     and t['value'] is not None and math.isfinite(t['value'])]
         best = (max if maximize else min)(complete, key=lambda t: t['value']) if reached and complete else None
         score = best['value'] if best else None
-        gain = None if previous is None or score is None else (score - previous if maximize else previous - score)
         elapsed = prefix[-1]['completed_elapsed_seconds'] if reached else None
         rows.append(dict(metadata, budget=budget, reached=reached,
             metric=history['settings']['metric'], direction=history['direction'],
-            best_value=score, gain_from_previous=gain,
+            best_value=score,
             best_trial=best['number'] if best else None,
             best_params=json.dumps(best['params'], sort_keys=True) if best else None,
             optimization_minutes=elapsed / 60 if elapsed is not None else None,
@@ -221,42 +216,11 @@ def checkpoint_rows(history, budgets, metadata):
             pruned=sum(t['state'] == 'PRUNED' for t in prefix),
             failed=sum(t['state'] == 'FAIL' for t in prefix),
             actual_trials=len(prefix), trajectory_trials=len(trials), stop_reason=history['stop_reason']))
-        previous = score
     return rows
 
 
-def summarize(rows, output, plots=False):
-    frame = pd.DataFrame(rows)
-    ablation.save_csv(frame, output / 'checkpoints.csv')
-    summary = frame.groupby(['dataset', 'stage', 'metric', 'budget'], sort=False).agg(
-        trajectories=('run', 'size'), reached_seeds=('reached', 'sum'),
-        score_mean=('best_value', 'mean'), score_sd=('best_value', 'std'),
-        optimization_minutes_mean=('optimization_minutes', 'mean'),
-        optimization_minutes_sd=('optimization_minutes', 'std'),
-        gain_mean=('gain_from_previous', 'mean')).reset_index()
-    ablation.save_csv(summary, output / 'summary.csv')
-    if not plots:
-        return
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    datasets = frame.dataset.unique()
-    for value, spread, title in [('score_mean', 'score_sd', 'Internal optimization CV (mean ± SD)'),
-                                  ('optimization_minutes_mean', 'optimization_minutes_sd', 'Optimization time (minutes; mean ± SD)')]:
-        fig, axes = plt.subplots(len(datasets), 2, figsize=(11, 3 * len(datasets)), squeeze=False)
-        for i, dataset in enumerate(datasets):
-            for j, stage in enumerate(BUDGETS):
-                data = summary[(summary.dataset == dataset) & (summary.stage == stage)].sort_values('budget')
-                ax = axes[i, j]
-                ax.errorbar(data.budget, data[value], yerr=data[spread].fillna(0), marker='o', capsize=3)
-                ax.set(title=f'{dataset.split("_")[0]} · {stage}', xlabel='Attempted trials',
-                       ylabel=(data.metric.iloc[0] if len(data) else '') if value == 'score_mean' else 'Minutes')
-                ax.grid(alpha=0.2)
-        fig.suptitle(title + '\nStage 2: fixed seed-6301 descriptors; missing checkpoints are not extrapolated')
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
-        for suffix in ('pdf', 'png'):
-            fig.savefig(output / f'{value}.{suffix}')
-        plt.close(fig)
+def save_results(rows, root):
+    ablation.save_csv(pd.DataFrame(rows), root / 'results.csv')
 
 
 def run_worker(root, config, resume):
@@ -267,7 +231,7 @@ def run_worker(root, config, resume):
         if not resume:
             raise FileExistsError(f'Existing result preserved: {output}')
         record = ablation.read_json(output / 'run.json')
-        if record['settings'] != config:
+        if not ablation.same_configuration(record['settings'], config):
             raise ValueError(f'Resume configuration changed: {output}')
         if record['status'] == 'completed':
             history = output / 'reports/optimization' / f'{config["stage"]}_study.json'
@@ -293,23 +257,6 @@ def run_worker(root, config, resume):
                        stdout=log, stderr=subprocess.STDOUT, env=environment, check=True)
 
 
-def wait_for_benchmark(path, state, protocol_path):
-    if path is None:
-        return
-    print(f'Waiting for benchmark completion: {path}', flush=True)
-    while True:
-        benchmark = ablation.read_json(path)
-        status = benchmark['status']
-        state.update(status='queued', last_checked_at=utc_now(), benchmark_status=status,
-                     benchmark_completed=benchmark.get('completed_results'))
-        atomic_json(protocol_path, state)
-        if status == 'completed':
-            return
-        if status != 'running':
-            raise RuntimeError(f'Benchmark is {status}; sweep was not started.')
-        time.sleep(45)
-
-
 def main():
     args = parse_arguments()
     os.chdir(PROJECT_PATH)
@@ -323,7 +270,8 @@ def main():
     budgets = {stage: [1, args.max_trials] if args.max_trials > 1 else [1] for stage in BUDGETS} if args.smoke_test else {k: list(v) for k, v in BUDGETS.items()}
     configuration = dict(settings, datasets=datasets, sources=sources, assets=assets,
         reusable_histories=reusable, search_seeds=list(range(6301, 6301 + args.runs)), budgets=budgets,
-        wait_for_benchmark=str(args.wait_for_benchmark) if args.wait_for_benchmark else None,
+        wait_for_benchmark=(ablation.read_json(args.output / 'protocol.json')['configuration'].get('wait_for_benchmark')
+                            if args.resume else None),
         note='Stage-level sensitivity, not a grid of full pipelines. Stage 1 patience disabled for new diagnostic '
              'searches. Reused 200-trial histories never triggered patience. Stage 2 holds production seed-6301 '
              'descriptors fixed across seeds. Original startup/pruning/timeouts retained. Scores are optimization '
@@ -341,7 +289,7 @@ def main():
         protocol_path = args.output / 'protocol.json'
         if args.resume:
             state = ablation.read_json(protocol_path)
-            if state['configuration'] != configuration:
+            if not ablation.same_configuration(state['configuration'], configuration):
                 raise ValueError('Resume protocol differs; existing outputs preserved.')
         else:
             state = dict(configuration=configuration, status='queued', completed_trajectories=0,
@@ -349,10 +297,10 @@ def main():
             for name in ('configs', 'logs'):
                 (args.output / name).mkdir()
             ablation.save_csv(inventory, args.output / 'input_inventory.csv')
+        ablation.preserve_protocol(protocol_path)
         atomic_json(protocol_path, state)
         rows, started = [], None
         try:
-            wait_for_benchmark(args.wait_for_benchmark, state, protocol_path)
             started = time.perf_counter()
             state.update(status='running', started_at=utc_now())
             atomic_json(protocol_path, state)
@@ -378,10 +326,10 @@ def main():
                         metadata = dict(dataset=dataset['dataset'], task=dataset['task'], run=run,
                             search_seed=6300 + run, stage=stage, reused=reused, history=str(history_path))
                         rows.extend(checkpoint_rows(ablation.read_json(history_path), budgets[stage], metadata))
-                        summarize(rows, args.output)
+                        save_results(rows, args.output)
                         state['completed_trajectories'] = len({(r['dataset'], r['run'], r['stage']) for r in rows})
                         atomic_json(protocol_path, state)
-            summarize(rows, args.output, plots=True)
+            save_results(rows, args.output)
         except BaseException as error:
             state.update(status='failed', error=f'{type(error).__name__}: {error}')
             raise
