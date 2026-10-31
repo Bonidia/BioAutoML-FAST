@@ -63,7 +63,7 @@ def check_history(path, run):
 
 def prepare_sources(datasets, include_reuse=True):
     """Find verified benchmark descriptors without rerunning earlier experiments."""
-    args = SimpleNamespace(output=RESULTS_PATH / 'benchmarks',
+    args = SimpleNamespace(output=benchmarks.DATASETS_PATH,
                            reuse_ablation=RESULTS_PATH / 'ablation', runs=5,
                            seed=63, n_cpu=32, estimations=200, tuning=150, pruning=True)
     current = benchmarks.training_settings(args, sys.modules[__name__])

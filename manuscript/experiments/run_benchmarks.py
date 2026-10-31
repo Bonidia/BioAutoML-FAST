@@ -16,6 +16,7 @@ from Bio import SeqIO
 PROJECT_PATH = Path(__file__).resolve().parents[2]
 EXPERIMENTS_PATH = Path(__file__).resolve().parent
 RESULTS_PATH = EXPERIMENTS_PATH / 'results'
+DATASETS_PATH = PROJECT_PATH / 'App/datasets'
 sys.path.insert(0, str(PROJECT_PATH))
 from bioautoml.execution import Execution, run_path, atomic_json, file_hash, utc_now
 
@@ -39,7 +40,7 @@ def parse_arguments():
     parser.add_argument('--estimations', type=int, default=200)
     parser.add_argument('--tuning', type=int, default=150)
     parser.add_argument('--pruning', action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument('--output', type=Path, default=RESULTS_PATH / 'benchmarks')
+    parser.add_argument('--output', type=Path, default=DATASETS_PATH)
     parser.add_argument('--reuse_ablation', type=Path, default=RESULTS_PATH / 'ablation')
     parser.add_argument('--reuse_from', type=Path, nargs='*', default=[], help='Additional benchmark directories to check for compatible results/features')
     parser.add_argument('--dry_run', action='store_true', help='Validate and report without writing or training')
@@ -48,7 +49,7 @@ def parse_arguments():
     if min(args.n_cpu, args.estimations, args.tuning) < 1 or not 0 <= args.seed * 100 + args.runs < 2**32 or args.seed < 0:
         parser.error('Use positive CPU/trial counts and a nonnegative seed with seed * 100 + runs < 2**32.')
     args.output = args.output.resolve()
-    inputs = (PROJECT_PATH / 'App/datasets').resolve()
+    inputs = DATASETS_PATH.resolve()
     protected = [args.reuse_ablation.resolve()]
     if args.output != inputs:
         protected.append(inputs)
@@ -60,7 +61,7 @@ def parse_arguments():
 
 def input_inventory():
     datasets, rows = [], []
-    directories = sorted((PROJECT_PATH / 'App/datasets').glob('dataset*'),
+    directories = sorted(DATASETS_PATH.glob('dataset*'),
                          key=lambda path: int(path.name.split('_')[0][7:]))
     for directory in directories:
         if not directory.is_dir():
@@ -274,7 +275,7 @@ def cache_reference(shared):
 def discover_sources(args, datasets, settings, support):
     sources, assets, references = {}, {}, {}
     # Existing manifests take precedence; never select a source by its score.
-    roots = [args.output, *getattr(args, 'reuse_from', []), RESULTS_PATH / 'benchmarks']
+    roots = [args.output, *getattr(args, 'reuse_from', []), DATASETS_PATH]
     seen = set()
     for root in roots:
         root = root.resolve()
@@ -435,7 +436,7 @@ def prepare_layout(root, datasets, sources, assets, references, settings, suppor
                 copy_artifacts(ref['output'], target)
                 check_result(dataset, run, target, settings, support)
                 references[key] = result_reference(target, ref['source'])
-    bibliography = PROJECT_PATH / 'App/datasets/references.bib'
+    bibliography = DATASETS_PATH / 'references.bib'
     target = root / 'references.bib'
     if bibliography.resolve() != target.resolve():
         if target.exists():

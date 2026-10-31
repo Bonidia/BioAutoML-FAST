@@ -299,19 +299,21 @@ pixi run benchmark-pruning-off
 - **Resume:** benchmark tasks resume automatically. Other tasks accept `--resume`.
   Stop previous runners and workers before restarting. Compatible completed runs
   and descriptors are reused; interrupted benchmark attempts are archived.
-- **Outputs:** all scripts live directly in `manuscript/experiments/`; outputs
-  remain in `results/<experiment>/` below it. Each experiment saves per-run
+- **Outputs:** all scripts live directly in `manuscript/experiments/`. The main
+  benchmark writes to `App/datasets/`; other experiments write to
+  `manuscript/experiments/results/<experiment>/`. Each experiment saves per-run
   `results.csv` rows, with dataset, seed/condition where applicable, metrics and
   timings, plus its underlying artifacts and provenance. The budget sweep saves
   per-seed checkpoint rows; the overlap audit saves per-dataset counts.
   Cross-seed summaries, paired differences and comparison plots are left to your
   analysis. Existing historical outputs are preserved.
-  Both benchmark tasks share `results/benchmarks/`, with one `runs/run_N/`
-  directory per completed dataset/seed and a reusable `shared/` descriptor cache.
-  `App/datasets` is a single symlink to `manuscript/experiments/results/benchmarks/`.
+  Both benchmark tasks share the real `App/datasets/` directory, with one
+  `runs/run_N/` directory per completed dataset/seed and a reusable `shared/`
+  descriptor cache inside each dataset.
   Each dataset contains real `train/`, `test/` (when available), `shared/` and
   `runs/` directories. Reused results and caches are copied into this layout.
-  Git includes the sequences and bibliography, but excludes generated results.
+  Git includes `train/`, `test/`, and bibliography files, but excludes generated
+  results, runs, and shared caches.
   Missing seeds are not replaced with older models.
   Benchmark-wide tables (`results.csv`, `results_index.csv`), protocols, inventories,
   worker configurations and logs are stored in the ignored `.benchmark/` directory.
