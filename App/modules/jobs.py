@@ -814,6 +814,26 @@ def sequence_overlap_report():
 def performance_metrics(task):
 
     sequence_overlap_report()
+    filter_path = run_path(st.session_state['job_path'], 'homology', 'test_filter_report.json')
+    if os.path.isfile(filter_path):
+        with open(filter_path) as handle:
+            filtered = json.load(handle)
+        with st.container(border=True):
+            st.markdown('**Filtered test evaluation**')
+            st.caption(f'{filtered["retained_test_samples"]}/{filtered["original_test_samples"]} sequences retained · '
+                       f'{filtered["excluded_test_samples"]} excluded for detected training matches. '
+                       'Full-test results below are unchanged.')
+            metrics_path = os.path.join(st.session_state['job_path'], 'results/metrics/filtered_test_metrics.csv')
+            st.dataframe(pd.read_csv(metrics_path), hide_index=True)
+            if filtered['metric_limitations']:
+                st.warning('Some filtered metrics could not be evaluated; see their status in the table.')
+            for filename, file_path in (
+                ('filtered_test_metrics.csv', metrics_path),
+                ('test_filter_membership.csv', run_path(st.session_state['job_path'], 'homology', 'test_filter_membership.csv')),
+            ):
+                with open(file_path, 'rb') as handle:
+                    st.download_button(f'Download {filename}', handle.read(), file_name=filename,
+                                       key=f'filtered_{filename}')
 
     with st.expander("What **Performance Metrics** shows"):
         st.info(

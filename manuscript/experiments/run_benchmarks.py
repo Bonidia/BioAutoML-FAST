@@ -102,10 +102,30 @@ def runtime_hashes():
             if not key.startswith('manuscript/')}
 
 
+TEST_FILTER_COMPATIBILITY = {
+    'engineering.py': (
+        '7b77b1912f5c434fc95a3899107070724ee5d7aede77397c58f0d3397fc9c321',
+        '81217ea6a3119e0c834923f5d42c036b65761585f2756e8709fc673db0709517'),
+    'generation.py': (
+        '9735c633fef92ffa51200fbd37b5f6799cc9f1d25881af3647560ccbdfc51d6f',
+        'bfbe9d8d07c481d970b6b6cff62d228835b1a66b7b85935844ab5d3f215668b9'),
+    'bioautoml/homology.py': (
+        'f1f1ba116c6355f06e66f13b962deb0670b0dd168872880c54493b46876a7fcb',
+        '59ff118e6648df84131d5029cad097601cfab1e080ca2f68e4f649f10f340b1b'),
+    'bioautoml/test_overlap.py': (
+        None, '15127d9b6a5fae67ad742bb966f423f63939ccd8d09a01872a1444397fd55bda'),
+}
+
+
 def check_code(previous, current):
     for name, value in current.items():
         old = previous.get(name)
-        if old != value and (old, value) != PRUNING_COMPATIBILITY.get(name):
+        # Reviewed optional evaluation only; this runner never enables test filtering.
+        for transitions in (PRUNING_COMPATIBILITY, TEST_FILTER_COMPATIBILITY):
+            transition = transitions.get(name)
+            if transition and old == transition[0]:
+                old = transition[1]
+        if old != value:
             raise ValueError(f'Incompatible source code: {name}')
 
 

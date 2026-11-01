@@ -18,6 +18,7 @@ results
 .fuse_hidden*
 secrets.toml
 **/signing.pem
+**/.bioautoml/
 task_results.db
 jobs
 /datasets

@@ -9,6 +9,7 @@ export JOBS_DIR="$test_path/jobs"
 export STATE_DIR="$test_path/state"
 export DATASETS_DIR="$test_path/datasets"
 export MODEL_KEYS_DIR="$test_path/keys"
+export MODEL_VERIFICATION_DIR="$test_path/verification"
 export BIND_ADDRESS=127.0.0.1
 export HOST_PORT="${CI_PORT:-18501}"
 export CI_ARTIFACTS_DIR="${CI_ARTIFACTS_DIR:-$test_path/logs}"
@@ -24,8 +25,12 @@ cleanup() {
     ./run-docker.sh --delete </dev/null || status=1
     # Only these disposable CI keys are removed; keep logs for diagnosis.
     if [[ -d "$MODEL_KEYS_DIR" ]]; then
-        rm -f -- "$MODEL_KEYS_DIR/signing.pem" "$MODEL_KEYS_DIR/trusted_keys.json" "$MODEL_KEYS_DIR/key_id"
+        rm -f -- "$MODEL_KEYS_DIR/signing.pem"
         rmdir -- "$MODEL_KEYS_DIR" || status=1
+    fi
+    if [[ -d "$MODEL_VERIFICATION_DIR" ]]; then
+        rm -f -- "$MODEL_VERIFICATION_DIR/trusted_keys.json"
+        rmdir -- "$MODEL_VERIFICATION_DIR" || status=1
     fi
     echo "Docker check logs: $CI_ARTIFACTS_DIR"
     exit "$status"

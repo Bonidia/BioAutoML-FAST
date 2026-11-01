@@ -2,12 +2,13 @@
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
 from urllib.request import urlopen
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 def docker(*args, **kwargs):
@@ -47,6 +48,33 @@ assert {'bioautoml', 'bioautoml-training'} <= queues, queues
     else:
         raise RuntimeError(f'Deployment did not become ready: {last_error}')
     print('Streamlit, Redis, and both workers are ready.', flush=True)
+    assert {path.name for path in Path(os.environ['MODEL_KEYS_DIR']).iterdir()} == {'signing.pem'}
+
+    docker('exec', container, 'python', '-c', '''
+import json, os
+from pathlib import Path
+assert not Path('/app/.bioautoml').exists(), 'Private key store was included in the image'
+assert not Path('/run/bioautoml/signing.pem').exists(), 'Private key exposed to web container'
+official = json.loads(Path('/app/deployment/official_public_keys.json').read_text())
+trust = json.loads(Path(os.environ['BIOAUTOML_TRUSTED_KEYS']).read_text())
+assert official['keys'].items() <= trust['keys'].items()
+''')
+    docker('exec', f'{container}-training', 'python', '-c', '''
+from bioautoml.model_security import initialize_web_signer, sign_manifest, verify_signature
+initialize_web_signer()
+manifest = {'ci': 'signed'}
+signature = sign_manifest(manifest)
+verify_signature(manifest, signature, check_packages=False)
+for changed, token in (({'ci': 'tampered'}, signature),
+                       (manifest, dict(signature, key_id='untrusted-ci-key'))):
+    try:
+        verify_signature(changed, token, check_packages=False)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Untrusted or tampered signature accepted')
+''')
+    print('Signing isolation, bundled trust and signature rejection checks passed.', flush=True)
 
     for script in ('engineering.py', 'generation.py'):
         output = docker('exec', '--workdir', '/app', container, 'python', script, '--help')
@@ -70,6 +98,18 @@ assert {'bioautoml', 'bioautoml-training'} <= queues, queues
             assert page.locator('[data-testid="stException"]').count() == 0
             assert not errors, errors
             print('Home page rendered successfully in Chromium.', flush=True)
+            page.get_by_text('Homology-aware cross-validation', exact=True).click()
+            page.get_by_role('combobox', name=re.compile('Testing')).click()
+            page.get_by_role('option', name='Test set', exact=True).click()
+            filter_label = 'Filter test sequences similar to training sequences'
+            page.get_by_text(filter_label, exact=True).wait_for(state='visible')
+            assert not page.get_by_role('checkbox', name=filter_label, exact=True).is_checked()
+            page.get_by_text(filter_label, exact=True).click()
+            expect(page.get_by_role('checkbox', name=filter_label, exact=True)).to_be_checked()
+            page.get_by_role('combobox', name=re.compile('Testing')).click()
+            page.get_by_role('option', name='Prediction set', exact=True).click()
+            page.get_by_text(filter_label, exact=True).wait_for(state='detached')
+            print('Optional test-overlap filter is available only for labelled test evaluation.', flush=True)
             menu = page.frame_locator('iframe[title="streamlit_option_menu.option_menu"]')
             menu.get_by_text('Model Repository', exact=True).click()
             page.get_by_text('Datasets were not found.', exact=False).wait_for(state='visible')

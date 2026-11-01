@@ -4,7 +4,7 @@
 name = "bioautoml-fast"
 channels = ["conda-forge", "bioconda"]
 platforms = ["linux-64"]
-requires-pixi = "==0.81.0"
+requires-pixi = ">=0.81.0,<0.84"
 
 [dependencies]
 uv = "==0.7.3"
@@ -21,12 +21,14 @@ sync = "uv sync --locked --no-dev"
 check-lock = "uv lock --check"
 environment = "uv run --locked --no-dev python -m bioautoml.environment_report"
 web = "uv run --locked --no-dev bash start.sh"
+keys-create = "uv run --locked --no-dev python deployment/signing_keys.py --create"
+keys-delete = "uv run --locked --no-dev python deployment/signing_keys.py --delete"
 ablation = "uv run --locked --no-dev python manuscript/experiments/run_ablation.py"
 benchmark-first = "uv run --locked --no-dev python manuscript/experiments/run_benchmarks.py --runs 1"
 benchmark = "uv run --locked --no-dev python manuscript/experiments/run_benchmarks.py"
 learner-aware = "uv run --locked --no-dev python manuscript/experiments/run_learner_aware.py"
 budget-sweep = "uv run --locked --no-dev python manuscript/experiments/run_trial_budget_sweep.py"
-homology = "uv run --locked --no-dev python manuscript/experiments/run_homology.py"
+homology = "uv run --locked --no-dev python manuscript/experiments/run_homology.py --filter_test_overlap"
 sequence-overlap = "uv run --locked --no-dev python manuscript/experiments/audit_sequence_overlap.py"
 pruning = "uv run --locked --no-dev python manuscript/experiments/run_pruning.py"
 benchmark-pruning-off = "uv run --locked --no-dev python manuscript/experiments/run_benchmarks.py --no-pruning --runs 1 --output manuscript/experiments/results/benchmark_pruning_off"

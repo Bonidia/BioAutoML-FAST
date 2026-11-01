@@ -10,6 +10,8 @@ jobs_path="${JOBS_DIR:-$project_path/App/jobs}"
 state_path="${STATE_DIR:-$project_path/App/task-results}"
 datasets_path="${DATASETS_DIR:-$project_path/App/datasets}"
 keys_path="${MODEL_KEYS_DIR:-}"
+signing_input="${MODEL_SIGNING_KEY:-}"
+trust_input="${MODEL_TRUSTED_KEYS:-}"
 training_container="${container_name}-training"
 owner_label="io.bioautoml-fast.launcher"
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -26,8 +28,11 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Defaults: ghcr.io/bonidia/bioautoml-fast:latest, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
     echo "IMAGE_NAME can select a registry tag or digest; --build requires a tag."
     echo "DATASETS_DIR is created if missing and mounted read-only; repository data is optional."
-    echo "MODEL_KEYS_DIR: optional external key directory; existing keys are reused, missing directories are initialized."
-    echo "Default: existing training container's keys, otherwise \${XDG_CONFIG_HOME:-\$HOME/.config}/bioautoml-fast/model-keys."
+    echo "MODEL_KEYS_DIR: optional protected key directory; default: ./.bioautoml under the current directory."
+    echo "Only signing.pem is stored there; public verification configuration is managed automatically."
+    echo "Existing deployments reuse their mounted key directory unless a key/path is explicitly selected."
+    echo "MODEL_SIGNING_KEY: optional Ed25519 private-key file to import; otherwise prompted on interactive launches."
+    echo "MODEL_TRUSTED_KEYS: optional public-key JSON trust file, e.g. previous keys during rotation."
     echo "Starts a dedicated signing/training container; private keys never enter the web container."
     echo "Interactive launches prompt for API keys with hidden input; Enter or whitespace disables that service."
     echo "Non-interactive launches use optional exported variables: BLABLADOR_API_KEY and MAILGUN_API_KEY."
@@ -110,13 +115,35 @@ if [[ "$development_mode" == true ]]; then
                           --env STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll)
 fi
 
-if [[ -z "$keys_path" ]] && docker container inspect "$training_container" >/dev/null 2>&1; then
+if [[ -t 0 && -z "$signing_input" && -z "$keys_path" ]]; then
+    printf '\nModel signing protects the application from untrusted model uploads.\n'
+    printf 'Enter the path to an existing Ed25519 private-key file, or press Enter.\n'
+    printf 'If blank, ./.bioautoml/signing.pem under your current directory is reused,\n'
+    printf 'or created if missing. This is the only private-key file you need to back up.\n'
+    printf 'Existing deployments keep their mounted keys.\n'
+    printf 'Supplied keys are imported into the protected key directory, never overwritten.\n'
+    printf 'Keep the private key secret and back it up securely.\n\n'
+    read -r -p 'Private-key file (Enter for automatic setup): ' signing_input || signing_input=""
+fi
+[[ -n "${signing_input//[[:space:]]/}" ]] || signing_input=""
+if [[ -n "$signing_input" ]]; then
+    [[ -f "$signing_input" && -r "$signing_input" && ! -L "$signing_input" ]] || fail "Private-key file is missing, unreadable or a symlink."
+    signing_input="$(cd -- "$(dirname -- "$signing_input")" && pwd -P)/$(basename -- "$signing_input")"
+    [[ "$signing_input" != *,* ]] || fail "Private-key paths cannot contain commas."
+fi
+if [[ -n "$trust_input" ]]; then
+    [[ -f "$trust_input" && -r "$trust_input" && ! -L "$trust_input" ]] || fail "Public trust file is missing, unreadable or a symlink."
+    trust_input="$(cd -- "$(dirname -- "$trust_input")" && pwd -P)/$(basename -- "$trust_input")"
+    [[ "$trust_input" != *,* ]] || fail "Trust-file paths cannot contain commas."
+fi
+if [[ -z "$keys_path" && -z "$signing_input" ]] && docker container inspect "$training_container" >/dev/null 2>&1; then
     signing_path="$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/run/bioautoml/signing.pem"}}{{.Source}}{{end}}{{end}}' "$training_container")"
     [[ -n "$signing_path" ]] || fail "Existing training container has no signing-key mount; set MODEL_KEYS_DIR explicitly."
     keys_path="$(dirname -- "$signing_path")"
     [[ -d "$keys_path" ]] || fail "Existing signing keys are unavailable; restore them before restarting."
+    echo "Reusing existing deployment keys: $keys_path"
 fi
-keys_path="${keys_path:-${XDG_CONFIG_HOME:-$HOME/.config}/bioautoml-fast/model-keys}"
+keys_path="${keys_path:-$(pwd -P)/.bioautoml}"
 [[ "$keys_path" != *,* && ! -L "$keys_path" ]] || fail "Key directories cannot be symlinks or contain commas."
 keys_parent="$(dirname -- "$keys_path")"
 (umask 077; mkdir -p -- "$keys_parent")
@@ -126,11 +153,12 @@ keys_name="$(basename -- "$keys_path")"
 keys_path="$keys_parent/$keys_name"
 [[ "$keys_path" != *,* ]] || fail "Key directories cannot contain commas."
 if [[ "$build_mode" == true ]]; then
-    [[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* ]] || fail "Keys must be outside the project/build context."
+    [[ "$keys_path" == "$project_path/.bioautoml" || "$keys_path" == "$project_path/.bioautoml/"* || ( "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* ) ]] || fail "Keys inside the project must be under the excluded .bioautoml/ directory."
+    [[ -z "$signing_input" || "$signing_input" == "$project_path/.bioautoml/"* || "$signing_input" != "$project_path/"* ]] || fail "Move private-key input outside the build context or under .bioautoml/."
 fi
 if [[ -e "$keys_path" ]]; then
     [[ -d "$keys_path" ]] || fail "Signing-key path is not a directory."
-    for name in signing.pem trusted_keys.json key_id; do
+    for name in signing.pem; do
         [[ -f "$keys_path/$name" && -s "$keys_path/$name" && -r "$keys_path/$name" && ! -L "$keys_path/$name" ]] || fail "Missing, empty or unsafe key configuration: $name. Restore the original keys; they will not be overwritten."
     done
 fi
@@ -147,9 +175,19 @@ for path in "$jobs_path" "$state_path"; do
     [[ "$path" != *,* ]] || fail "Bind-mount paths cannot contain commas."
     [[ -w "$path" && -x "$path" ]] || fail "Directory is not writable by your user: $path"
 done
+
+# Public trust is persistent for container restarts, but never writable by the web container.
+verification_path="${MODEL_VERIFICATION_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/bioautoml-fast/verification/$container_name}"
+[[ "$verification_path" != *,* && ! -L "$verification_path" ]] || fail "Unsafe verification directory."
+(umask 077; mkdir -p -m 700 -- "$verification_path")
+verification_path="$(cd -- "$verification_path" && pwd -P)"
+for path in "$jobs_path" "$state_path" "$datasets_path" "$keys_path"; do
+    [[ "$verification_path" != "$path" && "$verification_path" != "$path/"* ]] || fail "Public verification configuration must be outside shared data and private-key directories."
+done
 [[ "$jobs_path" != "$state_path" ]] || fail "JOBS_DIR and STATE_DIR must be separate directories."
 for path in "$jobs_path" "$state_path" "$datasets_path"; do
     [[ "$keys_path" != "$path" && "$keys_path" != "$path/"* ]] || fail "Signing keys must not be inside directories shared with the web container."
+    [[ -z "$signing_input" || "$signing_input" != "$path/"* ]] || fail "Private-key input must not be inside directories shared with the web container."
 done
 
 configure_api_keys() {
@@ -192,17 +230,27 @@ else
 fi
 image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
 
-if [[ ! -d "$keys_path" ]]; then
-    echo "Creating signing keys in $keys_path..."
-    docker run --rm --network none --read-only --cap-drop ALL \
-        --security-opt=no-new-privileges:true --ulimit core=0 \
-        --user "$(id -u):$(id -g)" \
-        --mount "type=bind,source=$keys_parent,target=/run/bioautoml-key-store" \
-        --entrypoint python "$image_id" -m bioautoml.model_security "/run/bioautoml-key-store/$keys_name"
+key_options=()
+key_arguments=(--output "/run/bioautoml-key-store/$keys_name" --reuse
+               --verification-file /run/bioautoml-verification/trusted_keys.json --print-key-id)
+if [[ -n "$signing_input" ]]; then
+    key_options+=(--mount "type=bind,source=$signing_input,target=/run/import-signing.pem,readonly")
+    key_arguments+=(--private-key /run/import-signing.pem)
 fi
-key_id="$(<"$keys_path/key_id")"
+if [[ -n "$trust_input" ]]; then
+    key_options+=(--mount "type=bind,source=$trust_input,target=/run/additional-trust.json,readonly")
+    key_arguments+=(--trust-file /run/additional-trust.json)
+fi
+echo "Preparing signing keys in $keys_path..."
+key_id="$(docker run --rm --network none --read-only --cap-drop ALL \
+    --security-opt=no-new-privileges:true --ulimit core=0 \
+    --user "$(id -u):$(id -g)" \
+    --mount "type=bind,source=$keys_parent,target=/run/bioautoml-key-store" \
+    --mount "type=bind,source=$verification_path,target=/run/bioautoml-verification" \
+    "${key_options[@]}" \
+    --entrypoint python "$image_id" /app/deployment/signing_keys.py "${key_arguments[@]}")"
 [[ "$key_id" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Invalid signing key ID."
-verification_options=(--mount "type=bind,source=$keys_path/trusted_keys.json,target=/run/bioautoml/trusted_keys.json,readonly"
+verification_options=(--mount "type=bind,source=$verification_path/trusted_keys.json,target=/run/bioautoml/trusted_keys.json,readonly"
                       --env BIOAUTOML_TRUSTED_KEYS=/run/bioautoml/trusted_keys.json
                       --env BIOAUTOML_TRAINING_ENABLED=1)
 docker run --rm --network none --read-only --cap-drop ALL \

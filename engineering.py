@@ -1275,6 +1275,8 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	homology_identity, homology_coverage = resolve_homology_arguments(parser, args)
+	if args.filter_test_overlap and (not args.fasta_test or not args.fasta_label_test or 'Predicted' in args.fasta_label_test):
+		parser.error('--filter_test_overlap requires a labelled FASTA test set, not prediction-only inputs.')
 	try:
 		fasta_train, fasta_label_train = prepare_fasta_inputs(args.fasta_train, args.fasta_label_train)
 	except ValueError as error:
@@ -1322,6 +1324,9 @@ if __name__ == '__main__':
 	homology_report = prepare_homology(
 		fasta_train, fasta_label_train, fasta_test, fasta_label_test, dtype, task,
 		random_seed, run_path(foutput, 'homology'), args.homology_aware, n_cpu, homology_identity, homology_coverage)
+	if args.filter_test_overlap:
+		from bioautoml.test_overlap import prepare_test_filter
+		prepare_test_filter(foutput, fasta_train, fasta_label_train, fasta_test, fasta_label_test, dtype, task)
 	if not args.homology_aware:
 		with phase('homology_grouping', 'skipped'):
 			pass
@@ -1365,7 +1370,8 @@ if __name__ == '__main__':
 					'-output', foutput, '--pruning' if args.pruning else '--no-pruning']
 						+ (['-search_jobs', str(search_jobs)] if search_jobs is not None else [])
 						+ (['--homology_aware', '--homology_identity', str(homology_identity),
-						    '--homology_coverage', str(homology_coverage)] if args.homology_aware else []), check=True)
+						    '--homology_coverage', str(homology_coverage)] if args.homology_aware else [])
+						+ (['--filter_test_overlap'] if args.filter_test_overlap else []), check=True)
 	execution.finish()
 
 ##########################################################################

@@ -539,7 +539,7 @@ def get_best_model_optuna(X, y, task, n_trials, n_cpu=-1, search_jobs=None, fold
     final_pipeline = Pipeline(steps=[("imputer", SimpleImputer(strategy='mean')), ("clf", final_model)])
     return final_pipeline, best_clf_type
 
-def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None, pruning=True):
+def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq, test, test_labels, test_nameseq, output, n_cpu=-1, search_jobs=None, homology_report=None, pruning=True, filter_test_overlap=False):
     """End-to-end training and prediction pipeline.
 
     When model=None: encodes labels, imputes missing values, runs Optuna hyperparameter search
@@ -553,6 +553,14 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
 
     if model:
         validate_model_support(model)
+
+    if filter_test_overlap:
+        if model or not homology_report or not homology_report.get('enabled') or not os.path.isfile(ftest_labels):
+            raise ValueError('Test-overlap filtering requires new homology-aware training and a labelled test set.')
+        from bioautoml.test_overlap import test_filter_mask, save_filtered_test
+        filtered_mask = test_filter_mask(output, train_nameseq, test_nameseq, test_labels, task, homology_report)
+        if task == 0 and not set(np.unique(test_labels)) <= set(np.unique(train_labels)):
+            raise ValueError('Test labels include classes absent from training.')
 
     for directory in ('model', 'results/metrics', 'results/predictions', 'results/descriptors'):
         os.makedirs(os.path.join(output, directory), exist_ok=True)
@@ -796,6 +804,10 @@ def predictive_pipeline(model, task, tuning, train, train_labels, train_nameseq,
                 print('Task completed successfully!')
         else:
             print('There are no test labels for evaluation, check parameters...')
+        if filter_test_overlap:
+            save_filtered_test(output, task, test_labels, preds, filtered_mask,
+                               probabilities=probs if task == 0 else None,
+                               classes=lb_encoder.classes_ if task == 0 else None)
     else:
         print('There are no test sequences for evaluation, check parameters...')
         print('Task completed - results generated in ' + output + '!')
@@ -844,6 +856,8 @@ if __name__ == '__main__':
     resolve_homology_arguments(parser, args)
     if args.homology_aware and args.path_model:
         parser.error('--homology_aware is a training option, not an inference option.')
+    if args.filter_test_overlap and not all(os.path.isfile(path) for path in (args.test, args.test_label, args.test_nameseq or '')):
+        parser.error('--filter_test_overlap requires test features, labels and sequence IDs.')
     path_model = args.path_model
     task = int(args.task)
     tuning = int(args.tuning)
@@ -956,7 +970,7 @@ if __name__ == '__main__':
     predictive_pipeline(
         model, task, tuning, train_read, train_labels_read, train_nameseq_read, 
         test_read, test_labels_read, test_nameseq_read, foutput, n_cpu,
-        search_jobs, homology_report=homology_report, pruning=args.pruning
+        search_jobs, homology_report=homology_report, pruning=args.pruning, filter_test_overlap=args.filter_test_overlap
     )
 
     cost = (time.time() - start_time) / 60

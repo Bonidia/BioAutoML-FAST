@@ -56,6 +56,8 @@ def homology_warnings(identity, coverage, data_type):
 
 
 def add_homology_arguments(parser):
+    parser.add_argument('--filter_test_overlap', action='store_true',
+                        help='Also evaluate labelled test sequences without detected training matches; requires --homology_aware; preserves full-test results')
     # None distinguishes explicit overrides from absent options, including when
     # generation.py reuses assignments made with historical thresholds.
     parser.add_argument('--homology_identity', type=float, default=None,
@@ -65,6 +67,8 @@ def add_homology_arguments(parser):
 
 
 def resolve_homology_arguments(parser, args):
+    if args.filter_test_overlap and not args.homology_aware:
+        parser.error('--filter_test_overlap requires --homology_aware')
     if not args.homology_aware and (args.homology_identity is not None or args.homology_coverage is not None):
         parser.error('--homology_identity and --homology_coverage require --homology_aware')
     identity = DEFAULT_IDENTITY if args.homology_identity is None else args.homology_identity

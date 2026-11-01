@@ -77,8 +77,9 @@ cd BioAutoML-FAST
 
 ### Locked environment with Pixi (Linux)
 
-Install **Pixi 0.81.0**, as required by `pixi.toml`, following the
+Install **Pixi 0.81–0.83**, as allowed by `pixi.toml`, following the
 [official installation instructions](https://pixi.prefix.dev/latest/installation/).
+The Docker build remains pinned to Pixi 0.81.0.
 
 This installs the locked native tools, including MMseqs2, and Python dependencies:
 
@@ -209,6 +210,7 @@ Both training scripts accept these options:
 | `--homology_aware` | Automatic MMseqs2 sequence grouping for CV and train–test similarity auditing. Start from FASTA inputs with `engineering.py`; `generation.py` reuses its assignments. | Off |
 | `--homology_identity` | Minimum identity in percent (1–100); requires `--homology_aware`. | 90 |
 | `--homology_coverage` | Minimum alignment coverage of **each** sequence in percent (1–100); requires `--homology_aware`. | 80 |
+| `--filter_test_overlap` | Also evaluate test sequences without detected training matches; requires homology-aware training and a labelled FASTA test set. | Off |
 
 The web training form provides the same **Trial pruning** checkbox, checked by
 default. Turning it off can increase training time. Search patience, trial caps,
@@ -227,6 +229,20 @@ reported as missing rather than replaced with a score.
 Classification probabilities are model estimates, not guaranteed confidence levels.
 
 #### Optional homology-aware cross-validation and overlap audit
+
+For an additional similarity-filtered test evaluation, add `--filter_test_overlap`
+to the `engineering.py --homology_aware` command with a labelled test set. The web
+app exposes the same option when homology-aware CV and **Test set** are selected.
+It uses the selected identity/coverage thresholds, excluding exact duplicates and
+detected similar training matches from the additional evaluation only. Training,
+original test files, full predictions and full-test metrics are unchanged.
+Prediction-only inputs and loaded models do not support this training option.
+
+Additional outputs are `results/metrics/filtered_test_metrics.csv`,
+`results/predictions/filtered_test_predictions.csv`, and
+`reports/homology/test_filter_membership.csv`. The Jobs page shows retained counts
+and filtered metrics. Undefined metrics are marked unavailable rather than replaced
+with full-test scores. No detected matches does not establish absence of homology.
 
 Add these options to an `engineering.py` training command:
 
@@ -283,11 +299,20 @@ pixi run ablation               # 15 datasets × 6 conditions × 3 seeds
 pixi run benchmark-first        # First seed across 64 datasets
 pixi run learner-aware          # Alternative Stage 1 learners
 pixi run budget-sweep           # Stage-specific trial budgets
-pixi run homology               # Ordinary and homology-aware CV
+pixi run homology               # Ordinary/homology-aware CV × original/filtered test sets
 pixi run sequence-overlap       # Exact train–test overlap audit
 pixi run pruning                # Pruning on/off, 3 datasets × 3 seeds
 pixi run benchmark              # Complete/resume five benchmark seeds
 ```
+
+The homology task automatically evaluates both CV strategies on the original test
+set and the same filtered subset (excluding training matches at 90% identity and
+80% coverage of both sequences). Completed training runs reuse saved predictions;
+no retraining is needed to add filtered evaluations. All four conditions are in
+`manuscript/experiments/results/homology_comparison/results.csv`. Original scores
+are preserved in `original_test_results.csv`; filtered predictions, metrics and
+membership CSVs are under `filtered_test/<dataset>/runs/run_<n>/<cv>/`.
+Full and filtered test scores refer to different test populations.
 
 Optional first-seed pruning-off benchmark:
 
@@ -457,23 +482,59 @@ history.
 For automated launches without a terminal on standard input, no prompts are
 shown; export `BLABLADOR_API_KEY` and `MAILGUN_API_KEY` beforehand if needed.
 
-The launcher creates signing keys automatically using the Docker image; host
-Python is not required. It reuses existing keys and starts the signing/training
-worker. On a fresh machine, keys are stored outside the repository in
-`${XDG_CONFIG_HOME:-$HOME/.config}/bioautoml-fast/model-keys`.
-If its training container already exists, the launcher reuses that container's
-key directory unless `MODEL_KEYS_DIR` is explicitly set.
+The launcher asks for an optional Ed25519 private-key file. Press Enter to reuse
+or create `./.bioautoml/signing.pem` under your **current working directory**.
+This is the only file stored in `.bioautoml/` and the only secret to back up.
+Existing deployments keep their mounted key directory unless you explicitly
+select another key or `MODEL_KEYS_DIR`. Supplied keys are copied into the protected
+key directory; existing private keys are never overwritten. Incomplete or
+mismatched key sets stop startup before any running containers are replaced.
+Key setup runs through Docker; host Python is not required. Only the training
+worker receives the private key, mounted read-only.
 
 To use a different directory or restore keys from another machine:
 
 ```sh
 MODEL_KEYS_DIR=/absolute/private/location/bioautoml-keys ./run-docker.sh
+# Non-interactive import into a new directory:
+MODEL_SIGNING_KEY=/private/signing.pem MODEL_KEYS_DIR=/private/new-keys ./run-docker.sh
 ```
 
-Back up the key directory securely. Existing keys are never overwritten; incomplete
-key sets stop startup. New keys do not automatically trust models from another
-deployment. Keep private keys out of Git and Docker images. CLI training does not
-require signing keys. `App/datasets/references.bib` is included in the repository;
+To create keys manually from a clone with the project environment installed:
+
+```sh
+pixi run keys-create
+pixi run keys-delete
+```
+
+`keys-create` creates `.bioautoml/signing.pem`, asking for confirmation before
+replacing an existing private key. It automatically adds the matching public key
+to `deployment/official_public_keys.json`, retaining previous public keys so
+previously signed models remain verifiable. Explicit revocations are preserved.
+Commit the public-key file and rebuild/publish the
+image to distribute the updated trust; restart deployments to use the new key.
+Never commit the private key. `keys-delete` confirms before deleting
+only `signing.pem`; public keys and existing model trust are unchanged.
+Revoke a compromised key explicitly using the public-key file's `revoked` list.
+Back up the private key first:
+replacement and deletion cannot be undone without a backup.
+
+Normal launcher runs never replace existing keys or edit the bundled public keys. Pass
+`MODEL_TRUSTED_KEYS=/path/to/previous/trusted_keys.json` on the first launch to retain
+the previous public keys for existing models. Additional trust is persisted in the
+automatically managed public verification configuration under
+`${XDG_CONFIG_HOME:-$HOME/.config}/bioautoml-fast/verification/<container>/`.
+It contains no private key and is mounted read-only. The public key and signer ID
+are derived from `signing.pem`; they need no separate files. Custom trust/revocation
+settings should also be backed up if you configure them.
+The bundled `deployment/official_public_keys.json` and local public keys are merged
+for verification on each launch; revocations take precedence. Local keys are **not**
+automatically trusted by other deployments or the official server unless their
+public keys are distributed there. Creating keys does not sign existing unsigned models.
+
+Back up `signing.pem` securely. `.bioautoml/` is excluded from Git and Docker
+builds; private files use owner-only permissions. Never publish private keys.
+CLI training does not require signing keys. `App/datasets/references.bib` is included in the repository;
 trained model files must be supplied separately for the model repository.
 The launcher resolves `App/datasets` and mounts the whole directory read-only
 at `/app/App/datasets`. Set `DATASETS_DIR` to use a different repository directory.

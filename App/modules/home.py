@@ -243,7 +243,8 @@ def homology_controls(data_type):
 
 
 def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homology_aware=False,
-                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True):
+                       homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True,
+                       filter_test_overlap=False):
     """Use the same explicit training controls for sequence and structured jobs."""
     arguments = ['--n_cpu', str(n_cpu), '--seed', str(seed),
                  '--search_seed', str(seed if search_seed is None else search_seed),
@@ -252,13 +253,18 @@ def training_arguments(n_cpu=8, seed=63, search_seed=None, search_jobs=1, homolo
         validate_homology_settings(homology_identity, homology_coverage)
         arguments.extend(['--homology_aware', '--homology_identity', str(homology_identity),
                           '--homology_coverage', str(homology_coverage)])
+    if filter_test_overlap:
+        if not homology_aware:
+            raise ValueError('Test-overlap filtering requires homology-aware CV.')
+        arguments.append('--filter_test_overlap')
     return arguments
 
 
 @web_execution
 def submit_job(train_files, test_files, predict_path, data_type, task, training, testing, tuning,
                seed=63, search_seed=None, n_cpu=8, search_jobs=1, homology_aware=False,
-               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True):
+               homology_identity=DEFAULT_IDENTITY, homology_coverage=DEFAULT_COVERAGE, pruning=True,
+               filter_test_overlap=False):
     """Process a single job - modified to be thread-safe."""
 
     job = get_current_job()
@@ -271,6 +277,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
     log_path = run_path(job_path, "subprocess.log")
 
     try:
+        if filter_test_overlap and (not homology_aware or testing != 'Test set' or not test_files):
+            raise ValueError('Test-overlap filtering requires homology-aware training and a labelled test set.')
         if homology_aware and (training != 'Training set' or data_type == 'Structured data'):
             raise ValueError('Homology-aware CV requires training from sequence FASTA inputs.')
         if homology_aware:
@@ -384,7 +392,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append(os.path.join(feat_path, "fnameseqtest.csv"))
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage, pruning=pruning))
+                                                  homology_identity, homology_coverage, pruning=pruning,
+                                                  filter_test_overlap=filter_test_overlap))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -459,7 +468,8 @@ def submit_job(train_files, test_files, predict_path, data_type, task, training,
                         command.append("Predicted")
 
                 command.extend(training_arguments(n_cpu, seed, search_seed, search_jobs, homology_aware,
-                                                  homology_identity, homology_coverage, pruning=pruning))
+                                                  homology_identity, homology_coverage, pruning=pruning,
+                                                  filter_test_overlap=filter_test_overlap))
                 command.extend(["--output", job_path])
 
                 with open(log_path, "w") as log_file:
@@ -912,6 +922,7 @@ def runUI():
     tuning = False  # default; overridden by the checkbox widget below when applicable
     pruning = True
     homology_aware = False
+    filter_test_overlap = False
     homology_identity, homology_coverage = DEFAULT_IDENTITY, DEFAULT_COVERAGE
 
     col1, col2 = st.columns(2)
@@ -963,6 +974,11 @@ def runUI():
 
         if homology_aware:
             homology_identity, homology_coverage = homology_controls(data_type)
+            if testing == 'Test set':
+                filter_test_overlap = st.checkbox(
+                    'Filter test sequences similar to training sequences', value=False,
+                    help='Adds metrics for test sequences without detected training matches at the selected thresholds. '
+                         'Original files, predictions and full-test metrics are preserved. Training is unchanged.')
     elif training == "Training set":
         pruning = st.checkbox('Trial pruning', value=True,
                               help='Stops unpromising tuning trials during cross-validation. '
@@ -1098,6 +1114,7 @@ def runUI():
             task = "Classification"
             tuning = False
             homology_aware = False
+            filter_test_overlap = False
         else:
             # For non-structured sequence classification, require >= 2 class files
             if task and data_type != "Structured data":
@@ -1258,6 +1275,7 @@ def runUI():
             "testing":   testing,
             "tuning": tuning,
             "homology_aware": homology_aware,
+            "filter_test_overlap": filter_test_overlap,
             "pruning": pruning,
             "homology_identity": homology_identity,
             "homology_coverage": homology_coverage,

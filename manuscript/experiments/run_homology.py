@@ -2,6 +2,8 @@
 
 Five datasets, five search seeds, unchanged supplied test sets. Cache extraction
 and reuse verified ordinary-CV ablation runs; never use test scores for selection.
+Both CV strategies are also evaluated on the non-overlapping test subset from
+saved predictions, without retraining or replacing original predictions.
 """
 import argparse
 import fcntl
@@ -13,6 +15,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from types import SimpleNamespace
 
@@ -45,6 +48,8 @@ def parse_arguments():
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--dry_run', action='store_true', help='Check source compatibility; no output or MMseqs2 searches')
     parser.add_argument('--prepare_only', action='store_true', help='Validate grouped folds and audit overlap, without training')
+    parser.add_argument('--filter_test_overlap', action=argparse.BooleanOptionalAction, default=True,
+                        help='Also evaluate both CV strategies on the overlap-filtered test subset (default: on)')
     parser.add_argument('--smoke_test', action='store_true')
     parser.add_argument('--worker_config', type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -255,6 +260,136 @@ def run_worker(root, config, resume):
 def save_results(rows, root):
     ablation.save_csv(pd.DataFrame(rows), root / 'results.csv')
 
+
+def evaluate_filtered_tests(args):
+    from sklearn.metrics import matthews_corrcoef, r2_score
+    from bioautoml.homology import read_sequences
+    from bioautoml.test_overlap import prepare_test_filter, test_filter_mask, save_filtered_test
+
+    root = args.output
+    protocol = ablation.read_json(root / 'protocol.json')
+    if protocol['status'] != 'completed':
+        raise ValueError('Complete the ordinary/homology experiment before filtering its test predictions.')
+    configuration = protocol['configuration']
+    source_results = root / 'original_test_results.csv'
+    results = pd.read_csv(source_results if source_results.exists() else root / 'results.csv')
+    for key in ('seed', 'n_cpu', 'estimations', 'tuning'):
+        if configuration[key] != getattr(args, key):
+            raise ValueError(f'Requested {key} differs from the saved experiment.')
+    expected = {(d['dataset'], run, cv) for d in configuration['datasets']
+                for run in range(1, args.runs + 1) for cv in CONDITIONS}
+    actual = list(zip(results.dataset, results.run, results.cv))
+    if len(actual) != len(set(actual)) or set(actual) != expected:
+        raise ValueError('Saved results do not contain exactly the requested paired runs.')
+    assets = {str(root / 'protocol.json'): file_hash(root / 'protocol.json'),
+              str(source_results): file_hash(source_results if source_results.exists() else root / 'results.csv')}
+    prepared = []
+    for dataset in configuration['datasets']:
+        if dataset['dataset_id'] not in args.datasets:
+            raise ValueError('Dataset selection differs from the saved experiment.')
+        for path, digest in dataset['input_hashes'].items():
+            if file_hash(path) != digest:
+                raise ValueError(f'Dataset changed since training: {path}')
+            assets[path] = digest
+        dtype = 'Protein' if dataset['dtype'] == 'protein' else 'DNA/RNA'
+        train = read_sequences(dataset['train_files'], dataset['train_labels'], 'train', dtype, dataset['task'])
+        test = read_sequences(dataset['test_files'], dataset['test_labels'], 'test', dtype, dataset['task'])
+        ids = [item['sequence_id'] for item in test]
+        labels = np.asarray([item['label'] for item in test])
+        classes = sorted({item['label'] for item in train}) if dataset['task'] == 0 else None
+        audit_path = root / dataset['dataset'] / 'preparation/reports/homology'
+        report = ablation.read_json(audit_path / 'homology_report.json')
+        if report['minimum_identity'] != .9 or report['minimum_query_and_target_coverage'] != .8:
+            raise ValueError('The saved audit does not use the agreed 90% identity / 80% coverage.')
+        for _, row in results.loc[results.dataset == dataset['dataset']].iterrows():
+            source = Path(row.output)
+            record = ablation.read_json(source / 'run.json')
+            if record['status'] != 'completed' or record['settings']['dataset']['input_hashes'] != dataset['input_hashes']:
+                raise ValueError(f'Incomplete or mismatched training result: {source}')
+            path = source / 'results/predictions/test_predictions.csv'
+            predictions = pd.read_csv(path)
+            if predictions.internal_id.duplicated().any() or set(predictions.internal_id) != set(ids):
+                raise ValueError(f'Prediction IDs do not match the original test set: {path}')
+            predictions = predictions.set_index('internal_id', drop=False).loc[ids].reset_index(drop=True)
+            primary = (matthews_corrcoef(labels, predictions.prediction) if dataset['task'] == 0
+                       else r2_score(labels.astype(float), predictions.prediction))
+            if not np.isclose(primary, row.primary_score, rtol=0, atol=1e-10):
+                raise ValueError(f'Saved predictions do not reproduce the original primary metric: {path}')
+            if classes is not None:
+                probabilities = predictions[classes].to_numpy()
+                if (not np.isfinite(probabilities).all() or (probabilities < 0).any()
+                        or (probabilities > 1).any() or not np.allclose(probabilities.sum(axis=1), 1, atol=1e-6)):
+                    raise ValueError(f'Invalid saved class probabilities: {path}')
+            assets[str(path)] = file_hash(path)
+            assets[str(source / 'run.json')] = file_hash(source / 'run.json')
+            if row.cv == 'homology':
+                for name in ('overlap_report.json', 'overlap_matches.csv', 'homology_report.json'):
+                    audit_file = audit_path / name
+                    digest = record['settings']['assets'][str(audit_file)]
+                    if file_hash(audit_file) != digest:
+                        raise ValueError(f'Overlap audit changed since training: {audit_file}')
+                    assets[str(audit_file)] = digest
+            prepared.append((dataset, row.to_dict(), train, labels, classes, predictions, audit_path, report))
+    settings = dict(source_sha256=assets, packages=package_versions(), identity=90, coverage=80,
+                    code_sha256={str(p.relative_to(PROJECT_PATH)): file_hash(p) for p in
+                                 (Path(__file__).resolve(), PROJECT_PATH / 'bioautoml/test_overlap.py',
+                                  PROJECT_PATH / 'bioautoml/homology.py')},
+                    evaluation='Saved predictions only; exclude detected training matches, not within-test duplicates. '
+                               'Full and filtered sets differ; score changes are not causal estimates of leakage.')
+    destination = root / 'filtered_test'
+    if args.dry_run:
+        print(f'Validated {len(results)} full-test results and {len(prepared)} filtered evaluations; no writes.', flush=True)
+        return
+    if not source_results.exists():
+        shutil.copy2(root / 'results.csv', source_results)
+    if destination.exists():
+        previous = ablation.read_json(destination / 'protocol.json')
+        if previous['status'] != 'completed' or previous['configuration'] != settings:
+            raise ValueError(f'Existing filtered evaluation differs; preserved: {destination}')
+        for path, digest in previous['outputs'].items():
+            if file_hash(destination / path) != digest:
+                raise ValueError(f'Filtered output changed: {path}')
+        shutil.copy2(destination / 'results.csv', root / 'results.csv')
+        print(f'Reusing completed filtered evaluation: {destination}', flush=True)
+        return
+    staging = Path(tempfile.mkdtemp(prefix='.filtered_test-', dir=root))
+    started = time.perf_counter()
+    rows = results.assign(test_set='original').to_dict('records')
+    for dataset, row, train, labels, classes, predictions, audit_path, report in prepared:
+        output = staging / dataset['dataset'] / 'runs' / f'run_{row["run"]}' / row['cv']
+        audit_output = output / 'reports/homology'
+        audit_output.mkdir(parents=True)
+        for name in ('overlap_report.json', 'overlap_matches.csv'):
+            shutil.copy2(audit_path / name, audit_output / name)
+        prepare_test_filter(output, dataset['train_files'], dataset['train_labels'], dataset['test_files'],
+                            dataset['test_labels'], dataset['dtype'], dataset['task'])
+        mask = test_filter_mask(output, [item['sequence_id'] for item in train], predictions.internal_id,
+                                labels, dataset['task'], report)
+        (output / 'results/predictions').mkdir(parents=True)
+        predictions.to_csv(output / 'results/predictions/test_predictions.csv', index=False)
+        save_filtered_test(output, dataset['task'], labels, predictions.prediction, mask,
+                           predictions[classes].to_numpy() if classes else None, classes)
+        metrics = pd.read_csv(output / 'results/metrics/filtered_test_metrics.csv')
+        row.update({key: np.nan for key in row if key.startswith('test_')})
+        row.update({f'test_{item.Metric}': item.Value for item in metrics.itertuples()})
+        row.update(test_set='filtered', test_records=int(mask.sum()), excluded_test_records=int((~mask).sum()),
+                   primary_score=float(metrics.loc[metrics.Metric == row['primary_metric'], 'Value'].iloc[0]),
+                   filtered_output=str(destination / output.relative_to(staging)))
+        rows.append(row)
+        print(f'{dataset["dataset"]} run {row["run"]} {row["cv"]}: retained {mask.sum()}/{len(mask)}', flush=True)
+    for path, digest in assets.items():
+        if file_hash(path) != digest:
+            raise ValueError(f'Source changed during evaluation: {path}')
+    save_results(rows, staging)
+    outputs = {str(path.relative_to(staging)): file_hash(path) for path in staging.rglob('*') if path.is_file()}
+    atomic_json(staging / 'protocol.json', dict(configuration=settings, status='completed',
+        completed_results=len(rows), filtered_results=len(prepared), outputs=outputs,
+        evaluation_seconds=time.perf_counter() - started, ended_at=utc_now()))
+    staging.rename(destination)
+    shutil.copy2(destination / 'results.csv', root / 'results.csv')
+    print(f'Saved {len(rows)} evaluations to {root / "results.csv"}', flush=True)
+
+
 def execute(args, datasets, inventory, sources, assets, reusable):
     settings = dict(seed=args.seed, n_cpu=args.n_cpu, estimations=args.estimations, tuning=args.tuning,
         packages=package_versions(), code_sha256=code_hashes(), mmseqs=list(get_mmseqs()), smoke_test=args.smoke_test)
@@ -342,6 +477,13 @@ def main():
         return
     if os.environ.get('BIOAUTOML_WEB_EXECUTION') == '1':
         raise RuntimeError('Run manuscript experiments outside the web queue.')
+    protocol_path = args.output / 'protocol.json'
+    completed = protocol_path.exists() and ablation.read_json(protocol_path)['status'] == 'completed'
+    if args.filter_test_overlap and completed and not args.prepare_only:
+        with (args.output / '.runner.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            evaluate_filtered_tests(args)
+        return
     datasets, inventory = ablation.input_inventory(args)
     sources, assets, reusable = prepare_sources(args, datasets)
     print(inventory.groupby(['dataset', 'split'], sort=False).records.sum().unstack().to_string(), flush=True)
@@ -359,6 +501,8 @@ def main():
     with (args.output / '.runner.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         execute(args, datasets, inventory, sources, assets, reusable)
+        if args.filter_test_overlap and not args.prepare_only:
+            evaluate_filtered_tests(args)
 
 
 if __name__ == '__main__':

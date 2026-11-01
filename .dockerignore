@@ -26,6 +26,7 @@ App/task-results
 .env.*
 **/*.pem
 **/*.key
+**/.bioautoml
 *.tar
 *.tar.gz
 *.tar.zst
