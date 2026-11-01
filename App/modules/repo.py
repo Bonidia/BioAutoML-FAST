@@ -540,6 +540,23 @@ class InternalUploadedFile:
 
 def runUI():
 
+    datasets_path = os.path.abspath("datasets")
+    if not os.path.isdir(datasets_path) or not any(
+        name.startswith("dataset") and os.path.isdir(os.path.join(datasets_path, name))
+        for name in os.listdir(datasets_path)
+    ):
+        st.warning(
+            "Datasets were not found. The Model Repository is not configured on this installation. "
+            "You can still train models in Home and access your results in Jobs."
+        )
+        return
+    if not os.path.isfile(os.path.join(datasets_path, "references.bib")):
+        st.warning(
+            "The Model Repository bibliography (references.bib) was not found. "
+            "Add it to the datasets directory to use this page."
+        )
+        return
+
     with st.expander("Predicting new data"):
         st.info("""
             Here you can **apply one of 60 curated, trained models** to perform **classification or regression** on biological sequences, without training a model from scratch.  

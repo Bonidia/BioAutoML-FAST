@@ -70,6 +70,12 @@ assert {'bioautoml', 'bioautoml-training'} <= queues, queues
             assert page.locator('[data-testid="stException"]').count() == 0
             assert not errors, errors
             print('Home page rendered successfully in Chromium.', flush=True)
+            menu = page.frame_locator('iframe[title="streamlit_option_menu.option_menu"]')
+            menu.get_by_text('Model Repository', exact=True).click()
+            page.get_by_text('Datasets were not found.', exact=False).wait_for(state='visible')
+            assert page.locator('[data-testid="stException"]').count() == 0
+            assert not errors, errors
+            print('Model Repository handles missing datasets without an error.', flush=True)
         except Exception:
             page.screenshot(path=str(artifacts / 'home-failure.png'), full_page=True)
             (artifacts / 'browser-errors.txt').write_text('\n'.join(errors), encoding='utf-8')

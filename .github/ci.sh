@@ -34,7 +34,6 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-cp App/datasets/references.bib "$DATASETS_DIR/references.bib"
 ./run-docker.sh --build \
     --label "org.opencontainers.image.source=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-Bonidia/BioAutoML-FAST}" \
     --label "org.opencontainers.image.revision=${GITHUB_SHA:-local}" </dev/null

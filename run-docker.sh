@@ -25,7 +25,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "Settings: IMAGE_NAME, CONTAINER_NAME, HOST_PORT, BIND_ADDRESS, JOBS_DIR, STATE_DIR, DATASETS_DIR."
     echo "Defaults: ghcr.io/bonidia/bioautoml-fast:latest, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
     echo "IMAGE_NAME can select a registry tag or digest; --build requires a tag."
-    echo "DATASETS_DIR is mounted read-only and must contain references.bib and your model repository."
+    echo "DATASETS_DIR is created if missing and mounted read-only; repository data is optional."
     echo "MODEL_KEYS_DIR: optional external key directory; existing keys are reused, missing directories are initialized."
     echo "Default: existing training container's keys, otherwise \${XDG_CONFIG_HOME:-\$HOME/.config}/bioautoml-fast/model-keys."
     echo "Starts a dedicated signing/training container; private keys never enter the web container."
@@ -124,7 +124,10 @@ keys_parent="$(cd -- "$keys_parent" && pwd -P)"
 keys_name="$(basename -- "$keys_path")"
 [[ "$keys_name" != . && "$keys_name" != .. && "$keys_name" != / ]] || fail "Use a dedicated signing-key directory."
 keys_path="$keys_parent/$keys_name"
-[[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* && "$keys_path" != *,* ]] || fail "Keys must be outside the project/build context."
+[[ "$keys_path" != *,* ]] || fail "Key directories cannot contain commas."
+if [[ "$build_mode" == true ]]; then
+    [[ "$keys_path" != "$project_path" && "$keys_path" != "$project_path/"* ]] || fail "Keys must be outside the project/build context."
+fi
 if [[ -e "$keys_path" ]]; then
     [[ -d "$keys_path" ]] || fail "Signing-key path is not a directory."
     for name in signing.pem trusted_keys.json key_id; do
@@ -132,12 +135,10 @@ if [[ -e "$keys_path" ]]; then
     done
 fi
 
-# Validate repository data before stopping the current application. Do not
-# silently create an empty datasets directory that would break the Repository tab.
-[[ -d "$datasets_path" && -r "$datasets_path" && -x "$datasets_path" ]] || fail "DATASETS_DIR must be an existing readable directory: $datasets_path"
+mkdir -p -- "$datasets_path"
+[[ -d "$datasets_path" && -r "$datasets_path" && -x "$datasets_path" ]] || fail "DATASETS_DIR must be a readable directory: $datasets_path"
 datasets_path="$(cd -- "$datasets_path" && pwd -P)"
 [[ "$datasets_path" != *,* ]] || fail "Bind-mount paths cannot contain commas."
-[[ -f "$datasets_path/references.bib" && -r "$datasets_path/references.bib" ]] || fail "Missing or unreadable bibliography: $datasets_path/references.bib"
 
 mkdir -p -- "$jobs_path" "$state_path"
 jobs_path="$(cd -- "$jobs_path" && pwd -P)"

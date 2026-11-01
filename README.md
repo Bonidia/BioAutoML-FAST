@@ -406,7 +406,21 @@ or login is required.
 
 ### Optional local Docker deployment
 
-With Docker available and `App/datasets/` populated, start a local instance:
+On Linux (amd64), with Docker running, Docker access without `sudo`, and `curl`
+installed, deploy without cloning the repository:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/Bonidia/BioAutoML-FAST/main/run-docker.sh &&
+bash run-docker.sh
+```
+
+The launcher prompts for optional API keys; press Enter to skip either service.
+The launcher creates persistent directories under `App/` beside the script.
+Datasets and pretrained models are optional; the Model Repository displays a warning
+until its data is supplied. You can inspect `run-docker.sh` before executing it.
+Later, run `bash run-docker.sh` again from this directory to pull and deploy updates.
+
+From a repository checkout, start a local instance with:
 
 ```sh
 ./run-docker.sh
@@ -420,7 +434,7 @@ See `./run-docker.sh --help` for options.
 
 Use `IMAGE_NAME=ghcr.io/bonidia/bioautoml-fast:sha-<full-commit> ./run-docker.sh`
 to select a particular build, or specify an image digest for an exact deployment.
-To build locally instead, use `./run-docker.sh --build`. For local UI development
+With a full repository checkout, build locally using `./run-docker.sh --build`. For local UI development
 with source mounts and live reload, use `./run-docker.sh --dev`.
 
 To stop and remove both application containers and the image without rebuilding:
