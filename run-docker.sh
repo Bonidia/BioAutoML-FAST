@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Rebuild and run the local application with live UI reload, preserving jobs and state.
+# Deploy the application while preserving jobs, state, and signing keys.
 set -Eeuo pipefail
 
 project_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-image_name="${IMAGE_NAME:-bioautoml-fast:local}"
 container_name="${CONTAINER_NAME:-bioautoml-fast}"
 host_port="${HOST_PORT:-8501}"
 bind_address="${BIND_ADDRESS:-127.0.0.1}"
@@ -13,20 +12,19 @@ datasets_path="${DATASETS_DIR:-$project_path/App/datasets}"
 keys_path="${MODEL_KEYS_DIR:-}"
 training_container="${container_name}-training"
 owner_label="io.bioautoml-fast.launcher"
-# Accept the previously documented flag; rebuilding is now unconditional.
-if [[ "${1:-}" == "--build" ]]; then
-    shift
-fi
-
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-    echo "Usage: $0 [--delete | Docker build options, e.g. --no-cache-filter mathfeature]"
-    echo "--delete: stop and remove this deployment's two containers and image tag, without rebuilding."
+    echo "Usage: $0 [--build [Docker build options] | --dev | --delete]"
+    echo "Default: pull ghcr.io/bonidia/bioautoml-fast:latest and recreate both containers."
+    echo "--build: build bioautoml-fast:local instead of pulling (accepts Docker build options)."
+    echo "--dev: build locally and enable live UI reload with read-only source mounts."
+    echo "--delete: stop and remove this deployment's two containers and selected image, without pulling."
+    echo "Use --build --delete to remove the default local-build image."
     echo "Local jobs, database files, datasets and signing keys are preserved."
-    echo "Without --delete, rebuilds the image and recreates the containers with live UI reload."
     echo "Replaces this script's container and image tag; completed jobs expire after 30 days."
     echo "Any running training jobs in that container will be interrupted."
     echo "Settings: IMAGE_NAME, CONTAINER_NAME, HOST_PORT, BIND_ADDRESS, JOBS_DIR, STATE_DIR, DATASETS_DIR."
-    echo "Defaults: bioautoml-fast:local, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
+    echo "Defaults: ghcr.io/bonidia/bioautoml-fast:latest, bioautoml-fast, 8501, 127.0.0.1, App/jobs, App/task-results, App/datasets."
+    echo "IMAGE_NAME can select a registry tag or digest; --build requires a tag."
     echo "DATASETS_DIR is mounted read-only and must contain references.bib and your model repository."
     echo "MODEL_KEYS_DIR: optional external key directory; existing keys are reused, missing directories are initialized."
     echo "Default: existing training container's keys, otherwise \${XDG_CONFIG_HOME:-\$HOME/.config}/bioautoml-fast/model-keys."
@@ -40,15 +38,33 @@ fi
 
 fail() { echo "Error: $*" >&2; exit 1; }
 delete_mode=false
-if [[ "${1:-}" == "--delete" ]]; then
-    [[ $# == 1 ]] || fail "--delete cannot be combined with Docker build options."
-    delete_mode=true
+build_mode=false
+development_mode=false
+build_options=()
+while (( $# )); do
+    case "$1" in
+        --build) build_mode=true; shift ;;
+        --dev) build_mode=true; development_mode=true; shift ;;
+        --delete) delete_mode=true; shift ;;
+        *)
+            [[ "$build_mode" == true ]] || fail "Unknown option: $1. Use --build before Docker build options."
+            build_options+=("$@")
+            break
+            ;;
+    esac
+done
+[[ "$delete_mode" == false || ( "$development_mode" == false && ${#build_options[@]} == 0 ) ]] || fail "--delete cannot be combined with --dev or Docker build options."
+if [[ "$build_mode" == true ]]; then
+    image_name="${IMAGE_NAME:-bioautoml-fast:local}"
+else
+    image_name="${IMAGE_NAME:-ghcr.io/bonidia/bioautoml-fast:latest}"
 fi
 command -v docker >/dev/null || fail "Docker is not installed."
 docker info >/dev/null 2>&1 || fail "Cannot access Docker. Check the daemon and your Docker permissions."
 [[ "$(id -u)" != "0" ]] || fail "Run this script as a non-root user with Docker access (without sudo)."
 [[ "$container_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || fail "Invalid CONTAINER_NAME."
-[[ "$image_name" != -* && "$image_name" != *@* && "$image_name" != sha256:* ]] || fail "IMAGE_NAME must be a local image name/tag, not an ID or digest."
+[[ "$image_name" != -* && "$image_name" != sha256:* ]] || fail "IMAGE_NAME must be an image name, not an option or image ID."
+[[ "$build_mode" == false || "$image_name" != *@* ]] || fail "--build requires an image tag, not a digest."
 
 # Validate both containers before removing either one.
 for existing_container in "$container_name" "$training_container"; do
@@ -67,7 +83,7 @@ remove_deployment() {
             docker container rm "$existing_container" >/dev/null
         fi
     done
-    if docker image inspect "$image_name" >/dev/null 2>&1; then
+    if [[ "$delete_mode" == true ]] && docker image inspect "$image_name" >/dev/null 2>&1; then
         echo "Removing image tag $image_name..."
         docker image rm "$image_name" || fail "Image removal failed; it may still be in use. No forced image removal was attempted."
     fi
@@ -84,14 +100,15 @@ host_port=$((10#$host_port))
 (( host_port >= 1 && host_port <= 65535 )) || fail "HOST_PORT must be between 1 and 65535."
 
 development_options=()
-[[ "$project_path" != *,* ]] || fail "Bind-mount paths cannot contain commas."
-for path in App/app.py App/modules start.sh; do
-    [[ -r "$project_path/$path" ]] || fail "Missing or unreadable development source: $path"
-    development_options+=(--mount "type=bind,source=$project_path/$path,target=/app/$path,readonly")
-done
-# Mount the startup script too so this works with previously built images.
-development_options+=(--env STREAMLIT_SERVER_RUN_ON_SAVE=true
-                      --env STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll)
+if [[ "$development_mode" == true ]]; then
+    [[ "$project_path" != *,* ]] || fail "Bind-mount paths cannot contain commas."
+    for path in App/app.py App/modules start.sh; do
+        [[ -r "$project_path/$path" ]] || fail "Missing or unreadable development source: $path"
+        development_options+=(--mount "type=bind,source=$project_path/$path,target=/app/$path,readonly")
+    done
+    development_options+=(--env STREAMLIT_SERVER_RUN_ON_SAVE=true
+                          --env STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll)
+fi
 
 if [[ -z "$keys_path" ]] && docker container inspect "$training_container" >/dev/null 2>&1; then
     signing_path="$(docker container inspect --format '{{range .Mounts}}{{if eq .Destination "/run/bioautoml/signing.pem"}}{{.Source}}{{end}}{{end}}' "$training_container")"
@@ -165,10 +182,13 @@ configure_api_keys() {
 
 configure_api_keys
 
-remove_deployment
-
-echo "Building $image_name..."
-docker build "$@" --tag "$image_name" --file "$project_path/Dockerfile" "$project_path"
+if [[ "$build_mode" == true ]]; then
+    echo "Building $image_name..."
+    docker build "${build_options[@]}" --tag "$image_name" --file "$project_path/Dockerfile" "$project_path"
+else
+    echo "Pulling $image_name..."
+    docker pull "$image_name" || fail "Could not pull the image. Check the tag and registry access, or use --build. Existing containers were not stopped."
+fi
 image_id="$(docker image inspect --format '{{.Id}}' "$image_name")"
 
 if [[ ! -d "$keys_path" ]]; then
@@ -177,7 +197,7 @@ if [[ ! -d "$keys_path" ]]; then
         --security-opt=no-new-privileges:true --ulimit core=0 \
         --user "$(id -u):$(id -g)" \
         --mount "type=bind,source=$keys_parent,target=/run/bioautoml-key-store" \
-        --entrypoint python "$image_name" -m bioautoml.model_security "/run/bioautoml-key-store/$keys_name"
+        --entrypoint python "$image_id" -m bioautoml.model_security "/run/bioautoml-key-store/$keys_name"
 fi
 key_id="$(<"$keys_path/key_id")"
 [[ "$key_id" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Invalid signing key ID."
@@ -191,11 +211,14 @@ docker run --rm --network none --read-only --cap-drop ALL \
     "${verification_options[@]}" \
     --env BIOAUTOML_SIGNING_KEY=/run/bioautoml/signing.pem \
     --env BIOAUTOML_SIGNING_KEY_ID="$key_id" \
-    --entrypoint python "$image_name" -c 'from bioautoml.model_security import initialize_web_signer; initialize_web_signer(); print("Signing keys verified.")'
+    --entrypoint python "$image_id" -c 'from bioautoml.model_security import initialize_web_signer; initialize_web_signer(); print("Signing keys verified.")'
 echo "Signing keys: $keys_path (keep a secure backup for future machines)."
 
-echo "Live UI reload enabled with read-only source mounts."
-echo "Avoid editing job-processing code while jobs are running; worker changes require a restart."
+remove_deployment
+if [[ "$development_mode" == true ]]; then
+    echo "Live UI reload enabled with read-only source mounts."
+    echo "Avoid editing job-processing code while jobs are running; worker changes require a restart."
+fi
 echo "Starting $container_name with persistent local directories..."
 docker run --detach --name "$container_name" \
     --label "$owner_label=run-docker.sh" \
@@ -213,7 +236,7 @@ docker run --detach --name "$container_name" \
     --env MAILGUN_API_KEY \
     "${verification_options[@]}" \
     "${development_options[@]}" \
-    "$image_name"
+    "$image_id"
 
 if [[ -n "$keys_path" ]]; then
     docker run --detach --name "$training_container" \
@@ -233,7 +256,7 @@ if [[ -n "$keys_path" ]]; then
         --env RQ_WORKER_NAME=bioautoml-training \
         --env BIOAUTOML_SIGNING_KEY=/run/bioautoml/signing.pem \
         --env BIOAUTOML_SIGNING_KEY_ID="$key_id" \
-        "$image_name"
+        "$image_id"
     echo "Signing/training worker: $training_container (private key mounted here only)"
 fi
 

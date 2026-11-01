@@ -412,9 +412,16 @@ With Docker available and `App/datasets/` populated, start a local instance:
 ./run-docker.sh
 ```
 
-Open `http://localhost:8501`. The script rebuilds the image and replaces its
-container; running jobs are interrupted. Jobs and database files remain in local
-bind-mounted directories. See `./run-docker.sh --help` for options.
+Open `http://localhost:8501`. The script pulls `ghcr.io/bonidia/bioautoml-fast:latest`
+and replaces both containers; running jobs are interrupted. Jobs and database
+files remain in local bind-mounted directories. A failed download leaves the
+existing containers running. Local source code does not override the published image.
+See `./run-docker.sh --help` for options.
+
+Use `IMAGE_NAME=ghcr.io/bonidia/bioautoml-fast:sha-<full-commit> ./run-docker.sh`
+to select a particular build, or specify an image digest for an exact deployment.
+To build locally instead, use `./run-docker.sh --build`. For local UI development
+with source mounts and live reload, use `./run-docker.sh --dev`.
 
 To stop and remove both application containers and the image without rebuilding:
 
@@ -425,6 +432,7 @@ To stop and remove both application containers and the image without rebuilding:
 Running container jobs are interrupted. Local jobs, database files, datasets,
 and signing keys are preserved. If you used custom `CONTAINER_NAME` or
 `IMAGE_NAME` values, supply the same values when deleting the deployment.
+For the default local-build image, use `./run-docker.sh --build --delete`.
 
 When run in a terminal, the launcher prompts for the Blablador and Mailgun API
 keys with hidden input. Press Enter or enter only whitespace to skip a service.
@@ -461,9 +469,19 @@ loading; linking them does not bypass model verification.
 ## Continuous integration
 
 GitHub Actions checks pull requests and pushes to the default branch by running
-`run-docker.sh` with isolated containers, temporary data, and disposable signing
+`run-docker.sh --build` with isolated containers, temporary data, and disposable signing
 keys. It checks Streamlit, Redis, both workers, CLI startup, and Home-page rendering
 in Chromium. No benchmarks or production credentials are used.
+
+Successful default-branch pushes publish the same tested image to GitHub Container
+Registry as `ghcr.io/bonidia/bioautoml-fast:latest` and `:sha-<full-commit>`.
+Pull requests only build and test; they never publish. Publication uses GitHub's
+automatic `GITHUB_TOKEN`, not a personal token. After the first publication, set
+the package visibility to **Public** in GitHub Packages to allow downloads without
+logging in. Until an image is published, use `./run-docker.sh --build`.
+Images are built for Linux amd64; other architectures require a local build with
+compatible dependencies. Publishing does not restart deployed applications:
+run the launcher on the deployment machine when you are ready to update.
 
 ## Citation
 
