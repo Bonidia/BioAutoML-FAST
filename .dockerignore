@@ -18,6 +18,13 @@ logs_tmp
 work
 DATA
 App/datasets
+!App/datasets/
+App/datasets/*
+!App/datasets/references.bib
+!App/datasets/dataset22_dai_protein_0/
+App/datasets/dataset22_dai_protein_0/*
+!App/datasets/dataset22_dai_protein_0/train/
+!App/datasets/dataset22_dai_protein_0/test/
 App/jobs
 App/task-results
 **/task_results.db*

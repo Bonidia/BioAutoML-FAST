@@ -1743,13 +1743,15 @@ def _runUI():
             st.session_state["job_input"] = job_id
 
     def get_job_example():
-        st.session_state["job_input"] = "f3cce5fc-9d48-42a7-9e71-d66aaead89ca"
+        st.session_state["job_input"] = manager.get_example_job_id() or ''
 
     with st.container(border=True):
         col1, col2 = st.columns([9, 1])
 
         with col2:
-            st.button("Example", use_container_width=True, on_click=get_job_example)
+            st.button("Example", use_container_width=True, on_click=get_job_example,
+                      disabled=not manager.get_example_job_id(),
+                      help='Open the bundled example model. It is not subject to the 30-day retention limit.')
 
         with st.form("jobs_submit", border=False, clear_on_submit=True):
 

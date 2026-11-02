@@ -159,6 +159,7 @@ def extract_aminoacid_features(preprocessed_fastas, selected, selected_path, n_c
         "CTDT",
         "CTDD",
         "CTriad",
+        "KSCTriad",
     ]
     selected_ifeature = [
         descriptor for descriptor in ifeature_names if descriptor in selected

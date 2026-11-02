@@ -51,6 +51,10 @@ RUN uv sync --locked --no-dev --no-install-project --no-cache \
 
 # 4. Application files, writable directories, and environment records.
 COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser --chmod=644 deployment/official_public_keys.json /app/deployment/official_public_keys.json
+COPY --chown=appuser:appuser App/datasets/dataset22_dai_protein_0/train/ /app/example-input/train/
+COPY --chown=appuser:appuser App/datasets/dataset22_dai_protein_0/test/ /app/example-input/test/
+COPY --chown=appuser:appuser App/datasets/references.bib /app/example-input/references.bib
 COPY --from=mathfeature --chown=appuser:appuser /export/MathFeature/ /app/MathFeature/
 COPY --from=mathfeature /export/mathfeature-commit /opt/bioautoml/mathfeature-commit
 

@@ -59,6 +59,8 @@ def job_lock(job_id, blocking=True):
 
 
 def is_expired(record, now=None):
+    if record and record.get('managed_example') and record.get('status') == 'success':
+        return False
     if not record or record.get('status') not in TERMINAL:
         return False
     if record['status'] == 'expired':

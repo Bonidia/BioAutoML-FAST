@@ -544,9 +544,21 @@ loading; linking them does not bypass model verification.
 ## Continuous integration
 
 GitHub Actions checks pull requests and pushes to the default branch by running
-`run-docker.sh --build` with isolated containers, temporary data, and disposable signing
-keys. It checks Streamlit, Redis, both workers, CLI startup, and Home-page rendering
-in Chromium. No benchmarks or production credentials are used.
+`run-docker.sh --build` with isolated containers and temporary data. It checks
+Streamlit, Redis, both workers, CLI startup, and the interface in Chromium, then
+trains a small example through the normal job queue with tuning enabled.
+
+Before publishing, add the private PEM file as the repository Actions secret
+`EXAMPLE_MODEL_SIGNING_KEY` (Settings → Secrets and variables → Actions). It must
+match a trusted public key in `deployment/official_public_keys.json`. Only
+default-branch pushes receive this secret; pull requests use disposable keys.
+The private key is mounted only into the training worker, never copied into the
+image or uploaded with the example.
+
+The published image includes the signed example results. On startup they are
+installed into the persistent jobs directory and registered for the **Example**
+button in Jobs. This managed example is exempt from automatic expiry. CI also
+tests installation on empty storage, prediction, and restart without a private key.
 
 Successful default-branch pushes publish the same tested image to GitHub Container
 Registry as `ghcr.io/bonidia/bioautoml-fast:latest` and `:sha-<full-commit>`.

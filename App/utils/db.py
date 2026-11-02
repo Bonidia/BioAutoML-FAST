@@ -49,7 +49,22 @@ class TaskResultManager:
             )
             """
         )
+        cursor.execute('CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
         self.connection.commit()
+
+    def get_example_job_id(self):
+        row = self.connection.execute("SELECT value FROM app_settings WHERE name = 'example_job_id'").fetchone()
+        return row[0] if row else None
+
+    def register_example(self, task_id, record):
+        with self.connection:
+            self.connection.execute(
+                'INSERT INTO task_results (id, status, pending_time, start_time, end_time) VALUES (?, ?, ?, ?, ?) '
+                'ON CONFLICT(id) DO UPDATE SET status=excluded.status, pending_time=excluded.pending_time, '
+                'start_time=excluded.start_time, end_time=excluded.end_time',
+                (task_id, TaskStatus.SUCCESS.value, record['started_at'], record['started_at'], record['ended_at']))
+            self.connection.execute("INSERT INTO app_settings (name, value) VALUES ('example_job_id', ?) "
+                                    'ON CONFLICT(name) DO UPDATE SET value=excluded.value', (task_id,))
 
     def store_pending_task(self, task_id):
         cursor = self.connection.cursor()
@@ -99,6 +114,7 @@ class TaskResultManager:
         if result:
             return {
                 "status": result[0],
+                "managed_example": task_id == self.get_example_job_id(),
                 "pending_time": result[1],
                 "start_time": result[2],
                 "end_time": result[3]

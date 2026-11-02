@@ -155,6 +155,8 @@ if [[ "$private_ready" != "1" ]]; then
     exit 1
 fi
 
+python "${app_path%/App}/deployment/example_job.py" || echo 'Bundled example unavailable; inspect startup logs. User jobs are unchanged.' >&2
+
 setsid python -m utils.retention --loop &
 retention_pid=$!
 
